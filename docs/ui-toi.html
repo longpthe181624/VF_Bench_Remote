@@ -1,0 +1,329 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  .page{
+    width:1440px; height:900px; background:#0a0a0a; color:#fafafa;
+    font-family:'Aptos','Aptos Display','Archivo', system-ui, sans-serif; font-size:13px; line-height:1.45;
+    display:flex; overflow:hidden;
+    font-variant-numeric:tabular-nums;
+  }
+  .grow{flex:1;}
+
+  /* ---------- sidebar ---------- */
+  .sidebar{width:236px; flex:none; background:#0a0a0a; border-right:1px solid #1f1f1f; padding:16px 12px 12px; display:flex; flex-direction:column; gap:15px;}
+  .brand{display:flex; align-items:baseline; gap:7px; padding:2px 9px 0;}
+  .brand-name{font-weight:700; font-size:14px; letter-spacing:-.01em;}
+  .ver{font-size:10px; color:#737373;}
+  .env{font-size:9.5px; font-weight:600; color:#fbbf24; background:#2a2008; border-radius:4px; padding:1px 5px;}
+
+  .search{display:flex; align-items:center; gap:8px; background:#141414; border:1px solid #1f1f1f; border-radius:8px; padding:7px 10px; color:#737373;}
+  .search input{border:none; outline:none; background:transparent; font-family:inherit; font-size:12.5px; color:#d4d4d4; width:100%;}
+  .search kbd{font-family:inherit; font-size:10px; color:#737373; border:1px solid #1f1f1f; border-radius:4px; padding:1px 5px;}
+  .icon{width:14px;height:14px;flex:none;}
+
+  .nav-group{display:flex; flex-direction:column; gap:2px;}
+  .nav-label{font-size:10.5px; font-weight:500; color:#737373; padding:0 9px; margin-bottom:4px;}
+  .nav-item{display:flex; align-items:center; gap:10px; padding:6px 9px; border-radius:7px; font-size:13px; font-weight:500; color:#d4d4d4;}
+  .nav-item .icon{color:#737373;}
+  .nav-item.active{background:#1f1f1f; color:#fafafa; font-weight:600;}
+  .nav-item.active .icon{color:#fafafa;}
+  .nav-item .n{font-size:11px; color:#737373;}
+  .nav-item .n.hot{color:#f87171;}
+
+  .side-note{font-size:10.5px; color:#737373; padding:0 9px; line-height:1.5;}
+  .user{display:flex; align-items:center; gap:9px; padding:9px 8px 0; border-top:1px solid #1f1f1f; margin-top:auto;}
+  .ava{width:26px;height:26px;border-radius:999px;background:#1f1f1f;color:#d4d4d4;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none;}
+  .user .nm{font-size:12.5px; font-weight:600;}
+  .user .rl{font-size:11px; color:#737373; margin-top:-1px;}
+
+  /* ---------- main ---------- */
+  .main{flex:1; min-width:0; display:flex; flex-direction:column;}
+  .topline{height:56px; flex:none; border-bottom:1px solid #1f1f1f; display:flex; align-items:center; padding:0 28px; gap:12px; background:#0a0a0a;}
+  .crumb{font-size:13px; font-weight:600;}
+  .crumb span{color:#737373; font-weight:400;}
+  .status-note{display:flex; align-items:center; gap:7px; font-size:12px; color:#737373;}
+  .status-note i{width:6px;height:6px;border-radius:999px;background:#22c55e;flex:none;}
+  .btn{display:flex; align-items:center; gap:6px; background:#fafafa; color:#0a0a0a; border:none; border-radius:8px; padding:7px 13px; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;}
+
+  .body{flex:1; min-height:0; padding:22px 28px 0; display:flex; flex-direction:column; gap:16px;}
+  .head{display:flex; align-items:flex-end; gap:12px;}
+  .h1{font-size:20px; font-weight:700; letter-spacing:-.01em;}
+  .h1-sub{font-size:12.5px; color:#737373; margin-top:2px;}
+  .ghost{display:flex; align-items:center; gap:7px; padding:5px 11px; border:1px solid #1f1f1f; background:#141414; border-radius:7px; font-size:12.5px; color:#d4d4d4;}
+  .ghost.strong{color:#fafafa; font-weight:600;}
+
+  .tabs{display:flex; align-items:center; gap:4px;}
+  .tab{display:flex; align-items:center; gap:7px; padding:5px 11px; border-radius:7px; font-size:12.5px; font-weight:500; color:#737373;}
+  .tab .n{font-size:11px; color:#737373;}
+  .tab.active{background:#1f1f1f; color:#fafafa; font-weight:600;}
+  .tab.active .n{color:#737373;}
+  .shown{font-size:11.5px; color:#737373;}
+  .sort{display:flex; align-items:center; gap:5px; font-size:11.5px; color:#d4d4d4;}
+
+  /* ---------- bench cards ---------- */
+  .grid{flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr); grid-auto-rows:152px; gap:13px; overflow:hidden; align-content:start;}
+  .card{background:#141414; border:1px solid #1f1f1f; border-radius:10px; padding:12px 14px 10px; display:flex; flex-direction:column; min-height:0; overflow:hidden; position:relative;}
+  .card.quiet{background:#111111;}
+  .card.hover{border-color:#333333; background:#181818;}
+
+  .c-head{display:flex; align-items:center; gap:7px;}
+  .c-name{font-size:13px; font-weight:700; letter-spacing:-.005em;}
+  .tag{font-size:9.5px; color:#737373; border:1px solid #1f1f1f; border-radius:4px; padding:1px 5px;}
+  .state{display:flex; align-items:center; gap:6px; font-weight:500; font-size:11px; color:#737373;}
+  .state i{width:5.5px;height:5.5px;border-radius:999px;flex:none;}
+  .s-ok i{background:#22c55e;}
+  .s-run i{background:#fafafa;}
+  .s-err{color:#f87171;} .s-err i{background:#ef4444;}
+  .s-off{color:#737373;} .s-off i{background:transparent; box-shadow:inset 0 0 0 1px #525252;}
+  .kebab{color:#737373; font-size:13px; line-height:1; letter-spacing:1px; margin-left:2px;}
+
+  .c-sub{font-size:10px; color:#5c5c5c; margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+  .c-val{display:flex; align-items:baseline; gap:5px; margin-top:auto;}
+  .c-val .v{font-size:25px; font-weight:700; line-height:1; letter-spacing:-.015em;}
+  .c-val .u{font-size:12px; color:#737373; font-weight:500;}
+  .c-val .ch{font-size:10px; color:#4d4d4d; margin-left:3px;}
+  .c-val.none .v{color:#3d3d3d;}
+
+  .c-note{font-size:11px; color:#737373; margin-top:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .c-note.warn{color:#f87171;}
+
+  .c-foot{display:flex; align-items:center; gap:9px; margin-top:auto; padding-top:8px; border-top:1px solid #1f1f1f;}
+  .c-foot .t{font-size:10.5px; color:#737373;}
+  .c-foot .who{font-size:10.5px; color:#737373;}
+  .c-foot a{font-size:11px; color:#fafafa; text-decoration:none; font-weight:600;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-name">Bench Console</div>
+      <div class="ver">v0.4.2</div>
+      <div class="grow"></div>
+      <div class="env">staging</div>
+    </div>
+
+    <div class="search">
+      <svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M14 14L17.5 17.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <input value="Tìm bench, test case…">
+      <kbd>⌘K</kbd>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">Giám sát</div>
+      <div class="nav-item active">
+        <svg class="icon" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="6" height="6" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="3" width="6" height="6" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="11" width="6" height="6" rx="1.6" stroke="currentColor" stroke-width="1.5"/><rect x="11" y="11" width="6" height="6" rx="1.6" stroke="currentColor" stroke-width="1.5"/></svg>
+        Bench<span class="grow"></span><span class="n">37</span>
+      </div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 20 20" fill="none"><path d="M7 4.5l9 5.5-9 5.5v-11z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        Phiên đang chạy<span class="grow"></span><span class="n">9</span>
+      </div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 20 20" fill="none"><path d="M10 3.5l7.5 13H2.5L10 3.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 8.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Cảnh báo<span class="grow"></span><span class="n hot">3</span>
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">Cấu hình</div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 20 20" fill="none"><rect x="3.5" y="3.5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 8h6M7 11.5h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Test Case<span class="grow"></span><span class="n">148</span>
+      </div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 20 20" fill="none"><path d="M4 5.5h12M4 10h12M4 14.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Test Plan<span class="grow"></span><span class="n">6</span>
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">Báo cáo</div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="6.8" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4.2l2.8 1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Lịch sử
+      </div>
+      <div class="nav-item">
+        <svg class="icon" viewBox="0 0 20 20" fill="none"><path d="M4 15.5V9M9 15.5V5M14 15.5v-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        Thống kê
+      </div>
+    </div>
+
+    <div class="grow"></div>
+    <div class="side-note">Broker hn-prod-01 · đồng bộ 10:41:26</div>
+
+    <div class="user">
+      <div class="ava">PL</div>
+      <div><div class="nm">Phạm Long</div><div class="rl">Kỹ sư bench · Xưởng 2</div></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topline">
+      <div class="crumb"><span>Giám sát /</span> Bench</div>
+      <div class="grow"></div>
+      <div class="status-note"><i></i>MQTT ổn định · trễ 82 ms</div>
+      <button class="btn">+ Test mới</button>
+    </div>
+
+    <div class="body">
+      <div class="head">
+        <div>
+          <div class="h1">Bench</div>
+          <div class="h1-sub">37 bench · làm mới lúc 10:41:26</div>
+        </div>
+        <div class="grow"></div>
+        <div class="ghost">Xưởng 2 &amp; 3
+          <svg width="11" height="11" viewBox="0 0 20 20" fill="none"><path d="M5.5 8l4.5 4.5L14.5 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="ghost strong"><svg width="11" height="11" viewBox="0 0 20 20" fill="none"><path d="M10 4.5v11M4.5 10h11" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>Thêm bench</div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active">Tất cả <span class="n">37</span></div>
+        <div class="tab">Cần chú ý <span class="n">3</span></div>
+        <div class="tab">Đang chạy <span class="n">9</span></div>
+        <div class="tab">Sẵn sàng <span class="n">25</span></div>
+        <div class="grow"></div>
+        <div class="shown">Hiển thị 15 / 37</div>
+        <div class="sort">Sắp xếp: trạng thái
+          <svg width="10" height="10" viewBox="0 0 20 20" fill="none"><path d="M5.5 8l4.5 4.5L14.5 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <div class="grid">
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">HIL-A05</span><span class="tag">VF6</span><span class="grow"></span><span class="state s-err"><i></i>Lỗi</span></div>
+          <div class="c-sub">Xưởng 2 · Rack B4 · FW 2.14.1</div>
+          <div class="c-val"><span class="v">36.8</span><span class="u">°C</span><span class="ch">T_chamber</span></div>
+          <div class="c-note warn">CAN timeout ở step 2/3 — sensor_door không phản hồi</div>
+          <div class="c-foot"><span class="t">2 phút trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card quiet">
+          <div class="c-head"><span class="c-name">EOL-B01</span><span class="tag">VF9</span><span class="grow"></span><span class="state s-off"><i></i>Mất kết nối</span></div>
+          <div class="c-sub">Xưởng 3 · Rack A1 · FW 2.09.4</div>
+          <div class="c-val none"><span class="v">—</span></div>
+          <div class="c-note">Không thấy heartbeat từ 10:37</div>
+          <div class="c-foot"><span class="t">41 phút trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card quiet">
+          <div class="c-head"><span class="c-name">HIL-C11</span><span class="tag">VF6</span><span class="grow"></span><span class="state s-off"><i></i>Bảo trì</span></div>
+          <div class="c-sub">Xưởng 2 · Rack D2 · FW 1.88.0</div>
+          <div class="c-val none"><span class="v">—</span></div>
+          <div class="c-note">Tháo cảm biến hiệu chuẩn · Nguyễn V. Hải</div>
+          <div class="c-foot"><span class="t">từ 13/09</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card hover">
+          <div class="c-head"><span class="c-name">HIL-A02</span><span class="tag">VF6</span><span class="grow"></span><span class="state s-run"><i></i>Đang chạy</span><span class="kebab">···</span></div>
+          <div class="c-sub">Xưởng 2 · Rack B1 · FW 2.14.1</div>
+          <div class="c-val"><span class="v">34.24</span><span class="u">°C</span><span class="ch">T_chamber</span></div>
+          <div class="c-note">TP-2026-014 · Cảnh báo đèn phanh (2/3)</div>
+          <div class="c-foot"><span class="t">4 giây trước</span><span class="who">· T. Anh</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">EOL-B04</span><span class="tag">VF9</span><span class="grow"></span><span class="state s-run"><i></i>Đang chạy</span></div>
+          <div class="c-sub">Xưởng 3 · Rack A2 · FW 2.13.0</div>
+          <div class="c-val"><span class="v">1.62</span><span class="u">bar</span><span class="ch">P_line</span></div>
+          <div class="c-note">TP-2026-011 · Rung khung gầm cao tốc (1/2)</div>
+          <div class="c-foot"><span class="t">1 giây trước</span><span class="who">· T. Anh</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">HIL-A07</span><span class="tag">VF6</span><span class="grow"></span><span class="state s-run"><i></i>Đang chạy</span></div>
+          <div class="c-sub">Xưởng 2 · Rack B3 · FW 2.14.1</div>
+          <div class="c-val"><span class="v">31.7</span><span class="u">°C</span><span class="ch">T_chamber</span></div>
+          <div class="c-note">TP-2026-014 · Chu kỳ nhiệt cao/thấp (3/5)</div>
+          <div class="c-foot"><span class="t">12 giây trước</span><span class="who">· P. Long</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">EOL-B09</span><span class="tag">VF9</span><span class="grow"></span><span class="state s-run"><i></i>Đang chạy</span></div>
+          <div class="c-sub">Xưởng 3 · Rack C1 · FW 2.13.0</div>
+          <div class="c-val"><span class="v">1.21</span><span class="u">bar</span><span class="ch">P_line</span></div>
+          <div class="c-note">TP-2026-011 · Cảnh báo áp suất lốp (1/3)</div>
+          <div class="c-foot"><span class="t">7 giây trước</span><span class="who">· M. Đức</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">HIL-A01</span><span class="tag">VF6</span><span class="grow"></span><span class="state s-ok"><i></i>Sẵn sàng</span></div>
+          <div class="c-sub">Xưởng 2 · Rack B1 · FW 2.14.1</div>
+          <div class="c-val"><span class="v">28.4</span><span class="u">°C</span><span class="ch">T_chamber</span></div>
+          <div class="c-note">Rảnh từ 09:12 · chưa gán test plan</div>
+          <div class="c-foot"><span class="t">5 giây trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">EOL-B02</span><span class="tag">VF9</span><span class="grow"></span><span class="state s-ok"><i></i>Sẵn sàng</span></div>
+          <div class="c-sub">Xưởng 3 · Rack A1 · FW 2.13.0</div>
+          <div class="c-val"><span class="v">1.40</span><span class="u">bar</span><span class="ch">P_line</span></div>
+          <div class="c-note">Chờ tới lượt trong TP-2026-011</div>
+          <div class="c-foot"><span class="t">9 giây trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">EOL-B07</span><span class="tag">VF9</span><span class="grow"></span><span class="state s-ok"><i></i>Sẵn sàng</span></div>
+          <div class="c-sub">Xưởng 3 · Rack C2 · FW 2.11.2</div>
+          <div class="c-val"><span class="v">1.33</span><span class="u">bar</span><span class="ch">P_line</span></div>
+          <div class="c-note">FW cũ hơn bản chuẩn 2.13.0</div>
+          <div class="c-foot"><span class="t">34 giây trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">HIL-A09</span><span class="tag">VF6</span><span class="grow"></span><span class="state s-ok"><i></i>Sẵn sàng</span></div>
+          <div class="c-sub">Xưởng 2 · Rack B5 · FW 2.14.1</div>
+          <div class="c-val"><span class="v">27.9</span><span class="u">°C</span><span class="ch">T_chamber</span></div>
+          <div class="c-note">Vừa hiệu chuẩn 14/09</div>
+          <div class="c-foot"><span class="t">2 phút trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">HIL-C03</span><span class="tag">VF6</span><span class="grow"></span><span class="state s-ok"><i></i>Sẵn sàng</span></div>
+          <div class="c-sub">Xưởng 2 · Rack D1 · FW 2.14.1</div>
+          <div class="c-val"><span class="v">29.1</span><span class="u">°C</span><span class="ch">T_chamber</span></div>
+          <div class="c-note">Rảnh từ hôm qua 17:40</div>
+          <div class="c-foot"><span class="t">6 phút trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">HIL-C07</span><span class="tag">VF6</span><span class="grow"></span><span class="state s-run"><i></i>Đang chạy</span></div>
+          <div class="c-sub">Xưởng 2 · Rack D1 · FW 2.14.1</div>
+          <div class="c-val"><span class="v">33.0</span><span class="u">°C</span><span class="ch">T_chamber</span></div>
+          <div class="c-note">TP-2026-009 · Chịu tải liên tục 4h (1/1)</div>
+          <div class="c-foot"><span class="t">3 giây trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">EOL-B11</span><span class="tag">VF9</span><span class="grow"></span><span class="state s-ok"><i></i>Sẵn sàng</span></div>
+          <div class="c-sub">Xưởng 3 · Rack C2 · FW 2.13.0</div>
+          <div class="c-val"><span class="v">1.38</span><span class="u">bar</span><span class="ch">P_line</span></div>
+          <div class="c-note">Rảnh từ 08:05</div>
+          <div class="c-foot"><span class="t">18 giây trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+        <div class="card">
+          <div class="c-head"><span class="c-name">HIL-A04</span><span class="tag">VF6</span><span class="grow"></span><span class="state s-ok"><i></i>Sẵn sàng</span></div>
+          <div class="c-sub">Xưởng 2 · Rack B2 · FW 2.14.1</div>
+          <div class="c-val"><span class="v">28.0</span><span class="u">°C</span><span class="ch">T_chamber</span></div>
+          <div class="c-note">Rảnh từ 10:02</div>
+          <div class="c-foot"><span class="t">11 giây trước</span><span class="grow"></span><a>Chi tiết</a></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

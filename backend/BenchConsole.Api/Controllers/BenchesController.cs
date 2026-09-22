@@ -1,0 +1,230 @@
+using BenchConsole.Core.Contracts;
+using BenchConsole.Api.Data;
+using BenchConsole.Api.Mqtt;
+using BenchConsole.Core.Messaging;
+using BenchConsole.Core.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace BenchConsole.Api.Controllers;
+
+[ApiController]
+[Route("api/benches")]
+public class BenchesController(AppDbContext db, BenchCommandPublisher publisher) : ControllerBase
+{
+    /// <summary>
+    /// Danh sách bench cho màn Giám sát. Đọc từ database, không hỏi bench —
+    /// dữ liệu đã được luồng MQTT ghi sẵn nên endpoint này luôn trả nhanh
+    /// và vẫn trả được cả khi bench đang mất kết nối.
+    /// </summary>
+    [HttpGet]
+    public async Task<ActionResult<List<BenchDto>>> List(
+        [FromQuery] string? state,
+        [FromQuery] string? model,
+        [FromQuery] string? q,
+        CancellationToken ct)
+    {
+        var query = db.Benches.AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            var wanted = BenchMessageParser.ParseState(state);
+            if (wanted == BenchState.Unknown && !state.Equals("unknown", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { error = $"Trạng thái không hợp lệ: {state}" });
+            query = query.Where(b => b.State == wanted);
+        }
+
+        if (!string.IsNullOrWhiteSpace(model))
+            query = query.Where(b => b.Model == model);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var needle = q.Trim();
+            query = query.Where(b =>
+                EF.Functions.Like(b.Code, $"%{needle}%") ||
+                (b.Workshop != null && EF.Functions.Like(b.Workshop, $"%{needle}%")) ||
+                (b.CurrentTestCase != null && EF.Functions.Like(b.CurrentTestCase, $"%{needle}%")));
+        }
+
+        var rows = await query
+            // Bench có vấn đề lên trước: Error(3), Offline(4) rồi mới Running/Idle.
+            .OrderBy(b => b.State == BenchState.Error ? 0
+                        : b.State == BenchState.Offline ? 1
+                        : b.State == BenchState.Maintenance ? 2 : 3)
+            .ThenBy(b => b.Code)
+            .ToListAsync(ct);
+
+        return rows.Select(BenchDto.From).ToList();
+    }
+
+    [HttpGet("{code}")]
+    public async Task<ActionResult<BenchDto>> Get(string code, CancellationToken ct)
+    {
+        var bench = await db.Benches.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Code == code, ct);
+        return bench is null ? NotFound(new { error = $"Không có bench {code}" }) : BenchDto.From(bench);
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<BenchDto>> Create(CreateBenchRequest req, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.Model))
+            return BadRequest(new { error = "Thiếu mã bench hoặc dòng xe" });
+
+        var code = req.Code.Trim().ToUpperInvariant();
+        var model = req.Model.Trim().ToLowerInvariant();
+
+        if (await db.Benches.AnyAsync(b => b.Code == code, ct))
+            return Conflict(new { error = $"Bench {code} đã tồn tại" });
+
+        var bench = new Bench
+        {
+            Code = code,
+            Model = model,
+            Workshop = req.Workshop,
+            Rack = req.Rack,
+            Firmware = req.Firmware,
+            PrimaryChannel = req.PrimaryChannel,
+            PrimaryUnit = req.PrimaryUnit,
+            // Phải khớp chính xác prefix mà agent trên máy bench dùng để publish.
+            TopicPrefix = $"bench/{model}/{code}",
+            State = BenchState.Unknown,
+        };
+
+        db.Benches.Add(bench);
+        await db.SaveChangesAsync(ct);
+
+        // Chưa có LastSeenAt: thẻ sẽ hiện "Chưa từng kết nối" cho tới khi agent
+        // gửi gói đầu tiên. Đó là tín hiệu để người dùng biết cấu hình agent sai.
+        return CreatedAtAction(nameof(Get), new { code = bench.Code }, BenchDto.From(bench));
+    }
+
+    [HttpPatch("{code}")]
+    public async Task<ActionResult<BenchDto>> Update(string code, UpdateBenchRequest req, CancellationToken ct)
+    {
+        var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
+        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+
+        // Không cho đổi Code và Model: chúng nằm trong TopicPrefix, đổi ở đây mà
+        // không đổi trên máy bench thì Console mất liên lạc mà không rõ vì sao.
+        if (req.Workshop is not null) bench.Workshop = req.Workshop;
+        if (req.Rack is not null) bench.Rack = req.Rack;
+        if (req.Firmware is not null) bench.Firmware = req.Firmware;
+        if (req.PrimaryChannel is not null) bench.PrimaryChannel = req.PrimaryChannel;
+        if (req.PrimaryUnit is not null) bench.PrimaryUnit = req.PrimaryUnit;
+
+        await db.SaveChangesAsync(ct);
+        return BenchDto.From(bench);
+    }
+
+    [HttpDelete("{code}")]
+    public async Task<IActionResult> Delete(string code, CancellationToken ct)
+    {
+        var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
+        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+
+        if (bench.State == BenchState.Running)
+            return Conflict(new { error = "Bench đang chạy test, dừng test trước khi xoá" });
+
+        db.Benches.Remove(bench);
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    // ------------------------------------------------------------ ra lệnh
+
+    [HttpPost("{code}/start")]
+    public Task<ActionResult<CommandAcceptedDto>> Start(string code, StartTestRequest req, CancellationToken ct)
+        => Dispatch(code, "start_test", req.TestCase, req.Plan, req.IssuedBy, ct);
+
+    [HttpPost("{code}/stop")]
+    public Task<ActionResult<CommandAcceptedDto>> Stop(string code, [FromQuery] string? by, CancellationToken ct)
+        => Dispatch(code, "stop", null, null, by, ct);
+
+    [HttpPost("{code}/reset")]
+    public Task<ActionResult<CommandAcceptedDto>> Reset(string code, [FromQuery] string? by, CancellationToken ct)
+        => Dispatch(code, "reset_bench", null, null, by, ct);
+
+    private async Task<ActionResult<CommandAcceptedDto>> Dispatch(
+        string code, string action, string? testCase, string? plan, string? by, CancellationToken ct)
+    {
+        var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
+        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+
+        if (action == "start_test")
+        {
+            if (string.IsNullOrWhiteSpace(testCase))
+                return BadRequest(new { error = "Thiếu tên test case" });
+
+            // Chặn ở đây để khỏi làm rối bench, nhưng agent vẫn phải tự kiểm tra
+            // lại — trạng thái trong DB có thể trễ vài giây so với thực tế.
+            if (bench.State == BenchState.Running)
+                return Conflict(new { error = $"Bench đang chạy {bench.CurrentTestCase}" });
+            if (bench.State is BenchState.Offline or BenchState.Unknown)
+                return Conflict(new { error = "Bench đang mất kết nối" });
+            if (bench.State == BenchState.Maintenance)
+                return Conflict(new { error = "Bench đang bảo trì" });
+        }
+
+        try
+        {
+            var cmd = await publisher.SendAsync(bench, action, testCase, plan, by, ct);
+
+            // 202 chứ không phải 200: lệnh đã gửi, bench chưa xác nhận. Giao diện
+            // theo tiếp bằng cmdId qua SignalR, không giữ HTTP request chờ test xong.
+            return Accepted(new CommandAcceptedDto(cmd.CmdId, "pending", cmd.IssuedAt));
+        }
+        catch (CommandNotSentException ex)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = ex.Message });
+        }
+    }
+
+    // ---------------------------------------------------------- dữ liệu đo
+
+    [HttpGet("{code}/telemetry")]
+    public async Task<ActionResult<List<TelemetrySeriesDto>>> Telemetry(
+        string code,
+        [FromQuery] string? channel,
+        [FromQuery] int minutes = 5,
+        CancellationToken ct = default)
+    {
+        var bench = await db.Benches.AsNoTracking().FirstOrDefaultAsync(b => b.Code == code, ct);
+        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+
+        minutes = Math.Clamp(minutes, 1, 180);
+        var since = DateTimeOffset.UtcNow.AddMinutes(-minutes);
+
+        var query = db.TelemetrySamples.AsNoTracking()
+            .Where(s => s.BenchId == bench.Id && s.At >= since);
+        if (!string.IsNullOrWhiteSpace(channel))
+            query = query.Where(s => s.Channel == channel);
+
+        var rows = await query.OrderBy(s => s.At).ToListAsync(ct);
+
+        return rows
+            .GroupBy(s => s.Channel)
+            .Select(g => new TelemetrySeriesDto(
+                g.Key,
+                g.Key == bench.PrimaryChannel ? bench.PrimaryUnit : null,
+                g.Select(s => new TelemetryPointDto(s.At, s.Value)).ToList()))
+            .OrderBy(s => s.Channel)
+            .ToList();
+    }
+
+    [HttpGet("{code}/runs")]
+    public async Task<ActionResult<List<RunDto>>> Runs(
+        string code, [FromQuery] int take = 50, CancellationToken ct = default)
+    {
+        var bench = await db.Benches.AsNoTracking().FirstOrDefaultAsync(b => b.Code == code, ct);
+        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+
+        var rows = await db.Runs.AsNoTracking()
+            .Where(r => r.BenchId == bench.Id)
+            .OrderByDescending(r => r.FinishedAt)
+            .Take(Math.Clamp(take, 1, 500))
+            .ToListAsync(ct);
+
+        return rows.Select(r => RunDto.From(r, bench.Code)).ToList();
+    }
+}

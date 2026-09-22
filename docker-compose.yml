@@ -1,0 +1,38 @@
+services:
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: bench-mqtt
+    ports:
+      # 0.0.0.0 cho phep may khac trong mang ket noi vao, khong chi localhost
+      - "0.0.0.0:1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mqtt-data:/mosquitto/data
+    restart: unless-stopped
+
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: bench-sql
+    environment:
+      ACCEPT_EULA: "Y"
+      # Phai trung voi ConnectionStrings:Default trong appsettings.json.
+      # SQL Server tu choi mat khau yeu va container se chet ngay khi khoi dong.
+      MSSQL_SA_PASSWORD: "Bench!Console1"
+      MSSQL_PID: Developer
+    ports:
+      - "127.0.0.1:14330:1433"
+    volumes:
+      - sql-data:/var/opt/mssql
+    restart: unless-stopped
+    # SQL Server can ~2GB RAM. Neu Docker Desktop cap it hon, container se
+    # khoi dong roi tat ngay - xem log bang: docker logs bench-sql
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/localhost/1433' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+volumes:
+  mqtt-data:
+  sql-data:

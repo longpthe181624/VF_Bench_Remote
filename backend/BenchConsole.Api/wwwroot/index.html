@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bench Console — tạm</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:#fafafa; color:#0a0a0a;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:13px; line-height:1.5;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:20px 20px 60px;}
+
+  header{display:flex; align-items:baseline; gap:10px; margin-bottom:4px;}
+  h1{font-size:17px; font-weight:700; margin:0; letter-spacing:-.01em;}
+  .badge{font-size:10px; font-weight:600; color:#92400e; background:#fef3c7; border-radius:4px; padding:2px 6px;}
+  .grow{flex:1;}
+  .meta{font-size:11.5px; color:#a1a1a1;}
+
+  .err{display:none; margin:10px 0; padding:8px 11px; border:1px solid #fecaca; background:#fef2f2; color:#b91c1c; border-radius:7px; font-size:12.5px;}
+  .err.show{display:block;}
+
+  section{margin-top:22px;}
+  .sec-head{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
+  h2{font-size:13px; font-weight:600; margin:0;}
+  .count{font-size:11px; color:#a1a1a1;}
+
+  input, select{
+    font-family:inherit; font-size:12.5px; color:#0a0a0a;
+    border:1px solid #e0e0e0; border-radius:6px; padding:5px 8px; background:#fff;
+  }
+  input:focus, select:focus{outline:1px solid #0a0a0a; outline-offset:-1px;}
+
+  button{
+    font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;
+    border-radius:6px; padding:5px 10px; border:1px solid #e0e0e0; background:#fff; color:#0a0a0a;
+  }
+  button:hover{border-color:#c4c4c4;}
+  button:disabled{opacity:.4; cursor:default;}
+  button.primary{background:#0a0a0a; color:#fff; border-color:#0a0a0a;}
+  button.danger{color:#b91c1c; border-color:#fecaca;}
+  button.ghost{border-color:transparent; color:#737373; padding:4px 6px;}
+
+  table{width:100%; border-collapse:collapse; background:#fff; border:1px solid #e9e9e9; border-radius:9px; overflow:hidden;}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid #f0f0f0; vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  th{font-size:10.5px; font-weight:600; color:#a1a1a1; text-transform:uppercase; letter-spacing:.02em; background:#fcfcfc;}
+
+  .code{font-weight:700;}
+  .sub{font-size:11px; color:#a1a1a1; margin-top:2px;}
+  .state{display:inline-flex; align-items:center; gap:6px; font-weight:500; white-space:nowrap;}
+  .state i{width:6px; height:6px; border-radius:999px; flex:none; background:#a1a1a1;}
+  .st-idle i{background:#16a34a;} .st-idle{color:#166534;}
+  .st-running i{background:#0a0a0a;} .st-running{color:#0a0a0a;}
+  .st-error i{background:#dc2626;} .st-error{color:#b91c1c;}
+  .st-offline i{box-shadow:inset 0 0 0 1px #c4c4c4; background:transparent;} .st-offline{color:#a1a1a1;}
+  .st-maintenance i{background:#a1a1a1;} .st-maintenance{color:#737373;}
+  .st-unknown i{box-shadow:inset 0 0 0 1px #c4c4c4; background:transparent;} .st-unknown{color:#a1a1a1;}
+
+  .testcase{font-size:12px;}
+  .testcase .none{color:#c4c4c4;}
+  .stale{font-size:11px; color:#a1a1a1;}
+  .stale.warn{color:#b91c1c;}
+
+  .actions{display:flex; gap:5px; flex-wrap:wrap; align-items:center;}
+  .actions input{width:118px;}
+
+  form.addbench{display:none; gap:8px; flex-wrap:wrap; align-items:end; background:#fff; border:1px solid #e9e9e9; border-radius:9px; padding:12px; margin-bottom:10px;}
+  form.addbench.show{display:flex;}
+  .field{display:flex; flex-direction:column; gap:3px;}
+  .field label{font-size:10.5px; color:#a1a1a1;}
+  .field input{width:130px;}
+
+  .empty{padding:20px; text-align:center; color:#a1a1a1; font-size:12.5px; background:#fff; border:1px solid #e9e9e9; border-radius:9px;}
+
+  .alert-row td{background:#fff;}
+  .alert-msg{color:#b91c1c;}
+  .toast{position:fixed; bottom:16px; right:16px; background:#0a0a0a; color:#fff; padding:8px 13px; border-radius:7px; font-size:12.5px; opacity:0; transform:translateY(6px); transition:opacity .15s, transform .15s; pointer-events:none;}
+  .toast.show{opacity:1; transform:translateY(0);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Bench Console</h1>
+    <span class="badge">giao diện tạm</span>
+    <span class="grow"></span>
+    <span class="meta" id="clock"></span>
+  </header>
+  <div class="meta">Trang tạm gọi thẳng REST API — dùng thay Swagger cho các thao tác thường ngày. Tự làm mới mỗi 5 giây.</div>
+
+  <div class="err" id="err"></div>
+
+  <section>
+    <div class="sec-head">
+      <h2>Bench</h2>
+      <span class="count" id="bench-count"></span>
+      <span class="grow"></span>
+      <input id="q" placeholder="Tìm mã bench / xưởng / test case…" style="width:220px">
+      <select id="filter-state">
+        <option value="">Mọi trạng thái</option>
+        <option value="idle">Sẵn sàng</option>
+        <option value="running">Đang chạy</option>
+        <option value="error">Lỗi</option>
+        <option value="offline">Mất kết nối</option>
+        <option value="maintenance">Bảo trì</option>
+      </select>
+      <button id="toggle-add">+ Thêm bench</button>
+    </div>
+
+    <form class="addbench" id="add-form">
+      <div class="field"><label>Mã bench *</label><input name="code" required placeholder="HIL-A05"></div>
+      <div class="field"><label>Dòng xe *</label><input name="model" required placeholder="vf6"></div>
+      <div class="field"><label>Xưởng</label><input name="workshop" placeholder="Xưởng 2"></div>
+      <div class="field"><label>Rack</label><input name="rack" placeholder="B4"></div>
+      <div class="field"><label>Firmware</label><input name="firmware" placeholder="2.14.1"></div>
+      <div class="field"><label>Kênh chính</label><input name="primaryChannel" placeholder="T_chamber"></div>
+      <div class="field"><label>Đơn vị</label><input name="primaryUnit" placeholder="°C"></div>
+      <button type="submit" class="primary">Tạo</button>
+      <button type="button" id="cancel-add">Huỷ</button>
+    </form>
+
+    <div id="bench-area"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Cảnh báo đang mở</h2>
+      <span class="count" id="alert-count"></span>
+    </div>
+    <div id="alert-area"></div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = "";
+const STATE_LABEL = {
+  idle: "Sẵn sàng", running: "Đang chạy", error: "Lỗi",
+  offline: "Mất kết nối", maintenance: "Bảo trì", unknown: "Chưa rõ"
+};
+// Giữ giá trị ô nhập test case qua các lần load() tự động (mỗi 5s), vì
+// dựng lại toàn bộ bảng sẽ tạo input mới và xoá mất chữ người dùng đang gõ.
+const pendingTestCase = {};
+
+function el(tag, attrs, ...children){
+  const n = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs||{})){
+    if (k === "class") n.className = v;
+    else if (k.startsWith("on") && typeof v === "function") n.addEventListener(k.slice(2), v);
+    else if (v !== null && v !== undefined) n.setAttribute(k, v);
+  }
+  for (const c of children){
+    if (c === null || c === undefined) continue;
+    n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return n;
+}
+
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+function showErr(msg){
+  const e = document.getElementById("err");
+  if (!msg){ e.classList.remove("show"); e.textContent = ""; return; }
+  e.textContent = msg;
+  e.classList.add("show");
+}
+
+async function api(path, opts){
+  const res = await fetch(API + path, {
+    headers: {"Content-Type": "application/json"},
+    ...opts,
+  });
+  if (!res.ok){
+    let msg = res.status + " " + res.statusText;
+    try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
+    throw new Error(msg);
+  }
+  if (res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function fmtAgo(seconds){
+  if (seconds === null || seconds === undefined) return "chưa từng kết nối";
+  if (seconds < 60) return seconds + " giây trước";
+  if (seconds < 3600) return Math.floor(seconds/60) + " phút trước";
+  if (seconds < 86400) return Math.floor(seconds/3600) + " giờ trước";
+  return Math.floor(seconds/86400) + " ngày trước";
+}
+
+function benchRow(b){
+  const stateClass = "st-" + (b.state || "unknown");
+  const stateLabel = STATE_LABEL[b.state] || b.state;
+  const sub = [b.workshop, b.rack, b.firmware ? "FW " + b.firmware : null].filter(Boolean).join(" · ");
+
+  const tc = el("div", {class:"testcase"},
+    b.testCase ? el("span", {}, b.testCase + (b.plan ? " (" + b.plan + ")" : "")) : el("span", {class:"none"}, "—"));
+
+  const staleWarn = b.staleSeconds !== null && b.staleSeconds !== undefined && b.staleSeconds > 90;
+  const stale = el("div", {class:"stale" + (staleWarn ? " warn" : "")}, fmtAgo(b.staleSeconds));
+
+  const testCaseInput = el("input", {placeholder:"tên test case", value: pendingTestCase[b.code] || ""});
+  testCaseInput.addEventListener("input", () => { pendingTestCase[b.code] = testCaseInput.value; });
+  const startBtn = el("button", {onclick: async () => {
+    if (!testCaseInput.value.trim()){ showErr("Nhập tên test case trước khi bấm Chạy."); return; }
+    try {
+      await api(`/api/benches/${b.code}/start`, {method:"POST", body: JSON.stringify({
+        testCase: testCaseInput.value.trim(), plan: null, issuedBy: "console-tam"
+      })});
+      delete pendingTestCase[b.code];
+      showToast(`Đã gửi lệnh chạy tới ${b.code}`);
+      showErr(null);
+      load();
+    } catch(e){ showErr(e.message); }
+  }}, "Chạy");
+
+  const stopBtn = el("button", {class:"danger", onclick: async () => {
+    try { await api(`/api/benches/${b.code}/stop?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh dừng tới ${b.code}`); showErr(null); load(); }
+    catch(e){ showErr(e.message); }
+  }}, "Dừng");
+
+  const resetBtn = el("button", {onclick: async () => {
+    try { await api(`/api/benches/${b.code}/reset?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh reset tới ${b.code}`); showErr(null); load(); }
+    catch(e){ showErr(e.message); }
+  }}, "Reset");
+
+  const delBtn = el("button", {class:"ghost", onclick: async () => {
+    if (!confirm(`Xoá bench ${b.code}?`)) return;
+    try { await api(`/api/benches/${b.code}`, {method:"DELETE"}); showToast(`Đã xoá ${b.code}`); load(); }
+    catch(e){ showErr(e.message); }
+  }}, "Xoá");
+
+  const actions = el("div", {class:"actions"}, testCaseInput, startBtn, stopBtn, resetBtn, delBtn);
+
+  return el("tr", {},
+    el("td", {}, el("div", {class:"code"}, b.code), el("div", {class:"sub"}, sub || "—")),
+    el("td", {}, b.model),
+    el("td", {}, el("span", {class:"state " + stateClass}, el("i"), stateLabel)),
+    el("td", {}, tc),
+    el("td", {}, stale),
+    el("td", {}, actions),
+  );
+}
+
+async function load(){
+  const q = document.getElementById("q").value.trim();
+  const state = document.getElementById("filter-state").value;
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (state) params.set("state", state);
+
+  try {
+    const [benches, alerts] = await Promise.all([
+      api("/api/benches" + (params.toString() ? "?" + params.toString() : "")),
+      api("/api/alerts"),
+    ]);
+    showErr(null);
+    renderBenches(benches);
+    renderAlerts(alerts);
+  } catch(e){
+    showErr("Không tải được dữ liệu: " + e.message);
+  }
+}
+
+function renderBenches(rows){
+  // Đang gõ dở trong ô test case thì bỏ qua lượt vẽ lại này — dựng lại bảng
+  // tạo input mới và làm con trỏ nhảy mất, dù chữ đã gõ không còn bị xoá.
+  if (document.activeElement?.closest?.(".actions")) return;
+
+  const area = document.getElementById("bench-area");
+  document.getElementById("bench-count").textContent = rows.length + " bench";
+  area.innerHTML = "";
+  if (!rows.length){
+    area.appendChild(el("div", {class:"empty"}, "Chưa có bench nào."));
+    return;
+  }
+  const table = el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Bench"), el("th", {}, "Dòng xe"), el("th", {}, "Trạng thái"),
+      el("th", {}, "Test case"), el("th", {}, "Cập nhật"), el("th", {}, "Hành động"))),
+    el("tbody", {}, ...rows.map(benchRow)));
+  area.appendChild(table);
+}
+
+function renderAlerts(rows){
+  const area = document.getElementById("alert-area");
+  document.getElementById("alert-count").textContent = rows.length + " cảnh báo";
+  area.innerHTML = "";
+  if (!rows.length){
+    area.appendChild(el("div", {class:"empty"}, "Không có cảnh báo nào đang mở."));
+    return;
+  }
+  const table = el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Bench"), el("th", {}, "Loại"), el("th", {}, "Nội dung"),
+      el("th", {}, "Lúc"), el("th", {}, ""))),
+    el("tbody", {}, ...rows.map(a => el("tr", {class:"alert-row"},
+      el("td", {}, el("span", {class:"code"}, a.benchCode)),
+      el("td", {}, a.kind),
+      el("td", {class:"alert-msg"}, a.message),
+      el("td", {}, new Date(a.raisedAt).toLocaleTimeString("vi-VN")),
+      el("td", {}, a.acknowledgedAt
+        ? el("span", {class:"meta"}, "đã xem")
+        : el("button", {class:"ghost", onclick: async () => {
+            try { await api(`/api/alerts/${a.id}/ack?by=console-tam`, {method:"POST"}); load(); }
+            catch(e){ showErr(e.message); }
+          }}, "Đã xem")),
+    ))));
+  area.appendChild(table);
+}
+
+document.getElementById("toggle-add").addEventListener("click", () => {
+  document.getElementById("add-form").classList.toggle("show");
+});
+document.getElementById("cancel-add").addEventListener("click", () => {
+  document.getElementById("add-form").classList.remove("show");
+});
+document.getElementById("add-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  const body = Object.fromEntries(fd.entries());
+  for (const k of Object.keys(body)) if (body[k] === "") body[k] = null;
+  try {
+    await api("/api/benches", {method:"POST", body: JSON.stringify(body)});
+    showToast(`Đã tạo bench ${body.code}`);
+    ev.target.reset();
+    ev.target.classList.remove("show");
+    showErr(null);
+    load();
+  } catch(e){ showErr(e.message); }
+});
+
+let debounceT;
+document.getElementById("q").addEventListener("input", () => { clearTimeout(debounceT); debounceT = setTimeout(load, 300); });
+document.getElementById("filter-state").addEventListener("change", load);
+
+function tickClock(){
+  document.getElementById("clock").textContent = new Date().toLocaleTimeString("vi-VN");
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+namespace BenchConsole.Core.Models;
+
+public enum BenchState
+{
+    Unknown = 0,
+    Idle = 1,        // Sẵn sàng
+    Running = 2,     // Đang chạy
+    Error = 3,       // Lỗi
+    Offline = 4,     // Mất kết nối
+    Maintenance = 5, // Bảo trì
+}
+
+public enum Verdict
+{
+    Unknown = 0,
+    Pass = 1,
+    Fail = 2,
+}
+
+public enum CommandStatus
+{
+    Pending = 0,     // đã publish, chưa có ack
+    Accepted = 1,
+    Rejected = 2,
+    TimedOut = 3,    // quá hạn không thấy ack
+    Completed = 4,   // đã có result
+}
+
+/// <summary>Một bench trong danh mục. Đăng ký bằng tay, không tự phát hiện.</summary>
+public class Bench
+{
+    public int Id { get; set; }
+    /// <summary>Mã bench, ví dụ HIL-A02. Phải trùng bench.id trong config của agent.</summary>
+    public string Code { get; set; } = "";
+    public string Model { get; set; } = "";          // vf6 / vf9
+    public string? Workshop { get; set; }            // "Xưởng 2"
+    public string? Rack { get; set; }                // "Rack B1"
+    public string? Firmware { get; set; }            // "2.14.1"
+    public string TopicPrefix { get; set; } = "";    // bench/vf6/HIL-A02
+
+    public BenchState State { get; set; } = BenchState.Unknown;
+    public DateTimeOffset? LastSeenAt { get; set; }
+    public DateTimeOffset? LastPacketAt { get; set; }
+
+    /// <summary>Chỉ số chính hiển thị trên thẻ, ví dụ T_chamber.</summary>
+    public string? PrimaryChannel { get; set; }
+    public double? PrimaryValue { get; set; }
+    public string? PrimaryUnit { get; set; }
+
+    public string? CurrentTestCase { get; set; }
+    public string? CurrentPlan { get; set; }
+    public string? CurrentStep { get; set; }         // "2/3"
+    public string? Note { get; set; }                // dòng ngữ cảnh trên thẻ
+
+    public List<Run> Runs { get; set; } = new();
+    public List<BenchCommand> Commands { get; set; } = new();
+}
+
+/// <summary>Một lệnh gửi xuống bench. Ghi trước khi publish để không mất dấu.</summary>
+public class BenchCommand
+{
+    public int Id { get; set; }
+    public string CmdId { get; set; } = "";          // khớp với ack
+    public int BenchId { get; set; }
+    public Bench? Bench { get; set; }
+
+    public string Action { get; set; } = "";         // start_test / stop / reset_bench
+    public string? TestCase { get; set; }
+    public string? Plan { get; set; }
+    public string? PayloadJson { get; set; }
+
+    public CommandStatus Status { get; set; } = CommandStatus.Pending;
+    public string? RejectReason { get; set; }
+    public string? IssuedBy { get; set; }
+    public DateTimeOffset IssuedAt { get; set; }
+    public DateTimeOffset? AckedAt { get; set; }
+}
+
+/// <summary>Một lượt chạy test đã xong, dùng cho màn Lịch sử.</summary>
+public class Run
+{
+    public int Id { get; set; }
+    public int BenchId { get; set; }
+    public Bench? Bench { get; set; }
+
+    public string? CmdId { get; set; }
+    public string TestCase { get; set; } = "";
+    public string? Plan { get; set; }
+    public Verdict Verdict { get; set; } = Verdict.Unknown;
+    public double? DurationSeconds { get; set; }
+    public string? Reason { get; set; }              // sensor_timeout khi fail vì lỗi
+    public string? DetailJson { get; set; }
+    public string? RunBy { get; set; }
+    public DateTimeOffset FinishedAt { get; set; }
+}
+
+/// <summary>Một điểm đo. Giữ thô để vẽ biểu đồ 5 phút gần nhất.</summary>
+public class TelemetrySample
+{
+    public long Id { get; set; }
+    public int BenchId { get; set; }
+    public string Channel { get; set; } = "";
+    public double Value { get; set; }
+    public DateTimeOffset At { get; set; }
+}
+
+/// <summary>Cảnh báo đang mở, sinh ra khi bench vào trạng thái error hoặc offline.</summary>
+public class Alert
+{
+    public int Id { get; set; }
+    public int BenchId { get; set; }
+    public Bench? Bench { get; set; }
+
+    public string Kind { get; set; } = "";           // sensor_timeout / disconnected
+    public string Message { get; set; } = "";
+    public DateTimeOffset RaisedAt { get; set; }
+    public DateTimeOffset? AcknowledgedAt { get; set; }
+    public string? AcknowledgedBy { get; set; }
+    public DateTimeOffset? ClosedAt { get; set; }
+}
