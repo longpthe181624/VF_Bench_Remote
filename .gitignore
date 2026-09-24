@@ -65,3 +65,6 @@ obj/
 
 # Kho gói test case người dùng tải lên — dữ liệu chạy, không phải mã nguồn
 backend/BenchConsole.Api/App_Data/
+
+# Ghi chu ngu canh cho Claude Code — chi dung o may ca nhan
+CLAUDE.md
