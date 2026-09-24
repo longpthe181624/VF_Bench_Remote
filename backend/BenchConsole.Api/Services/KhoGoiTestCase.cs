@@ -33,8 +33,13 @@ public class KhoGoiTestCase
     public KhoGoiTestCase(IConfiguration cfg, IHostEnvironment env, ILogger<KhoGoiTestCase> log)
     {
         _log = log;
-        _thuMuc = cfg["GoiTestCase:ThuMuc"]
-                  ?? Path.Combine(env.ContentRootPath, "App_Data", "goi-test-case");
+        // Phải kiểm chuỗi rỗng chứ không chỉ null: "ThuMuc": null trong
+        // appsettings.json được .NET Configuration đọc thành chuỗi rỗng, nên
+        // toán tử ?? không bắt được và CreateDirectory("") sẽ ném lỗi.
+        var thuMucCauHinh = cfg["GoiTestCase:ThuMuc"];
+        _thuMuc = string.IsNullOrWhiteSpace(thuMucCauHinh)
+                  ? Path.Combine(env.ContentRootPath, "App_Data", "goi-test-case")
+                  : thuMucCauHinh;
         Directory.CreateDirectory(_thuMuc);
     }
 

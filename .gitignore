@@ -11,3 +11,6 @@ venv/
 bin/
 obj/
 *.user
+
+# Kho goi test case nguoi dung tai len — du lieu chay, khong commit
+backend/BenchConsole.Api/App_Data/

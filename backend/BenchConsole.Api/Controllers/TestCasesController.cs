@@ -9,6 +9,21 @@ using Microsoft.EntityFrameworkCore;
 namespace BenchConsole.Api.Controllers;
 
 /// <summary>
+/// Các trường của form tải gói lên.
+///
+/// Phải gom vào một lớp thay vì để rời từng tham số <c>[FromForm]</c>:
+/// Swashbuckle không đọc được <c>IFormFile</c> đứng cạnh các tham số form
+/// khác và sẽ ném lỗi làm hỏng CẢ tài liệu OpenAPI, khiến `/swagger` trả 500
+/// và không xuất được spec cho đội khác dùng.
+/// </summary>
+public sealed class TaiLenGoiForm
+{
+    public IFormFile? File { get; set; }
+    public string Ten { get; set; } = "";
+    public string? NguoiTaiLen { get; set; }
+}
+
+/// <summary>
 /// Kho gói test case trên Console.
 ///
 /// Luồng đầy đủ: người dùng nén thư mục test case thành ZIP rồi tải lên đây;
@@ -43,12 +58,15 @@ public class TestCasesController(
     /// </summary>
     [HttpPost]
     [RequestSizeLimit(KhoGoiTestCase.KichThuocToiDa)]
+    [Consumes("multipart/form-data")]
     public async Task<ActionResult<GoiTestCaseDto>> TaiLen(
-        [FromForm] IFormFile file,
-        [FromForm] string ten,
-        [FromForm] string? nguoiTaiLen,
+        [FromForm] TaiLenGoiForm form,
         CancellationToken ct)
     {
+        var file = form.File;
+        var ten = form.Ten;
+        var nguoiTaiLen = form.NguoiTaiLen;
+
         if (file is null || file.Length == 0)
             return BadRequest(new { error = "Chưa chọn file." });
 
