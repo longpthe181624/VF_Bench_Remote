@@ -181,6 +181,66 @@ Check(BenchNote.Describe(St(BenchState.Offline)) == "Không nhận được dữ
 Check(BenchNote.Describe(St(BenchState.Unknown)) is null,
       "trạng thái chưa biết thì để null, không bịa ra chữ");
 
+Check(BenchNote.Describe(St(BenchState.Idle)) == "Rảnh · sẵn sàng nhận lệnh",
+      "bench rảnh mà không kèm mô tả thì dùng câu mặc định");
+
+Check(BenchNote.Describe(St(BenchState.Idle, detail: "Đang dùng tại chỗ — Qauto giữ kênh CAN"))
+        == "Đang dùng tại chỗ — Qauto giữ kênh CAN",
+      "bench rảnh nhưng có người thao tác tay thì phải hiện, không được báo sẵn sàng");
+
+// ------------------------------------------------------------- mã model
+Section("Đổi tên dòng xe thành mã dùng trong topic");
+
+// Tên thật tester đặt, lấy từ danh sách bench thực tế.
+Check(MaModel.Ma("VF8") == "vf8", "tên đơn giản chỉ cần viết thường");
+Check(MaModel.Ma("VF9VN") == "vf9vn", "không có khoảng trắng thì giữ nguyên chữ");
+Check(MaModel.Ma("VF8New VN") == "vf8new-vn", "khoảng trắng thành gạch nối");
+Check(MaModel.Ma("VF8New ME") == "vf8new-me", "biến thể theo thị trường cũng vậy");
+
+Check(MaModel.Ma("  VF8New   ME  ") == "vf8new-me",
+      "khoảng trắng thừa hai đầu và ở giữa không được sinh gạch nối thừa");
+Check(MaModel.Ma("VF8_New.ME") == "vf8-new-me",
+      "gạch dưới và dấu chấm cũng quy về gạch nối");
+Check(MaModel.Ma("") == "" && MaModel.Ma(null) == "" && MaModel.Ma("   ") == "",
+      "rỗng thì trả rỗng, để nơi gọi tự quyết, hàm này không đoán hộ");
+Check(MaModel.Ma("!!!") == "", "toàn ký tự bỏ đi thì cũng phải ra rỗng, không ra gạch nối");
+
+Check(MaModel.TopicPrefix("VF8New ME", "hil-a02") == "bench/vf8new-me/HIL-A02",
+      "prefix phải viết thường model và VIẾT HOA mã bench, đúng như backend lưu");
+
+// ------------------------------------------------------- đối chiếu tên máy
+Section("Đối chiếu tên máy với bench");
+
+Check(MayCuaBench.Lech("BENCH-PC-01", "BENCH-PC-02"),
+      "hai tên máy khác nhau thì phải coi là lệch");
+Check(!MayCuaBench.Lech("BENCH-PC-01", "bench-pc-01"),
+      "tên máy Windows không phân biệt hoa thường, đừng cảnh báo oan");
+Check(!MayCuaBench.Lech("BENCH-PC-01", "  BENCH-PC-01  "),
+      "khoảng trắng thừa không được tính là lệch");
+
+// Hai vế thiếu thì im lặng. Cảnh báo lúc này chỉ tạo nhiễu, rồi người ta tắt
+// đi, và lúc lệch thật thì không ai buồn nhìn nữa.
+Check(!MayCuaBench.Lech(null, "BENCH-PC-02"),
+      "bench chưa khai tên máy thì không kiểm, đó là chuyện bình thường");
+Check(!MayCuaBench.Lech("BENCH-PC-01", null),
+      "agent bản cũ chưa gửi host thì cũng không được cảnh báo");
+Check(!MayCuaBench.Lech("", "BENCH-PC-02") && !MayCuaBench.Lech("BENCH-PC-01", "   "),
+      "chuỗi rỗng hay toàn khoảng trắng phải coi như chưa khai");
+
+Check(MayCuaBench.MoTaLech("HIL-A02", "PC-01", "PC-09").Contains("HIL-A02")
+      && MayCuaBench.MoTaLech("HIL-A02", "PC-01", "PC-09").Contains("PC-09"),
+      "câu cảnh báo phải nêu cả mã bench lẫn tên máy thật, để người đi kiểm đúng chỗ");
+
+var cóHost = BenchMessageParser.Parse(
+    "bench/vf6/HIL-A02/status",
+    """{"state": "idle", "host": "BENCH-PC-01"}""") as StatusMessage;
+Check(cóHost?.Host == "BENCH-PC-01", "status phải đọc được trường host");
+
+var khôngHost = BenchMessageParser.Parse(
+    "bench/vf6/HIL-A02/status", """{"state": "idle"}""") as StatusMessage;
+Check(khôngHost is not null && khôngHost.Host is null,
+      "agent bản cũ không gửi host thì Host phải là null, không phải lỗi");
+
 // ---------------------------------------------------------------- DTO
 Section("Chuyển entity sang DTO cho giao diện");
 

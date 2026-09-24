@@ -187,6 +187,12 @@ public class MqttIngestService(
                 bench.Note = BenchNote.Describe(s);
                 if (s.State is not BenchState.Offline) bench.LastSeenAt = at;
 
+                var lechMay = await KiemTraTenMayAsync(db, bench, s, at, ct);
+                if (lechMay is not null)
+                    pushes.Add(() => hub.Clients.All.SendAsync("alertRaised", new AlertDto(
+                        lechMay.Id, bench.Code, lechMay.Kind, lechMay.Message,
+                        lechMay.RaisedAt, null, null), ct));
+
                 var raised = await ApplyAlertAsync(db, bench, s, at, ct);
                 if (raised is not null)
                     pushes.Add(() => hub.Clients.All.SendAsync("alertRaised", new AlertDto(
@@ -290,14 +296,53 @@ public class MqttIngestService(
     }
 
     /// <summary>
+    /// Đối chiếu tên máy agent báo với tên máy đã khai cho bench.
+    ///
+    /// Tách khỏi <see cref="ApplyAlertAsync"/> vì đây là loại cảnh báo khác
+    /// hẳn: bench vẫn chạy tốt, chỉ là **danh tính đáng ngờ**. Gộp chung vào
+    /// một cảnh báo mỗi bench thì hai loại sẽ đè nhau — bench đang lệch máy mà
+    /// gặp lỗi CAN là mất dấu chuyện lệch máy.
+    ///
+    /// Cảnh báo này KHÔNG tự đóng khi bench hồi phục, vì nó không nói về sức
+    /// khoẻ bench. Nó chỉ hết khi người ta sửa cấu hình cho khớp lại.
+    /// </summary>
+    private async Task<Alert?> KiemTraTenMayAsync(
+        AppDbContext db, Bench bench, StatusMessage s, DateTimeOffset at, CancellationToken ct)
+    {
+        if (!MayCuaBench.Lech(bench.TenMay, s.Host)) return null;
+
+        // Đã có cảnh báo lệch máy đang mở thì thôi, đừng sinh thêm mỗi nhịp
+        // status — agent gửi vài chục giây một lần, sẽ ngập bảng cảnh báo.
+        var dangMo = await db.Alerts.AnyAsync(
+            a => a.BenchId == bench.Id && a.Kind == MayCuaBench.LoaiCanhBao && a.ClosedAt == null, ct);
+        if (dangMo) return null;
+
+        var alert = new Alert
+        {
+            BenchId = bench.Id,
+            Kind = MayCuaBench.LoaiCanhBao,
+            Message = MayCuaBench.MoTaLech(bench.Code, bench.TenMay, s.Host),
+            RaisedAt = at,
+        };
+        db.Alerts.Add(alert);
+        log.LogWarning("Bench {Code} khai máy {Khai} nhưng agent báo {That}",
+            bench.Code, bench.TenMay, s.Host);
+        return alert;
+    }
+
+    /// <summary>
     /// Mở cảnh báo khi bench vào trạng thái xấu, đóng khi nó hồi phục.
     /// Trả về cảnh báo vừa mở, hoặc null nếu không có gì mới.
     /// </summary>
     private static async Task<Alert?> ApplyAlertAsync(
         AppDbContext db, Bench bench, StatusMessage s, DateTimeOffset at, CancellationToken ct)
     {
-        var open = await db.Alerts
-            .FirstOrDefaultAsync(a => a.BenchId == bench.Id && a.ClosedAt == null, ct);
+        // Loại trừ cảnh báo lệch máy: nó nói về DANH TÍNH bench, không phải sức
+        // khoẻ bench. Không lọc ở đây thì bench khoẻ trở lại là nó tự đóng mất
+        // cảnh báo lệch máy, trong khi cấu hình vẫn đang sai.
+        var open = await db.Alerts.FirstOrDefaultAsync(
+            a => a.BenchId == bench.Id && a.ClosedAt == null
+                 && a.Kind != MayCuaBench.LoaiCanhBao, ct);
 
         var isBad = s.State is BenchState.Error or BenchState.Offline;
 

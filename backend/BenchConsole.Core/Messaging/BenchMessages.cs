@@ -35,7 +35,10 @@ public sealed record StatusMessage(
     string? Plan,
     string? Step,
     string? ErrorKind,
-    string? Detail) : BenchMessage(Topic, Timestamp);
+    string? Detail,
+    /// <summary>Tên máy tính agent đang chạy trên đó. Dùng để phát hiện máy
+    /// bị mang sang bench khác mà quên đổi cấu hình.</summary>
+    string? Host = null) : BenchMessage(Topic, Timestamp);
 
 public sealed record TelemetryMessage(
     BenchTopic Topic,
@@ -122,7 +125,8 @@ public static class BenchMessageParser
             ReadString(root, "plan"),
             ReadString(root, "step"),
             ReadString(root, "error"),
-            ReadString(root, "detail"));
+            ReadString(root, "detail"),
+            ReadString(root, "host"));
     }
 
     private static BenchMessage ParseTelemetry(BenchTopic t, DateTimeOffset? ts, JsonElement root)

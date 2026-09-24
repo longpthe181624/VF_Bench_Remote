@@ -72,7 +72,9 @@ public class BenchesController(AppDbContext db, BenchCommandPublisher publisher)
             return BadRequest(new { error = "Thiếu mã bench hoặc dòng xe" });
 
         var code = req.Code.Trim().ToUpperInvariant();
-        var model = req.Model.Trim().ToLowerInvariant();
+        // Giữ nguyên tên người gõ ("VF8New ME") để hiển thị; topic dùng mã đã
+        // chuẩn hoá. Xem MaModel.
+        var model = req.Model.Trim();
 
         if (await db.Benches.AnyAsync(b => b.Code == code, ct))
             return Conflict(new { error = $"Bench {code} đã tồn tại" });
@@ -84,10 +86,12 @@ public class BenchesController(AppDbContext db, BenchCommandPublisher publisher)
             Workshop = req.Workshop,
             Rack = req.Rack,
             Firmware = req.Firmware,
+            TenMay = req.TenMay,
             PrimaryChannel = req.PrimaryChannel,
             PrimaryUnit = req.PrimaryUnit,
-            // Phải khớp chính xác prefix mà agent trên máy bench dùng để publish.
-            TopicPrefix = $"bench/{model}/{code}",
+            // Phải khớp prefix agent dùng để publish. Dựng qua MaModel để
+            // Console và agent không bao giờ ghép lệch nhau.
+            TopicPrefix = MaModel.TopicPrefix(model, code),
             State = BenchState.Unknown,
         };
 
@@ -105,11 +109,21 @@ public class BenchesController(AppDbContext db, BenchCommandPublisher publisher)
         var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
         if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
 
-        // Không cho đổi Code và Model: chúng nằm trong TopicPrefix, đổi ở đây mà
-        // không đổi trên máy bench thì Console mất liên lạc mà không rõ vì sao.
+        // Code thì KHÔNG cho đổi — nó là danh tính bench, đổi là mồ côi toàn bộ
+        // lịch sử chạy.
+        //
+        // Model thì CHO đổi: thay MHU trong bench là đổi dòng xe, mà bench vẫn
+        // giữ nguyên id. Đổi model phải dựng lại TopicPrefix theo, nếu không
+        // chiều gửi lệnh xuống sẽ trỏ vào topic cũ.
+        if (req.Model is not null && req.Model.Trim() != bench.Model)
+        {
+            bench.Model = req.Model.Trim();
+            bench.TopicPrefix = MaModel.TopicPrefix(bench.Model, bench.Code);
+        }
         if (req.Workshop is not null) bench.Workshop = req.Workshop;
         if (req.Rack is not null) bench.Rack = req.Rack;
         if (req.Firmware is not null) bench.Firmware = req.Firmware;
+        if (req.TenMay is not null) bench.TenMay = req.TenMay;
         if (req.PrimaryChannel is not null) bench.PrimaryChannel = req.PrimaryChannel;
         if (req.PrimaryUnit is not null) bench.PrimaryUnit = req.PrimaryUnit;
 

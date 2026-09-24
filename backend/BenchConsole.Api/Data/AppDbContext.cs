@@ -17,11 +17,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasIndex(x => x.Code).IsUnique();
             e.Property(x => x.Code).HasMaxLength(64).IsRequired();
-            e.Property(x => x.Model).HasMaxLength(32).IsRequired();
+            // Tên biến thể dài hơn hẳn 'vf6': 'VF8New ME', 'VF9VN'…
+            e.Property(x => x.Model).HasMaxLength(64).IsRequired();
             e.Property(x => x.TopicPrefix).HasMaxLength(128).IsRequired();
             e.Property(x => x.Workshop).HasMaxLength(64);
             e.Property(x => x.Rack).HasMaxLength(64);
             e.Property(x => x.Firmware).HasMaxLength(32);
+            e.Property(x => x.TenMay).HasMaxLength(64);
             e.Property(x => x.PrimaryChannel).HasMaxLength(64);
             e.Property(x => x.PrimaryUnit).HasMaxLength(16);
             e.Property(x => x.Note).HasMaxLength(256);

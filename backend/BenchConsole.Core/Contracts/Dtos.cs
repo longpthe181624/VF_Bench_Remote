@@ -15,6 +15,7 @@ public record BenchDto(
     string? Workshop,
     string? Rack,
     string? Firmware,
+    string? TenMay,
     string State,
     string? Note,
     string? TestCase,
@@ -35,7 +36,7 @@ public record BenchDto(
             : (int)Math.Max(0, (DateTimeOffset.UtcNow - b.LastSeenAt.Value).TotalSeconds);
 
         return new BenchDto(
-            b.Id, b.Code, b.Model, b.Workshop, b.Rack, b.Firmware,
+            b.Id, b.Code, b.Model, b.Workshop, b.Rack, b.Firmware, b.TenMay,
             b.State.ToString().ToLowerInvariant(),
             b.Note, b.CurrentTestCase, b.CurrentPlan, b.CurrentStep,
             b.PrimaryChannel, b.PrimaryValue, b.PrimaryUnit,
@@ -82,13 +83,18 @@ public record CreateBenchRequest(
     string? Workshop,
     string? Rack,
     string? Firmware,
+    /// <summary>Tên máy tính gán cố định cho bench. Để trống thì không đối chiếu.</summary>
+    string? TenMay,
     string? PrimaryChannel,
     string? PrimaryUnit);
 
 public record UpdateBenchRequest(
+    /// <summary>Đổi được: thay MHU trong bench là đổi dòng xe, id giữ nguyên.</summary>
+    string? Model,
     string? Workshop,
     string? Rack,
     string? Firmware,
+    string? TenMay,
     string? PrimaryChannel,
     string? PrimaryUnit);
 

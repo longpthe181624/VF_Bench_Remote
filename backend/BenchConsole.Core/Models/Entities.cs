@@ -38,6 +38,16 @@ public class Bench
     public string? Firmware { get; set; }            // "2.14.1"
     public string TopicPrefix { get; set; } = "";    // bench/vf6/HIL-A02
 
+    /// <summary>
+    /// Tên máy tính được gán cố định cho bench này. Để trống thì không kiểm.
+    ///
+    /// Dựa trên cam kết vận hành "mỗi bench một máy tính riêng" — khi đó tên
+    /// máy và mã bench là cặp 1-1. Khai ở đây để backend đối chiếu với tên máy
+    /// agent tự báo: lệch nghĩa là có người mang máy sang bench khác mà quên
+    /// đổi cấu hình, và lượt test sẽ vào nhầm lịch sử của bench này.
+    /// </summary>
+    public string? TenMay { get; set; }
+
     public BenchState State { get; set; } = BenchState.Unknown;
     public DateTimeOffset? LastSeenAt { get; set; }
     public DateTimeOffset? LastPacketAt { get; set; }

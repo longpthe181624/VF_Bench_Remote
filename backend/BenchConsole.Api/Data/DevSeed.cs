@@ -1,3 +1,4 @@
+using BenchConsole.Core.Messaging;
 using BenchConsole.Core.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,7 +41,7 @@ public static class DevSeed
                 Workshop = s.Workshop,
                 Rack = s.Rack,
                 Firmware = s.Firmware,
-                TopicPrefix = $"bench/{s.Model}/{s.Code}",
+                TopicPrefix = MaModel.TopicPrefix(s.Model, s.Code),
                 PrimaryChannel = s.Channel,
                 PrimaryUnit = s.Unit,
                 // Unknown, không phải Idle: chưa nghe thấy gì từ bench thì đừng
