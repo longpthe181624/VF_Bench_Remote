@@ -273,6 +273,60 @@ var runDto = RunDto.From(run, "HIL-A05");
 Check(runDto.Verdict == "fail" && runDto.BenchCode == "HIL-A05",
       "RunDto phải mang mã bench và verdict dạng chữ");
 
+// ------------------------------------------------- gói test case đẩy xuống bench
+Console.WriteLine();
+Console.WriteLine("── Nhận dạng gói nén theo byte đầu file");
+
+byte[] Dau(params int[] b) => b.Select(x => (byte)x).ToArray();
+
+var zip = Dau(0x50, 0x4B, 0x03, 0x04, 0x14, 0x00);
+var bay = Dau(0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C);
+
+Check(NhanDangNen.Doan(zip) == DangNen.Zip, "chữ ký PK phải nhận ra là ZIP");
+Check(NhanDangNen.Doan(bay) == DangNen.SevenZip, "chữ ký 7z phải nhận ra là 7z");
+Check(NhanDangNen.Doan(Dau(0x25, 0x50, 0x44, 0x46, 0x2D, 0x31)) == DangNen.KhongRo,
+      "PDF không được nhận nhầm thành gói nén");
+Check(NhanDangNen.Doan(ReadOnlySpan<byte>.Empty) == DangNen.KhongRo,
+      "file rỗng không được làm hàm nhận dạng ném exception");
+Check(NhanDangNen.Doan(Dau(0x50, 0x4B)) == DangNen.KhongRo,
+      "file ngắn hơn chữ ký không được đọc tràn ra ngoài mảng");
+
+Check(NhanDangNen.LyDoTuChoi(zip) is null, "gói ZIP hợp lệ thì không có lý do từ chối");
+// .mtc có file là ZIP, có file là 7z, cùng một đuôi — nên phải chặn theo byte
+// đầu và nói rõ phải làm gì, chứ để lỗi nổ ở tận máy bench lúc bung gói thì
+// người ở xa chỉ thấy "triển khai thất bại".
+Check(NhanDangNen.LyDoTuChoi(bay)?.Contains("ZIP") == true,
+      "từ chối 7z phải nói rõ là cần nén lại bằng ZIP");
+
+Console.WriteLine();
+Console.WriteLine("── Tên thư mục gói bung ra trên máy bench");
+
+Check(TenGoi.LyDoTuChoi("Warning_VF8New_ME") is null, "tên gói bình thường phải nhận");
+Check(TenGoi.LyDoTuChoi("9VN all language") is null, "tên có khoảng trắng vẫn hợp lệ");
+Check(TenGoi.LyDoTuChoi(null) is not null, "tên rỗng phải bị từ chối");
+Check(TenGoi.LyDoTuChoi("   ") is not null, "tên toàn khoảng trắng phải bị từ chối");
+// Tên này đi thẳng xuống và thành đường dẫn thật trên đĩa máy bench.
+Check(TenGoi.LyDoTuChoi("..") is not null, "'..' phải bị chặn — leo ra ngoài AutoTests/");
+Check(TenGoi.LyDoTuChoi("a/../../b") is not null, "đường dẫn leo thư mục phải bị chặn");
+Check(TenGoi.LyDoTuChoi("a" + (char)92 + "b") is not null, "gạch chéo ngược phải bị chặn");
+Check(TenGoi.LyDoTuChoi("C:ten") is not null, "dấu hai chấm phải bị chặn");
+Check(TenGoi.LyDoTuChoi("ten" + (char)0 + "xau") is not null, "ký tự điều khiển phải bị chặn");
+Check(TenGoi.LyDoTuChoi("bao?cao") is not null, "ký tự Windows cấm phải bị chặn");
+Check(TenGoi.LyDoTuChoi("thu muc.") is not null,
+      "Windows không tạo được thư mục kết thúc bằng dấu chấm");
+Check(TenGoi.LyDoTuChoi(new string('x', TenGoi.DaiToiDa + 1)) is not null,
+      "tên quá dài phải bị từ chối");
+
+var goi = new GoiTestCase
+{
+    Id = 7, Ten = "Warning_VF8", TenFileGoc = "warning.zip",
+    Sha256 = new string('a', 64), KichThuoc = 204_800, SoTestCase = 12,
+    NguoiTaiLen = "long.pt", TaiLenLuc = DateTimeOffset.UtcNow,
+};
+var goiDto = GoiTestCaseDto.From(goi);
+Check(goiDto.Ten == "Warning_VF8" && goiDto.SoTestCase == 12 && goiDto.Sha256.Length == 64,
+      "GoiTestCaseDto phải mang đủ tên, số bài và sha256 để Console hiện được");
+
 // ---------------------------------------------------------------- kết quả
 Console.WriteLine($"\n{'='}{new string('=', 50)}");
 if (failures.Count == 0)

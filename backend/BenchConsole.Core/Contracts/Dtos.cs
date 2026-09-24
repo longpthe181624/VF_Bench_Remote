@@ -107,3 +107,27 @@ public record StartTestRequest(string TestCase, string? Plan, string? IssuedBy);
 /// suốt thời gian đó là sai. Giao diện theo dõi tiếp qua SignalR bằng cmdId.
 /// </summary>
 public record CommandAcceptedDto(string CmdId, string Status, DateTimeOffset IssuedAt);
+
+/// <summary>Một gói test case đã tải lên, hiển thị trên Console.</summary>
+public record GoiTestCaseDto(
+    int Id,
+    string Ten,
+    string TenFileGoc,
+    string Sha256,
+    long KichThuoc,
+    int SoTestCase,
+    string? NguoiTaiLen,
+    DateTimeOffset TaiLenLuc)
+{
+    public static GoiTestCaseDto From(GoiTestCase g) => new(
+        g.Id, g.Ten, g.TenFileGoc, g.Sha256, g.KichThuoc, g.SoTestCase,
+        g.NguoiTaiLen, g.TaiLenLuc);
+}
+
+/// <summary>
+/// Yêu cầu đẩy một gói đã tải lên xuống một bench cụ thể.
+///
+/// Chỉ mang <c>GoiId</c> chứ không mang lại nội dung gói: file đã nằm sẵn trên
+/// máy A từ lúc tải lên, agent sẽ tự tải về qua REST.
+/// </summary>
+public record TrienKhaiGoiRequest(int GoiId, string? IssuedBy);

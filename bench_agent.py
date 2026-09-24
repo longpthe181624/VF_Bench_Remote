@@ -32,7 +32,12 @@ import signal
 import socket
 import subprocess
 import time
+import hashlib
+import tempfile
+import threading
 import unicodedata
+import urllib.error
+import urllib.request
 import zipfile
 from ctypes import wintypes as W
 from dataclasses import dataclass
@@ -43,6 +48,12 @@ import paho.mqtt.client as mqtt
 
 LOG_QAUTO_MAC_DINH = r"D:\Qauto_2610\Qauto_2610\Logs\log.txt"
 ADB_QAUTO_MAC_DINH = r"D:\Qauto_2610\Qauto_2610\ADB\adb.exe"
+AUTOTESTS_MAC_DINH = r"D:\Qauto_2610\Qauto_2610\AutoTests"
+
+# Trần kích thước gói, phải khớp KhoGoiTestCase.KichThuocToiDa bên C#.
+# Kiểm cả hai đầu: máy A chặn lúc tải lên, agent chặn lúc tải về — giữa hai
+# đầu còn một chặng mạng và một cấu hình có thể lệch.
+GOI_TOI_DA = 64 * 1024 * 1024
 
 
 # Tên máy cố định suốt vòng đời tiến trình, đọc một lần là đủ.
@@ -297,6 +308,66 @@ def _bo_vo_boc(ten_muc: list[str]) -> str:
     """
     goc = {p.split("/")[0] for p in ten_muc if p}
     return goc.pop() if len(goc) == 1 else ""
+
+
+def sha256_file(duong_dan: str) -> str:
+    """Băm theo khối, không nạp cả file vào RAM."""
+    h = hashlib.sha256()
+    with open(duong_dan, "rb") as f:
+        for khoi in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(khoi)
+    return h.hexdigest()
+
+
+def tai_goi(url: str, sha256_mong_doi: str, thu_muc_tam: str | None = None) -> str:
+    """Tải gói test case từ Console về, kiểm sha256 rồi mới trả đường dẫn.
+
+    Kiểm sha256 là bắt buộc chứ không phải cho chắc: tải dở giữa chừng mà vẫn
+    bung là rải file hỏng vào `AutoTests/`, Qauto vẫn chạy nhưng chạy một bài
+    không còn đúng nữa — mà verdict của Qauto vốn đã không phản ánh kết quả
+    thật, nên sẽ chẳng có gì báo động.
+    """
+    if not sha256_mong_doi or len(sha256_mong_doi) != 64:
+        raise GoiHong(f"sha256 trong lệnh không hợp lệ: {sha256_mong_doi!r}")
+
+    fd, tam = tempfile.mkstemp(suffix=".zip", prefix="goi-", dir=thu_muc_tam)
+    os.close(fd)
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            # Content-Length có thể thiếu, nên vẫn phải đếm lúc ghi.
+            dai = r.headers.get("Content-Length")
+            if dai and int(dai) > GOI_TOI_DA:
+                raise GoiHong(f"Gói {int(dai) // 1024 // 1024} MB, vượt trần "
+                              f"{GOI_TOI_DA // 1024 // 1024} MB")
+            da = 0
+            with open(tam, "wb") as f:
+                while True:
+                    khoi = r.read(256 * 1024)
+                    if not khoi:
+                        break
+                    da += len(khoi)
+                    if da > GOI_TOI_DA:
+                        raise GoiHong("Gói vượt trần "
+                                      f"{GOI_TOI_DA // 1024 // 1024} MB khi đang tải")
+                    f.write(khoi)
+    except urllib.error.HTTPError as ex:
+        os.unlink(tam)
+        raise GoiHong(f"Console trả HTTP {ex.code} khi tải gói") from ex
+    except urllib.error.URLError as ex:
+        os.unlink(tam)
+        # Lỗi hay gặp nhất: backend máy A bind localhost nên máy bench không với
+        # tới. Nói rõ URL để người trực biết phải sửa cấu hình chỗ nào.
+        raise GoiHong(f"Không với tới Console ở {url}: {ex.reason}") from ex
+    except Exception:
+        os.unlink(tam)
+        raise
+
+    that = sha256_file(tam)
+    if that != sha256_mong_doi.lower():
+        os.unlink(tam)
+        raise GoiHong("sha256 lệch — gói tải về hỏng. "
+                      f"Chờ {sha256_mong_doi[:12]}, nhận {that[:12]}")
+    return tam
 
 
 def bung_goi_test_case(goi: str, thu_muc_autotests: str,
@@ -603,6 +674,7 @@ class BenchAgent:
         self.nhip_tim = args.heartbeat
         self.adb = args.adb
         self.log = DocLogQauto(args.qauto_log)
+        self.autotests = getattr(args, "autotests", AUTOTESTS_MAC_DINH)
 
         self.trang_thai_cu: dict | None = None
         self.lan_gui_cuoi = 0.0
@@ -668,15 +740,85 @@ class BenchAgent:
             return
 
         cmd_id = lenh.get("cmd_id", "?")
-        # Chạy test từ xa còn chặn ở câu hỏi #1 trong CLAUDE.md: chưa ai biết
-        # có ra lệnh cho Qauto/VDSA mà không bấm tay được không. Từ chối thẳng
-        # và nói rõ lý do, chứ im lặng thì Console treo tới lúc hết hạn chờ ack
-        # rồi báo "bench không phản hồi" — sai nguyên nhân.
+        action = lenh.get("action", "")
+
+        if action == "deploy_testcase":
+            self._nhan_goi(cmd_id, lenh)
+            return
+
+        # Mọi lệnh còn lại đều dính câu hỏi #1 trong CLAUDE.md: chưa ra lệnh cho
+        # Qauto chạy test mà không bấm tay được. Từ chối thẳng và nói rõ lý do,
+        # chứ im lặng thì Console treo tới lúc hết hạn chờ ack rồi báo "bench
+        # không phản hồi" — sai nguyên nhân hoàn toàn.
         self._gui("ack", {
             "cmd_id": cmd_id,
             "status": "rejected",
-            "reason": "Agent mới chỉ giám sát, chưa điều khiển được Qauto/VDSA",
+            "reason": f"Agent chưa làm được lệnh '{action}' — mới chỉ giám sát "
+                      "và nhận gói test case, chưa điều khiển được Qauto/VDSA",
         })
+
+    def _nhan_goi(self, cmd_id: str, lenh: dict) -> None:
+        """Nhận lệnh đẩy gói test case xuống.
+
+        Đây là lệnh DUY NHẤT agent làm được lúc này, vì nó chỉ động tới file —
+        không cần điều khiển Qauto nên không vướng câu hỏi #1.
+
+        Tải rồi bung mất vài giây tới vài chục giây. Làm ngay trong callback là
+        chẹn luôn vòng lặp mạng của paho, quá keepalive thì broker cắt kết nối
+        và Last Will bắn ra — Console sẽ báo bench mất kết nối giữa lúc nó đang
+        làm việc bình thường. Nên đẩy sang luồng riêng.
+        """
+        goi = lenh.get("goi") or {}
+        url, sha, ten = goi.get("url"), goi.get("sha256"), goi.get("ten")
+
+        if not url or not sha or not ten:
+            self._gui("ack", {
+                "cmd_id": cmd_id, "status": "rejected",
+                "reason": "Lệnh thiếu goi.url, goi.sha256 hoặc goi.ten",
+            })
+            return
+
+        # Nhận trước rồi làm, để Console biết lệnh đã tới chứ không phải rơi mất.
+        self._gui("ack", {"cmd_id": cmd_id, "status": "accepted"})
+        threading.Thread(target=self._lam_goi, args=(cmd_id, url, sha, ten),
+                         daemon=True).start()
+
+    def _lam_goi(self, cmd_id: str, url: str, sha: str, ten: str) -> None:
+        tam = None
+        try:
+            tam = tai_goi(url, sha)
+            kq = bung_goi_test_case(tam, self.autotests, ten)
+            print(f"[{self.id}] đã bung gói {ten}: {kq['so_test_case']} bài")
+            self._gui("result", {
+                "cmd_id": cmd_id,
+                "action": "deploy_testcase",
+                "verdict": "pass",
+                "test_case": ten,
+                "detail": kq,
+            })
+        except GoiHong as ex:
+            # Hỏng ở đây thì nói đúng câu lỗi ra, đừng gộp thành "thất bại".
+            # Người đọc ở xa không mở được máy bench để tự xem.
+            print(f"[{self.id}] gói {ten} hỏng: {ex}")
+            self._gui("result", {
+                "cmd_id": cmd_id,
+                "action": "deploy_testcase",
+                "verdict": "fail",
+                "test_case": ten,
+                "reason": str(ex),
+            })
+        except Exception as ex:                       # noqa: BLE001
+            print(f"[{self.id}] lỗi không lường khi nhận gói {ten}: {ex!r}")
+            self._gui("result", {
+                "cmd_id": cmd_id,
+                "action": "deploy_testcase",
+                "verdict": "fail",
+                "test_case": ten,
+                "reason": f"Lỗi không lường: {ex!r}",
+            })
+        finally:
+            if tam and os.path.exists(tam):
+                os.unlink(tam)
 
     def _gui(self, leaf: str, payload: dict, retain: bool = False) -> None:
         payload.setdefault("ts", bay_gio())
@@ -749,6 +891,8 @@ def main():
     ap.add_argument("--model", default="vf6")
     ap.add_argument("--qauto-log", default=LOG_QAUTO_MAC_DINH)
     ap.add_argument("--adb", default=ADB_QAUTO_MAC_DINH)
+    ap.add_argument("--autotests", default=AUTOTESTS_MAC_DINH,
+                    help="thư mục AutoTests của Qauto, nơi bung gói test case")
     ap.add_argument("--interval", type=float, default=5.0,
                     help="giây giữa hai lần đọc cảm biến")
     ap.add_argument("--heartbeat", type=float, default=30.0,

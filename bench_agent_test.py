@@ -12,15 +12,18 @@ mẫu chứ không phải log thật.
     PYTHONIOENCODING=utf-8 python bench_agent_test.py
 """
 
+import json
 import os
 import sys
 import tempfile
+import time
 import types
 import zipfile
 
 from bench_agent import (BenchAgent, DocLogQauto, GoiHong, LuotChay,
                          bung_goi_test_case, danh_gia_qauto, doi_verdict,
-                         ma_model, mo_ta_qauto, suy_trang_thai)
+                         ma_model, mo_ta_qauto, sha256_file, suy_trang_thai,
+                         tai_goi)
 
 LOG_THAT = r"D:\Qauto_2610\Qauto_2610\Logs\log.txt"
 
@@ -366,6 +369,184 @@ if os.path.exists(LOG_THAT):
 else:
     print(f"   BỎ QUA — không thấy {LOG_THAT} trên máy này.")
     print("   Các phép trên chạy bằng mẫu rút gọn, chưa đối chiếu log thật.")
+
+# ------------------------------------------------- tải gói test case từ Console
+#
+# Dựng HTTP server thật trong tiến trình test chứ không giả lập urlopen: chỗ
+# hay hỏng nhất của phần này là tầng mạng — 404, tải dở, sai địa chỉ — mà giả
+# lập thì không bao giờ tái hiện được.
+print()
+print("── Tải gói test case qua REST")
+
+import functools
+import hashlib
+import http.server
+import socketserver
+import threading
+
+kho_tam = tempfile.mkdtemp(prefix="kho-goi-")
+
+goi_that = os.path.join(kho_tam, "tot.zip")
+with zipfile.ZipFile(goi_that, "w") as z:
+    z.writestr("Warning_VF8/bai1.tc", "noi dung bai 1")
+    z.writestr("Warning_VF8/bai2.tc", "noi dung bai 2")
+sha_that = hashlib.sha256(open(goi_that, "rb").read()).hexdigest()
+
+Check(sha256_file(goi_that) == sha_that,
+      "sha256_file phải cho cùng kết quả với băm một phát cả file")
+
+phuc_vu = functools.partial(http.server.SimpleHTTPRequestHandler, directory=kho_tam)
+phuc_vu.log_message = lambda *a, **k: None          # im lặng, khỏi bẩn output test
+may_chu = socketserver.TCPServer(("127.0.0.1", 0), phuc_vu)
+cong = may_chu.server_address[1]
+threading.Thread(target=may_chu.serve_forever, daemon=True).start()
+
+goc = f"http://127.0.0.1:{cong}"
+try:
+    tai_ve = tai_goi(f"{goc}/tot.zip", sha_that)
+    Check(os.path.exists(tai_ve), "tải gói hợp lệ phải ra một file có thật")
+    Check(sha256_file(tai_ve) == sha_that, "file tải về phải nguyên vẹn")
+
+    kq_tai = bung_goi_test_case(tai_ve, kho_tam, "Warning_VF8")
+    Check(kq_tai["so_test_case"] == 2,
+          "bung gói tải về phải đếm đúng 2 bài")
+    os.unlink(tai_ve)
+
+    # sha lệch = gói hỏng hoặc tải dở. Phải chặn TRƯỚC khi bung, vì rải file
+    # hỏng vào AutoTests/ thì Qauto vẫn chạy và vẫn báo Pass.
+    try:
+        tai_goi(f"{goc}/tot.zip", "b" * 64)
+        Check(False, "sha256 lệch phải bị từ chối")
+    except GoiHong as ex:
+        Check("sha256" in str(ex).lower(), "báo lỗi sha lệch phải nói rõ là sha256")
+
+    try:
+        tai_goi(f"{goc}/khong-co.zip", sha_that)
+        Check(False, "tải file không tồn tại phải ném GoiHong")
+    except GoiHong as ex:
+        Check("404" in str(ex), "lỗi 404 phải nói rõ mã HTTP")
+
+    try:
+        tai_goi(f"{goc}/tot.zip", "abc")
+        Check(False, "sha256 sai độ dài phải bị chặn ngay, không cần tải")
+    except GoiHong:
+        Check(True, "sha256 sai độ dài bị chặn")
+
+    # Cổng đóng: đúng tình huống máy A bind localhost nên máy bench không với tới.
+    try:
+        tai_goi("http://127.0.0.1:1/tot.zip", sha_that)
+        Check(False, "không với tới Console phải ném GoiHong")
+    except GoiHong as ex:
+        Check("với tới" in str(ex), "lỗi mạng phải nói rõ là không với tới Console")
+finally:
+    may_chu.shutdown()
+    may_chu.server_close()
+
+# ------------------------- agent nhận lệnh đẩy gói, đi trọn đường không cần broker
+#
+# Phép quan trọng nhất của đợt này: nó chạy ĐÚNG đường mà lệnh thật đi —
+# `_khi_co_lenh` → `_nhan_goi` → tải qua HTTP → kiểm sha → bung vào AutoTests/
+# → publish result. Trước đó `bung_goi_test_case` có test nhưng KHÔNG ai gọi,
+# nên phần nối dây chưa từng được kiểm.
+print()
+print("── Agent nhận lệnh deploy_testcase (không cần broker)")
+
+autotests_gia = tempfile.mkdtemp(prefix="autotests-")
+args_goi = types.SimpleNamespace(
+    id="TEST-02", model="VF8New ME", interval=5.0, heartbeat=20.0,
+    adb=os.path.join(tempfile.mkdtemp(), "adb.exe"),
+    qauto_log=os.path.join(tempfile.mkdtemp(), "log.txt"),
+    autotests=autotests_gia)
+ag2 = BenchAgent(args_goi)
+
+Check(ag2.prefix == "bench/vf8new-me/TEST-02",
+      "tên model có khoảng trắng phải thành mã gạch nối trong topic")
+
+# Thay client bằng cái ghi lại, để bắt đúng những gói agent định gửi đi.
+da_gui = []
+ag2.client = types.SimpleNamespace(
+    publish=lambda topic, payload, qos=0, retain=False:
+        da_gui.append((topic, json.loads(payload))))
+
+may_chu2 = socketserver.TCPServer(("127.0.0.1", 0), phuc_vu)
+cong2 = may_chu2.server_address[1]
+threading.Thread(target=may_chu2.serve_forever, daemon=True).start()
+try:
+    lenh = types.SimpleNamespace(payload=json.dumps({
+        "cmd_id": "abc123",
+        "action": "deploy_testcase",
+        "goi": {
+            "ten": "Warning_VF8",
+            "url": f"http://127.0.0.1:{cong2}/tot.zip",
+            "sha256": sha_that,
+        },
+    }).encode())
+    ag2._khi_co_lenh(None, None, lenh)
+
+    # Tải + bung chạy ở luồng riêng để không chẹn vòng lặp mạng của paho.
+    for _ in range(100):
+        if any(t.endswith("/result") for t, _ in da_gui):
+            break
+        time.sleep(0.05)
+
+    acks = [b for t, b in da_gui if t.endswith("/ack")]
+    ketqua = [b for t, b in da_gui if t.endswith("/result")]
+
+    Check(len(acks) == 1 and acks[0]["status"] == "accepted",
+          "agent phải ack accepted NGAY, trước khi tải — không để Console treo chờ")
+    Check(acks[0]["cmd_id"] == "abc123", "ack phải mang đúng cmd_id của lệnh")
+    Check(len(ketqua) == 1, "bung xong phải gửi đúng một gói result")
+    Check(ketqua[0]["verdict"] == "pass", f"result phải là pass, nhận {ketqua and ketqua[0]}")
+    Check(ketqua[0]["cmd_id"] == "abc123", "result phải ghép được về đúng lệnh bằng cmd_id")
+
+    bung_ra = os.path.join(autotests_gia, "Warning_VF8")
+    Check(os.path.isdir(bung_ra), "gói phải được bung ra đúng AutoTests/<tên gói>/")
+    Check(sorted(os.listdir(bung_ra)) == ["bai1.tc", "bai2.tc"],
+          "hai bài trong gói phải nằm đúng chỗ sau khi bung")
+
+    # sha lệch: phải hỏng ở agent, KHÔNG được để file hỏng lọt vào AutoTests/.
+    da_gui.clear()
+    lenh_xau = types.SimpleNamespace(payload=json.dumps({
+        "cmd_id": "xau999",
+        "action": "deploy_testcase",
+        "goi": {"ten": "Goi_Hong", "url": f"http://127.0.0.1:{cong2}/tot.zip",
+                "sha256": "c" * 64},
+    }).encode())
+    ag2._khi_co_lenh(None, None, lenh_xau)
+    for _ in range(100):
+        if any(t.endswith("/result") for t, _ in da_gui):
+            break
+        time.sleep(0.05)
+
+    xau = [b for t, b in da_gui if t.endswith("/result")]
+    Check(len(xau) == 1 and xau[0]["verdict"] == "fail",
+          "sha lệch phải trả verdict fail")
+    Check("sha256" in xau[0].get("reason", "").lower(),
+          "lý do fail phải nói rõ sha256 lệch, đừng gộp thành 'thất bại'")
+    Check(not os.path.exists(os.path.join(autotests_gia, "Goi_Hong")),
+          "gói sha lệch TUYỆT ĐỐI không được bung ra AutoTests/")
+
+    # Lệnh chạy test vẫn phải bị từ chối tường minh, chưa làm được.
+    da_gui.clear()
+    ag2._khi_co_lenh(None, None, types.SimpleNamespace(
+        payload=json.dumps({"cmd_id": "run1", "action": "start_test"}).encode()))
+    tc = [b for t, b in da_gui if t.endswith("/ack")]
+    Check(len(tc) == 1 and tc[0]["status"] == "rejected",
+          "lệnh start_test vẫn phải bị từ chối, chưa điều khiển được Qauto")
+    Check("start_test" in tc[0]["reason"],
+          "lý do từ chối phải nói rõ lệnh nào không làm được")
+
+    # Lệnh thiếu trường: từ chối ngay, không được ném exception làm chết callback.
+    da_gui.clear()
+    ag2._khi_co_lenh(None, None, types.SimpleNamespace(
+        payload=json.dumps({"cmd_id": "thieu", "action": "deploy_testcase",
+                            "goi": {"ten": "X"}}).encode()))
+    thieu = [b for t, b in da_gui if t.endswith("/ack")]
+    Check(len(thieu) == 1 and thieu[0]["status"] == "rejected",
+          "lệnh deploy thiếu url/sha phải bị từ chối, không được ném exception")
+finally:
+    may_chu2.shutdown()
+    may_chu2.server_close()
 
 # ------------------------------------------------------------------ tổng kết
 print("\n" + "=" * 51)

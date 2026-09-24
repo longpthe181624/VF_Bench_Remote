@@ -128,3 +128,36 @@ public class Alert
     public string? AcknowledgedBy { get; set; }
     public DateTimeOffset? ClosedAt { get; set; }
 }
+
+/// <summary>
+/// Một gói test case đã tải lên Console, chờ đẩy xuống máy bench.
+///
+/// File nằm ngoài DB (thư mục trên đĩa, tra theo <see cref="Sha256"/>), DB chỉ
+/// giữ mô tả. Gói là ZIP vài trăm KB tới vài MB — nhét vào DB thì mỗi lần liệt
+/// kê danh sách lại kéo theo cả đống byte không ai cần.
+/// </summary>
+public class GoiTestCase
+{
+    public int Id { get; set; }
+
+    /// <summary>Tên thư mục sẽ bung ra trong `AutoTests/` trên máy bench.</summary>
+    public string Ten { get; set; } = "";
+
+    /// <summary>Tên file gốc người dùng tải lên, chỉ để hiển thị.</summary>
+    public string TenFileGoc { get; set; } = "";
+
+    /// <summary>
+    /// Vừa là khoá tra file trên đĩa, vừa là thứ agent dùng để kiểm gói tải về
+    /// có nguyên vẹn không. Tải dở giữa chừng mà vẫn bung là rải file hỏng vào
+    /// `AutoTests/`, rồi Qauto chạy một bài không còn đúng nữa.
+    /// </summary>
+    public string Sha256 { get; set; } = "";
+
+    public long KichThuoc { get; set; }
+
+    /// <summary>Số file .tc/.mtc đếm được lúc tải lên. Gói 0 bài là gói sai.</summary>
+    public int SoTestCase { get; set; }
+
+    public string? NguoiTaiLen { get; set; }
+    public DateTimeOffset TaiLenLuc { get; set; }
+}

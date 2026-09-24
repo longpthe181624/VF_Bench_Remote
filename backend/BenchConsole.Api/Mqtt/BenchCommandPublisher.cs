@@ -30,6 +30,7 @@ public class BenchCommandPublisher(
         string? testCase = null,
         string? plan = null,
         string? issuedBy = null,
+        IReadOnlyDictionary<string, object?>? themVaoPayload = null,
         CancellationToken ct = default)
     {
         var client = mqtt.Client;
@@ -59,6 +60,11 @@ public class BenchCommandPublisher(
         };
         if (testCase is not null) body["test_case"] = testCase;
         if (plan is not null) body["plan"] = plan;
+        // Trường riêng của từng loại lệnh, ví dụ url + sha256 của gói test case.
+        // Gộp vào payload MQTT chứ không thêm cột: mỗi loại lệnh cần một bộ
+        // trường khác nhau, thêm cột cho từng loại là bảng phình ra toàn null.
+        if (themVaoPayload is not null)
+            foreach (var (k, v) in themVaoPayload) body[k] = v;
 
         cmd.PayloadJson = JsonSerializer.Serialize(body, Json);
 

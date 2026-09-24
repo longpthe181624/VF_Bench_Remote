@@ -37,10 +37,10 @@ backend/                     C# .NET 8 + SQL Server (xem backend/README.md)
   BenchConsole.Core/         KHÔNG phụ thuộc gói ngoài nào — entity, parser, DTO
   BenchConsole.Api/          EF Core, MQTTnet, SignalR, REST
     wwwroot/index.html       giao diện tạm, backend tự phục vụ ở /
-  BenchConsole.Core.SmokeTest/  72 phép kiểm tra, chạy không cần NuGet/DB/broker
+  BenchConsole.Core.SmokeTest/  92 phép kiểm tra, chạy không cần NuGet/DB/broker
 bench_simulator.py           5 bench giả lập, mỗi con một kết nối + Last Will riêng
 bench_agent.py               agent thật trên máy bench — đọc log Qauto, dò PCAN, không bịa số
-bench_agent_test.py          51 phép kiểm tra: đọc log, suy trạng thái, bung gói
+bench_agent_test.py          82 phép kiểm tra: đọc log, suy trạng thái, bung gói
 docker-compose.yml           mosquitto 1883, SQL Server 14330
 docs/api.md                  danh sách REST API cần có, bản Markdown
 docs/BenchConsole.docx       bản Word cho team đọc, sinh từ api.md rồi sửa tay
@@ -91,8 +91,8 @@ Windows 11 + Docker Desktop + PowerShell, và Git Bash cho tool Bash.
 
 - Simulator 5 bench nối từ máy B sang broker máy A qua LAN.
 - `dotnet build` qua với MQTTnet + EF Core thật.
-- SmokeTest 72/72 đạt, dùng payload thật bắt từ simulator.
-- `bench_agent_test.py` 51/51 đạt, trong đó có phép chạy trên **log thật** của
+- SmokeTest 92/92 đạt, dùng payload thật bắt từ simulator.
+- `bench_agent_test.py` 82/82 đạt, trong đó có phép chạy trên **log thật** của
   Qauto: nhận đúng 4 lượt chạy, 4 verdict, không dính bẫy dòng CRC.
 - `bench_agent.py --once` đọc đúng trạng thái máy bench thật (lúc thử thì
   adapter CAN đã rút, agent báo `error / can_adapter_missing` — đúng).
@@ -145,13 +145,23 @@ Windows 11 + Docker Desktop + PowerShell, và Git Bash cho tool Bash.
   log thật đã có, nhưng chưa lần nào agent đang chạy mà Qauto bắt đầu một test
   mới, nên chuỗi `running → result` chưa đi hết đường sống.
 - Bố cục in của `docs/BenchConsole.docx` chưa soi được vì máy thiếu LibreOffice.
+- **Luồng đẩy gói test case chưa chạy qua máy A lần nào.** Nửa phía agent đã
+  kiểm đầu-cuối thật (tải qua HTTP server thật, kiểm sha256, bung ra đúng
+  `AutoTests/<tên gói>/`, trả result) nhưng máy B không có Docker nên không
+  dựng được SQL Server để chạy backend. Phải thử trên máy A, và nhớ hai việc
+  làm tay ở mục "Đẩy gói test case xuống bench": tạo bảng `GoiTestCases` và
+  cho Kestrel nghe `0.0.0.0`.
 
 ### Chưa làm
 
-Đăng ký ECU/vehicle, dự án, test case, request test, hẹn giờ, flash, AI sinh
-test case, xác thực người dùng (hiện `issuedBy` là tham số tự khai), chuyển
-`EnsureCreated()` sang EF migration, giao diện web thật, **agent thật trên máy
-bench**. Chi tiết từng endpoint xem `docs/api.md`.
+Đăng ký ECU/vehicle, dự án, request test, hẹn giờ, flash, AI sinh test case,
+xác thực người dùng (hiện `issuedBy` là tham số tự khai), chuyển
+`EnsureCreated()` sang EF migration, giao diện web thật. Chi tiết từng endpoint
+xem `docs/api.md`.
+
+Kho gói test case **đã làm** 24/09 — tải lên, đẩy xuống bench, agent bung vào
+`AutoTests/`. Xem mục "Đẩy gói test case xuống bench". Còn thiếu vế sau: **ra
+lệnh cho Qauto chạy** bài vừa đẩy xuống, đang chờ đội Qauto mở topic MQTT.
 
 ## Nối hai máy — đường đang dùng (23/09)
 
@@ -577,6 +587,87 @@ Tìm theo chữ của con, rồi `SelectionItemPattern.Select()`.
 
 Chín bước. Phần phụ thuộc toạ độ chỉ còn ba: nút ⚙, combobox CAN, nút ▶. Còn
 lại đều theo định danh ổn định.
+
+## Đẩy gói test case xuống bench — làm 24/09
+
+**File đi đường REST, lệnh đi đường MQTT.** Gói vài MB nhét vào payload MQTT thì
+broker phải ôm trọn trong bộ nhớ; còn lệnh thì nhỏ và cần đến đúng một máy đang
+mở sẵn kết nối ra ngoài.
+
+```
+người dùng ──(1) POST multipart /api/test-cases──> Console giữ file theo sha256
+người dùng ──(2) POST /api/benches/{mã}/trien-khai──> MQTT cmd deploy_testcase
+                                                       { goi: {url, sha256, ten} }
+agent ──(3) GET /api/test-cases/{id}/tai──> tải về, kiểm sha256
+agent ──(4) bung vào AutoTests/<tên gói>/ ──> publish result
+```
+
+Số đo thật trên máy bench 24/09: `AutoTests/` của Qauto là **31 MB cho 3138
+bài**, file `.tc` lớn nhất **21 KB**, phổ biến ~9 KB. Nên trần 64 MB là rộng
+gấp đôi cả kho.
+
+**Chỉ nhận ZIP, không nhận 7z.** Agent bung bằng `zipfile` có sẵn trong Python;
+7z phải cài thêm, mà máy bench trong xưởng thường bị khoá. Nhận dạng bằng
+**byte đầu file chứ không bằng đuôi** — `.mtc` có file là ZIP có file là 7z,
+cùng một đuôi. Từ chối ngay ở máy A kèm câu "hãy nén lại bằng ZIP", đừng để lỗi
+nổ ở tận máy bench.
+
+**sha256 kiểm ở cả hai đầu và là bắt buộc.** Tải dở giữa chừng mà vẫn bung là
+rải file hỏng vào `AutoTests/`, Qauto vẫn chạy nhưng chạy một bài không còn
+đúng nữa — mà verdict Qauto vốn đã không phản ánh kết quả thật, nên sẽ chẳng
+có gì báo động. Đã kiểm: gói sha lệch **không bao giờ được bung ra**.
+
+**Tải và bung chạy ở luồng riêng**, không làm trong callback của paho. Tải vài
+chục giây ngay trong callback là chẹn vòng lặp mạng, quá keepalive thì broker
+cắt và Last Will bắn ra — Console báo bench mất kết nối giữa lúc nó đang làm
+việc bình thường.
+
+`deploy_testcase` là **lệnh duy nhất agent làm được lúc này**, vì nó chỉ động
+tới file, không cần điều khiển Qauto nên không vướng câu hỏi #1. Mọi lệnh khác
+vẫn bị từ chối tường minh kèm tên lệnh.
+
+### Hai chỗ phải làm tay trên máy A trước khi dùng
+
+**1. Bảng `GoiTestCases` KHÔNG tự sinh trên database đã có.** Backend dùng
+`EnsureCreatedAsync()`, mà hàm này chỉ tạo khi database **chưa tồn tại** — có
+sẵn rồi thì nó không đụng gì, không thêm bảng mới. Triệu chứng: mọi thao tác
+gói đều lỗi `Invalid object name 'GoiTestCases'`. Chạy tay một lần:
+
+```sql
+CREATE TABLE GoiTestCases (
+    Id           int IDENTITY(1,1) PRIMARY KEY,
+    Ten          nvarchar(100)  NOT NULL,
+    TenFileGoc   nvarchar(260)  NOT NULL,
+    Sha256       nvarchar(64)   NOT NULL,
+    KichThuoc    bigint         NOT NULL,
+    SoTestCase   int            NOT NULL,
+    NguoiTaiLen  nvarchar(128)  NULL,
+    TaiLenLuc    datetimeoffset NOT NULL
+);
+CREATE UNIQUE INDEX IX_GoiTestCases_Ten ON GoiTestCases(Ten);
+```
+
+Đây chính là cái giá của việc còn nợ EF migration.
+
+**2. Kestrel phải nghe ra ngoài localhost, nếu không agent không tải được gói.**
+Mặc định `dotnet run` bind localhost nên máy B không với tới cổng 5000 — đã ghi
+ở mục "Nối hai máy". Muốn agent tải được:
+
+```powershell
+dotnet run --project BenchConsole.Api --urls http://0.0.0.0:5000
+```
+
+**Cân nhắc trước khi mở:** backend **chưa có xác thực nào**, `issuedBy` vẫn là
+tham số tự khai. Mở ra tailnet nghĩa là ai vào được tailnet cũng ra lệnh chạy
+test và xoá bench được. Chấp nhận được trong phạm vi tailnet nội bộ lúc này,
+nhưng **phải có đăng nhập trước khi mở rộng hơn**. Vì vậy `docker-compose.yml`
+vẫn cố ý giữ `127.0.0.1:5000:8080` — muốn mở thì sửa tường minh, không để mặc
+định trở thành công khai.
+
+Địa chỉ agent dùng để tải nằm ở `GoiTestCase:BaseUrlChoAgent` trong
+`appsettings.json`, mặc định `http://100.69.35.102:5000` (máy A qua Tailscale).
+Không cấu hình thì endpoint triển khai trả 500 kèm lý do, chứ không gửi xuống
+một URL mà agent không với tới.
 
 ## Model và mã bench — chốt 24/09
 

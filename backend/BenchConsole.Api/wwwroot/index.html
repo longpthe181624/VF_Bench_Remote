@@ -129,6 +129,29 @@
 
   <section>
     <div class="sec-head">
+      <h2>Gói test case</h2>
+      <span class="count" id="goi-count"></span>
+      <span style="flex:1"></span>
+      <button id="toggle-goi">+ Tải gói lên</button>
+    </div>
+
+    <form class="addbench" id="goi-form" enctype="multipart/form-data">
+      <input id="goi-ten" placeholder="Tên thư mục trong AutoTests/" style="width:240px" required>
+      <input id="goi-file" type="file" accept=".zip,application/zip" required>
+      <input id="goi-by" placeholder="Người tải lên" style="width:140px">
+      <button type="submit">Tải lên</button>
+      <button type="button" id="goi-cancel">Huỷ</button>
+      <div class="meta" style="flex-basis:100%">
+        Nén thư mục test case thành <b>ZIP</b> (không phải 7z). Tên gói chính là
+        tên thư mục sẽ bung ra trong <code>AutoTests/</code> trên máy bench.
+      </div>
+    </form>
+
+    <div id="goi-area"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
       <h2>Cảnh báo đang mở</h2>
       <span class="count" id="alert-count"></span>
     </div>
@@ -148,6 +171,8 @@ const STATE_LABEL = {
 // Giữ giá trị ô nhập test case qua các lần load() tự động (mỗi 5s), vì
 // dựng lại toàn bộ bảng sẽ tạo input mới và xoá mất chữ người dùng đang gõ.
 const pendingTestCase = {};
+// Danh sách bench của lượt load gần nhất, dùng cho ô chọn bench khi đẩy gói.
+let benchesHienTai = [];
 
 function el(tag, attrs, ...children){
   const n = document.createElement(tag);
@@ -263,13 +288,16 @@ async function load(){
   if (state) params.set("state", state);
 
   try {
-    const [benches, alerts] = await Promise.all([
+    const [benches, alerts, goi] = await Promise.all([
       api("/api/benches" + (params.toString() ? "?" + params.toString() : "")),
       api("/api/alerts"),
+      api("/api/test-cases"),
     ]);
     showErr(null);
+    benchesHienTai = benches;
     renderBenches(benches);
     renderAlerts(alerts);
+    renderGoi(goi);
   } catch(e){
     showErr("Không tải được dữ liệu: " + e.message);
   }
@@ -292,6 +320,68 @@ function renderBenches(rows){
       el("th", {}, "Bench"), el("th", {}, "Dòng xe"), el("th", {}, "Trạng thái"),
       el("th", {}, "Test case"), el("th", {}, "Cập nhật"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...rows.map(benchRow)));
+  area.appendChild(table);
+}
+
+function kbGon(byte){
+  if (byte < 1024) return byte + " B";
+  if (byte < 1024*1024) return Math.round(byte/1024) + " KB";
+  return (byte/1024/1024).toFixed(1) + " MB";
+}
+
+function goiRow(g){
+  // Ô chọn bench để đẩy gói xuống. Bench mất kết nối vẫn chọn được: lệnh nằm
+  // lại hàng đợi phía Console, còn từ chối thẳng ở đây thì người dùng không
+  // hiểu vì sao bench vừa thấy trên màn hình lại không chọn được.
+  const chon = el("select", {});
+  chon.appendChild(el("option", {value:""}, "— chọn bench —"));
+  for (const b of benchesHienTai){
+    chon.appendChild(el("option", {value:b.code}, `${b.code} (${b.model})`));
+  }
+
+  const dayBtn = el("button", {onclick: async () => {
+    if (!chon.value){ showErr("Chưa chọn bench để đẩy gói."); return; }
+    try {
+      const r = await api(`/api/benches/${chon.value}/trien-khai`, {
+        method:"POST",
+        body: JSON.stringify({goiId: g.id, issuedBy: "console-tam"}),
+      });
+      showToast(`Đã gửi gói ${g.ten} tới ${chon.value} (cmd ${r.cmdId})`);
+      showErr(null);
+    } catch(e){ showErr(e.message); }
+  }}, "Đẩy xuống bench");
+
+  const xoaBtn = el("button", {class:"ghost", onclick: async () => {
+    if (!confirm(`Xoá gói ${g.ten}?`)) return;
+    try { await api(`/api/test-cases/${g.id}`, {method:"DELETE"}); showToast(`Đã xoá gói ${g.ten}`); load(); }
+    catch(e){ showErr(e.message); }
+  }}, "Xoá");
+
+  return el("tr", {},
+    el("td", {}, el("div", {class:"code"}, g.ten), el("div", {class:"sub"}, g.tenFileGoc)),
+    el("td", {}, g.soTestCase + " bài"),
+    el("td", {}, kbGon(g.kichThuoc)),
+    el("td", {}, el("span", {class:"meta"}, g.sha256.slice(0,12))),
+    el("td", {}, new Date(g.taiLenLuc).toLocaleString("vi-VN")),
+    el("td", {}, el("div", {class:"actions"}, chon, dayBtn, xoaBtn)),
+  );
+}
+
+function renderGoi(rows){
+  if (document.activeElement?.closest?.("#goi-form")) return;
+
+  const area = document.getElementById("goi-area");
+  document.getElementById("goi-count").textContent = rows.length + " gói";
+  area.innerHTML = "";
+  if (!rows.length){
+    area.appendChild(el("div", {class:"empty"}, "Chưa có gói test case nào."));
+    return;
+  }
+  const table = el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Gói"), el("th", {}, "Số bài"), el("th", {}, "Dung lượng"),
+      el("th", {}, "sha256"), el("th", {}, "Tải lên"), el("th", {}, "Hành động"))),
+    el("tbody", {}, ...rows.map(goiRow)));
   area.appendChild(table);
 }
 
@@ -346,6 +436,44 @@ document.getElementById("add-form").addEventListener("submit", async (ev) => {
 let debounceT;
 document.getElementById("q").addEventListener("input", () => { clearTimeout(debounceT); debounceT = setTimeout(load, 300); });
 document.getElementById("filter-state").addEventListener("change", load);
+
+const goiForm = document.getElementById("goi-form");
+document.getElementById("toggle-goi").addEventListener("click", () => {
+  goiForm.classList.toggle("show");
+});
+document.getElementById("goi-cancel").addEventListener("click", () => {
+  goiForm.classList.remove("show");
+  goiForm.reset();
+});
+
+goiForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const f = document.getElementById("goi-file").files[0];
+  if (!f){ showErr("Chưa chọn file."); return; }
+
+  // Không dùng api() ở đây: nó đặt sẵn Content-Type application/json, mà
+  // multipart cần trình duyệt tự đặt kèm boundary. Đặt tay là hỏng upload.
+  const fd = new FormData();
+  fd.append("file", f);
+  fd.append("ten", document.getElementById("goi-ten").value.trim());
+  const by = document.getElementById("goi-by").value.trim();
+  if (by) fd.append("nguoiTaiLen", by);
+
+  try {
+    const res = await fetch(API + "/api/test-cases", {method:"POST", body: fd});
+    if (!res.ok){
+      let msg = res.status + " " + res.statusText;
+      try { const b = await res.json(); if (b?.error) msg = b.error; } catch {}
+      throw new Error(msg);
+    }
+    const g = await res.json();
+    showToast(`Đã nhận gói ${g.ten}: ${g.soTestCase} bài`);
+    showErr(null);
+    goiForm.reset();
+    goiForm.classList.remove("show");
+    load();
+  } catch(e){ showErr(e.message); }
+});
 
 function tickClock(){
   document.getElementById("clock").textContent = new Date().toLocaleTimeString("vi-VN");

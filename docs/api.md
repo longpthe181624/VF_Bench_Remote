@@ -79,20 +79,31 @@ Endpoint `start` hiện nhận **tên** test case dạng chuỗi. Cần đổi s
 
 | Endpoint | Method | Mô tả | Trạng thái |
 |---|---|---|---|
-| `/api/test-cases` | POST | Upload, multipart. File nén kèm metadata | Chưa có |
-| `/api/test-cases` | GET | Danh sách. Lọc: `type`, `project`, `q` | Chưa có |
-| `/api/test-cases/{id}` | GET | Metadata một test case | Chưa có |
-| `/api/test-cases/{id}/file` | GET | **Agent tải file về** để chạy | Chưa có |
-| `/api/test-cases/{id}` | DELETE | Xoá | Chưa có |
+| `/api/test-cases` | POST | Upload gói ZIP, multipart: `file`, `ten`, `nguoiTaiLen` | Đã có |
+| `/api/test-cases` | GET | Danh sách gói đã tải lên | Đã có |
+| `/api/test-cases/{id}` | GET | Metadata một gói | Đã có |
+| `/api/test-cases/{id}/tai` | GET | **Agent tải file về** để bung vào `AutoTests/` | Đã có |
+| `/api/test-cases/{id}` | DELETE | Xoá gói | Đã có |
+| `/api/benches/{code}/trien-khai` | POST | Đẩy gói xuống một bench. Trả 202 + cmdId | Đã có |
 
-Lưu ý khi làm upload, dựa trên các file test case thật trong VDSA 1.15.08:
+Lọc theo `type`, `project`, `q` thì **chưa có** — chưa có bảng dự án.
 
-- File nén có thể là **ZIP hoặc 7z**, cả hai đều mang đuôi `.tc` hoặc `.mtc`.
-  `MHU.mtc` là ZIP, `Test case.mtc` là 7z. Phải nhận cả hai.
-- Lưu nguyên file, không parse cấu trúc bên trong.
-- Lưu kèm hash để agent kiểm tra cache cục bộ và để phát hiện file đổi.
-- Đặt thư mục lưu file **ngoài** `wwwroot`, vì `wwwroot` đang được phục vụ tĩnh.
-- `type` phân biệt test case cho đội manual và test case tự động.
+Ghi chú theo bản đã làm 24/09:
+
+- **Chỉ nhận ZIP.** Khảo sát VDSA 1.15.08 thấy `.tc`/`.mtc` có file là ZIP có
+  file là 7z, cùng đuôi; bản đầu định nhận cả hai. Nay chốt **chỉ ZIP**, vì
+  agent bung bằng `zipfile` có sẵn trong Python, còn 7z phải cài thêm mà máy
+  bench trong xưởng thường bị khoá. Gói 7z bị từ chối ngay lúc upload kèm câu
+  "hãy nén lại bằng ZIP".
+- **Nhận dạng theo byte đầu file, không theo đuôi** — chính vì cùng một đuôi
+  mà hai định dạng.
+- Lưu nguyên file, không parse cấu trúc bên trong. Tên file trên đĩa **là
+  sha256 của nội dung**: tải lên cùng một gói hai lần không tốn thêm chỗ, và
+  agent có đúng một con số để kiểm gói tải về có nguyên vẹn không.
+- Thư mục lưu nằm **ngoài** `wwwroot` (mặc định `App_Data/goi-test-case`, đổi
+  được bằng `GoiTestCase:ThuMuc`), vì `wwwroot` đang được phục vụ tĩnh.
+- Đếm số file `.tc`/`.mtc` lúc upload; gói không có bài nào bị từ chối.
+- `type` phân biệt test case manual và tự động thì **chưa có**.
 
 ## 5. Request test
 

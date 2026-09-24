@@ -10,7 +10,10 @@ namespace BenchConsole.Api.Controllers;
 
 [ApiController]
 [Route("api/benches")]
-public class BenchesController(AppDbContext db, BenchCommandPublisher publisher) : ControllerBase
+public class BenchesController(
+    AppDbContext db,
+    BenchCommandPublisher publisher,
+    IConfiguration cfg) : ControllerBase
 {
     /// <summary>
     /// Danh sách bench cho màn Giám sát. Đọc từ database, không hỏi bench —
@@ -159,8 +162,51 @@ public class BenchesController(AppDbContext db, BenchCommandPublisher publisher)
     public Task<ActionResult<CommandAcceptedDto>> Reset(string code, [FromQuery] string? by, CancellationToken ct)
         => Dispatch(code, "reset_bench", null, null, by, ct);
 
+    /// <summary>
+    /// Đẩy một gói test case đã tải lên xuống máy bench.
+    ///
+    /// Lệnh chỉ mang **đường dẫn tải và sha256**, không mang nội dung gói. Agent
+    /// tự tải file về qua REST rồi bung vào `AutoTests/`. Đây là lệnh duy nhất
+    /// agent hiện nhận, vì nó chỉ động tới file — không cần điều khiển Qauto,
+    /// nên không vướng câu hỏi còn treo về chạy test từ xa.
+    /// </summary>
+    [HttpPost("{code}/trien-khai")]
+    public async Task<ActionResult<CommandAcceptedDto>> TrienKhai(
+        string code, TrienKhaiGoiRequest req, CancellationToken ct)
+    {
+        var goi = await db.GoiTestCases.AsNoTracking()
+            .FirstOrDefaultAsync(g => g.Id == req.GoiId, ct);
+        if (goi is null) return NotFound(new { error = $"Không có gói id {req.GoiId}" });
+
+        // Agent nằm ở máy khác nên URL phải là địa chỉ nó với tới được. Cấu hình
+        // tường minh, vì Request.Host ở đây thường là 'localhost' — agent tải
+        // 'localhost' là tự tải chính nó.
+        var goc = cfg["GoiTestCase:BaseUrlChoAgent"]?.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(goc))
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                error = "Chưa cấu hình GoiTestCase:BaseUrlChoAgent — agent sẽ không biết tải gói ở đâu.",
+            });
+
+        var them = new Dictionary<string, object?>
+        {
+            ["goi"] = new Dictionary<string, object?>
+            {
+                ["id"] = goi.Id,
+                ["ten"] = goi.Ten,
+                ["url"] = $"{goc}/api/test-cases/{goi.Id}/tai",
+                ["sha256"] = goi.Sha256,
+                ["kich_thuoc"] = goi.KichThuoc,
+                ["so_test_case"] = goi.SoTestCase,
+            },
+        };
+
+        return await Dispatch(code, "deploy_testcase", goi.Ten, null, req.IssuedBy, ct, them);
+    }
+
     private async Task<ActionResult<CommandAcceptedDto>> Dispatch(
-        string code, string action, string? testCase, string? plan, string? by, CancellationToken ct)
+        string code, string action, string? testCase, string? plan, string? by,
+        CancellationToken ct, IReadOnlyDictionary<string, object?>? them = null)
     {
         var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
         if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
@@ -182,7 +228,7 @@ public class BenchesController(AppDbContext db, BenchCommandPublisher publisher)
 
         try
         {
-            var cmd = await publisher.SendAsync(bench, action, testCase, plan, by, ct);
+            var cmd = await publisher.SendAsync(bench, action, testCase, plan, by, them, ct);
 
             // 202 chứ không phải 200: lệnh đã gửi, bench chưa xác nhận. Giao diện
             // theo tiếp bằng cmdId qua SignalR, không giữ HTTP request chờ test xong.

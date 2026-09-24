@@ -1,6 +1,7 @@
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Hubs;
 using BenchConsole.Api.Mqtt;
+using BenchConsole.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,6 +23,9 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttIngestService>
 
 // Scoped: nó dùng AppDbContext, vòng đời phải theo request.
 builder.Services.AddScoped<BenchCommandPublisher>();
+
+// Singleton: chỉ giữ đường dẫn thư mục, không giữ trạng thái theo request.
+builder.Services.AddSingleton<KhoGoiTestCase>();
 
 // ---------------------------------------------------------------- web
 builder.Services.AddControllers();

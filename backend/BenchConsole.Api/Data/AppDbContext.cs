@@ -1,3 +1,4 @@
+using BenchConsole.Core.Messaging;
 using BenchConsole.Core.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Run> Runs => Set<Run>();
     public DbSet<TelemetrySample> TelemetrySamples => Set<TelemetrySample>();
     public DbSet<Alert> Alerts => Set<Alert>();
+    public DbSet<GoiTestCase> GoiTestCases => Set<GoiTestCase>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -58,6 +60,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Truy vấn chính: lấy 5 phút gần nhất của một bench + một kênh, nên index theo đúng thứ tự đó.
             e.HasIndex(x => new { x.BenchId, x.Channel, x.At });
             e.Property(x => x.Channel).HasMaxLength(64).IsRequired();
+        });
+
+        b.Entity<GoiTestCase>(e =>
+        {
+            // Tên gói là tên thư mục trong AutoTests/ trên máy bench. Trùng tên
+            // là gói sau bung đè lên gói trước ở bench — nên chặn ngay từ đây.
+            e.HasIndex(x => x.Ten).IsUnique();
+            e.Property(x => x.Ten).HasMaxLength(TenGoi.DaiToiDa).IsRequired();
+            e.Property(x => x.TenFileGoc).HasMaxLength(260).IsRequired();
+            e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            e.Property(x => x.NguoiTaiLen).HasMaxLength(128);
         });
 
         b.Entity<Alert>(e =>
