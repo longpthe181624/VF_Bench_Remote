@@ -24,6 +24,24 @@ Chi tiết backend, các sự kiện SignalR và cấu hình: `backend/README.md
 
 Dừng broker và database: `docker compose down`
 
+## Chạy backend bằng Docker (khuyến nghị)
+
+`dotnet run` chết khi đóng terminal. Muốn backend sống qua khởi động lại máy
+thì dựng cả ba bằng compose:
+
+```bash
+docker compose up -d --build
+```
+
+Lần đầu mất vài phút vì phải tải ảnh .NET và build. Backend chờ SQL Server
+sẵn sàng rồi mới lên — SQL mất tới ~90 giây, đừng tưởng nó treo.
+
+Xem log: `docker compose logs -f api`
+
+Backend **cố ý chỉ mở cho localhost** (`127.0.0.1:5000`), vì hiện chưa có xác
+thực — `issuedBy` là tham số tự khai. Muốn máy khác gọi được thì phải làm xác
+thực trước, rồi đổi dòng `ports` của service `api` trong `docker-compose.yml`.
+
 ## Thử xem nó chạy đúng chưa
 
 Mở một cửa sổ terminal khác để nghe:
@@ -47,6 +65,32 @@ Sẽ thấy lần lượt: `ack accepted` → `status` chuyển `running` → v�
 Nếu anh muốn một máy thứ hai giả làm bench thay vì chạy tất cả trên localhost,
 xem `docs/hai-may.md`. Cách đó đi qua đường mạng thật và kiểm chứng được trạng
 thái "Mất kết nối" bằng cách rút dây mạng.
+
+## Agent thật trên máy bench
+
+`bench_simulator.py` bịa số để thử backend. `bench_agent.py` thì ngược lại —
+nó chạy trên chính máy bench và chỉ báo về những gì đọc được thật.
+
+```bash
+python bench_agent.py --once                        # xem nó đọc được gì, không cần broker
+python bench_agent.py --host <IP máy A> --id QAUTO-01 --model vf6
+```
+
+Nó lấy trạng thái test từ log của Qauto, biết bench đang chạy test
+nào và verdict ra sao mà không cần sửa test case hay nhờ đội Qauto hỗ trợ. Nó
+cũng hỏi `PCANBasic.dll` xem adapter CAN còn cắm không và có ai đang giữ kênh
+không — kênh bị chiếm nghĩa là có kỹ sư đang ngồi thao tác tay tại bench.
+
+Agent **chỉ đọc**: không mở bus CAN, không gửi lệnh. Mọi lệnh từ Console đều bị
+từ chối kèm lý do, vì chưa ai biết có điều khiển Qauto/VDSA bằng dòng lệnh được
+hay không.
+
+Máy bench phải được đăng ký trước trên Console, nếu không backend cố ý bỏ dữ
+liệu:
+
+```bash
+curl -X POST http://<IP máy A>:5000/api/benches   -H "Content-Type: application/json"   -d '{"code":"QAUTO-01","model":"vf6"}'
+```
 
 ## Tuỳ chọn của giả lập
 
@@ -80,6 +124,8 @@ Mọi topic theo mẫu `bench/<model>/<mã bench>/<loại>`:
 ```
 backend/                 backend C# / .NET 8 + SQL Server
 bench_simulator.py       bench giả lập
+bench_agent.py           agent thật trên máy bench (đọc log Qauto, dò PCAN)
+bench_agent_test.py      kiểm thử bộ đọc log/kết quả, không cần broker
 docker-compose.yml       broker MQTT + SQL Server cho môi trường dev
 mosquitto/               cấu hình broker (chỉ dùng cho localhost)
 docs/hai-may.md          chạy giả lập trên máy thứ hai
@@ -104,4 +150,5 @@ TLS và cấp tài khoản riêng cho từng bench.
 - [ ] Xác thực người dùng (hiện `issuedBy` là tham số tự khai)
 - [ ] Chuyển schema sang EF migration thay cho `EnsureCreated()`
 - [ ] Giao diện web
-- [ ] Agent thật chạy trên máy bench
+- [~] Agent thật chạy trên máy bench — `bench_agent.py` đã giám sát được
+      (sống/chết, đang chạy test, verdict); chưa điều khiển được Qauto/VDSA
