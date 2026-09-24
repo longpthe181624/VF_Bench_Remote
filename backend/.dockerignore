@@ -1,0 +1,11 @@
+# Thư mục build của máy host không được lọt vào ảnh: chúng nặng, và tệ hơn là
+# có thể mang nhị phân biên dịch cho Windows vào ảnh Linux rồi sinh lỗi khó lần.
+**/bin/
+**/obj/
+
+**/*.user
+**/.vs/
+**/.vscode/
+
+# Bộ kiểm thử chạy tay, không thuộc ảnh chạy thật.
+BenchConsole.Core.SmokeTest/

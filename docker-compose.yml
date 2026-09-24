@@ -33,6 +33,40 @@ services:
       retries: 10
       start_period: 90s
 
+  api:
+    build:
+      context: ./backend
+    container_name: bench-api
+    # Chờ SQL thật sự nhận kết nối rồi mới bật backend. Không có cái này thì
+    # backend lên trước, EnsureCreatedAsync() gọi vào một SQL chưa sẵn sàng và
+    # chết ngay lần khởi động đầu — mà SQL Server mất tới ~90 giây mới lên.
+    depends_on:
+      sql:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+    environment:
+      # Giữ Development để có Swagger ở /swagger. LƯU Ý: môi trường này cũng
+      # chạy DevSeed, tức tự đăng ký 5 bench giả lập của bench_simulator.py.
+      # Không muốn chúng trong danh mục thì đổi thành Production.
+      ASPNETCORE_ENVIRONMENT: Development
+      # Trong mạng của compose thì gọi nhau bằng TÊN SERVICE và CỔNG NỘI BỘ.
+      # Không phải 127.0.0.1,14330 — 14330 là cổng publish ra host, container
+      # này không dùng tới. Quy tắc "luôn dùng 127.0.0.1" trong CLAUDE.md chỉ
+      # đúng cho chiều host gọi vào container.
+      ConnectionStrings__Default: "Server=sql,1433;Database=BenchConsole;User Id=sa;Password=Bench!Console1;TrustServerCertificate=True;Encrypt=True"
+      Mqtt__Host: mqtt
+      Mqtt__Port: "1883"
+    ports:
+      # CỐ Ý chỉ mở cho localhost. Backend hiện KHÔNG có xác thực — `issuedBy`
+      # và `by` là tham số người gọi tự khai. Mở ra mạng công ty lúc này nghĩa
+      # là ai cũng ra lệnh chạy test lên bench thật được, dưới tên bất kỳ.
+      # docs/api.md mục 9 đặt xác thực là điều kiện trước khi ra khỏi localhost.
+      #
+      # Khi đã có xác thực thì đổi dòng dưới thành "0.0.0.0:5000:8080".
+      - "127.0.0.1:5000:8080"
+    restart: unless-stopped
+
 volumes:
   mqtt-data:
   sql-data:
