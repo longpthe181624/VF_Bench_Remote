@@ -44,11 +44,10 @@ public class TestCasesController(
     [HttpPost]
     [RequestSizeLimit(KhoGoiTestCase.KichThuocToiDa)]
     public async Task<ActionResult<GoiTestCaseDto>> TaiLen(
-        [FromForm] IFormFile file,
-        [FromForm] string ten,
-        [FromForm] string? nguoiTaiLen,
-        CancellationToken ct)
+        [FromForm] TaiGoiForm form, CancellationToken ct)
     {
+        var (file, ten, nguoiTaiLen) = (form.File, form.Ten, form.NguoiTaiLen);
+
         if (file is null || file.Length == 0)
             return BadRequest(new { error = "Chưa chọn file." });
 
@@ -139,4 +138,23 @@ public class TestCasesController(
 
         return NoContent();
     }
+}
+
+/// <summary>
+/// Gộp cả file lẫn mấy trường chữ vào một model.
+///
+/// Không phải cho gọn: Swashbuckle **không sinh được** đặc tả khi
+/// <c>[FromForm] IFormFile</c> đứng chung với các tham số <c>[FromForm]</c>
+/// khác — `/swagger/v1/swagger.json` trả 500 và cả trang Swagger chết theo.
+/// Gộp vào một model thì nó sinh bình thường. Tên thuộc tính giữ đúng tên
+/// trường cũ nên phía giao diện không phải đổi gì.
+/// </summary>
+public class TaiGoiForm
+{
+    public IFormFile File { get; set; } = default!;
+
+    /// <summary>Tên thư mục sẽ bung ra trong `AutoTests/` trên máy bench.</summary>
+    public string Ten { get; set; } = "";
+
+    public string? NguoiTaiLen { get; set; }
 }

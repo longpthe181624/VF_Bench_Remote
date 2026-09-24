@@ -170,9 +170,11 @@ Máy A và máy B **không cùng dải LAN**: máy B ở Wi-Fi `10.170.225.181`,
 
 - Máy A là peer tên `vinfast` → `100.69.35.102`. Broker MQTT ở `1883` **mở**.
 - Máy B là peer `desktop-a300nsf` → `100.98.15.124`.
-- **Cổng 5000 của máy A KHÔNG với tới được.** Broker trong Docker publish ra
-  `0.0.0.0` nên lọt qua, còn backend `dotnet run` bind localhost nên không.
-  Muốn gọi REST từ máy khác thì phải cho Kestrel nghe `0.0.0.0`.
+- **Cổng 5000 của máy A: với tới được, xác nhận 24/09.** Trước đó không, vì
+  `dotnet run` mặc định bind localhost. Nay máy A chạy kèm
+  `--urls http://0.0.0.0:5000` nên `curl http://100.69.35.102:5000/api/benches`
+  từ máy B ra danh sách thật. Đây là điều kiện bắt buộc để agent tải được gói
+  test case. Nhớ là API này **chưa có xác thực nào**.
 
 ```bash
 python bench_agent.py --host 100.69.35.102 --id QAUTO-01 --model vf6
