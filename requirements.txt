@@ -1,1 +1,24 @@
-paho-mqtt>=1.6
+# Bench Console — phần chạy trên máy bench (máy B)
+#
+# Cài:  pip install -r requirements.txt
+#
+# Cần Python 3.10 trở lên. Code dùng cú pháp kiểu `str | None`, chạy trên
+# Python 3.9 sẽ lỗi cú pháp ngay lúc nạp file chứ không đợi tới lúc chạy.
+#
+# Cố ý chỉ có MỘT gói ngoài. Máy bench trong xưởng thường bị khoá quyền cài
+# đặt và không phải máy nào cũng ra được Internet, nên mọi thứ khác đều dùng
+# thư viện chuẩn của Python: zipfile để bung gói test case, hashlib để kiểm
+# sha256, urllib để tải gói, ctypes để dò adapter PCAN, http.server cho kênh
+# nhận báo cáo nội bộ, subprocess để gọi adb.
+
+# Kết nối MQTT: gửi trạng thái, nhận lệnh, và đăng ký Last Will để Console
+# biết ngay khi agent chết.
+#
+# PHẢI là 2.0 trở lên. bench_agent.py gọi thẳng mqtt.CallbackAPIVersion.VERSION2
+# mà không có nhánh dự phòng, nên cài bản 1.x sẽ hỏng ngay lúc khởi động với
+# AttributeError. Bản trước của file này ghi >=1.6 là sai — bench_simulator.py
+# chạy được cả 1.x lẫn 2.x nhờ try/except, còn agent thì không.
+#
+# Chặn trần ở 3.0 vì paho đã một lần đổi chữ ký callback khi lên 2.0; không
+# nên để bản 3.x tự kéo về rồi làm chết agent trên máy không ai trực.
+paho-mqtt>=2.0,<3.0
