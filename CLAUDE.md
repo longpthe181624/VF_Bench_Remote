@@ -45,7 +45,7 @@ docker-compose.yml           mosquitto 1883, SQL Server 14330
 docs/api.md                  danh sách REST API cần có, bản Markdown
 docs/BenchConsole.docx       bản Word cho team đọc, sinh từ api.md rồi sửa tay
 docs/hai-may.md              dựng hai máy, bài thử rút dây mạng
-docs/yeu-cau-qauto-mqtt.md   đề nghị đội Qauto mở 4 topic MQTT nhận lệnh
+docs/yeu-cau-qauto-mqtt.md   đặc tả gửi đội Qauto: Qauto LÀ client, 4 mục
 docs/api-tich-hop.md         bản giao cho bên ngoài tích hợp: hợp đồng API, SignalR
 docs/figma-prompt.md         prompt sinh giao diện
 docs/ui-*.html, ui-*.png     mockup giao diện đã chốt (tối giản, gần đơn sắc)
