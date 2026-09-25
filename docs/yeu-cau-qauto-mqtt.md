@@ -1,202 +1,285 @@
-# Đề nghị đội Qauto: kênh MQTT nhận lệnh chạy test
+# Yêu cầu Qauto làm client của Bench Console
 
-Gửi đội phát triển Qauto — từ nhóm làm **Bench Console** (chạy test bench từ xa).
-Ngày 24/09/2026. Đối chiếu trên bản `QAuto_V2.6.10.2`.
+Gửi đội phát triển Qauto. Cập nhật 25/09/2026.
 
-## Tóm tắt một đoạn
+Mục tiêu: **Qauto tự nói chuyện với Bench Console**, không cần phần mềm trung
+gian nào trên máy bench. Hiện chúng tôi có một agent Python chạy tạm để chứng
+minh luồng này hoạt động — nó đã chạy thật và sẽ được bỏ đi khi Qauto làm được.
 
-Chúng tôi cần **một kênh để gửi lệnh "chạy test case này" tới Qauto và nhận kết
-quả về**. Hiện Qauto không có đường nào như vậy, nên chúng tôi đang phải điều
-khiển giao diện bằng UI Automation — cách đó mong manh và sẽ hỏng mỗi khi Qauto
-đổi bố cục.
+Tài liệu chỉ gồm bốn việc: **địa chỉ server**, **thông tin gửi lên**, **nhận
+test plan**, **trả kết quả**.
 
-Qauto **đã có sẵn** hạ tầng MQTT v5, chứng chỉ mTLS cho 5 vùng và 14 topic đang
-chạy. Đề nghị này chỉ xin **thêm 4 topic** vào thứ đã có, không phải xây mới.
+Hai chỗ đánh dấu **[cần xác nhận]** là giả định của chúng tôi, mong đội Qauto
+phản hồi nếu thấy không hợp.
 
-## Vì sao không dùng được cách khác
+## Nguyên tắc chung
 
-Chúng tôi đã thử hết và ghi lại kết quả:
+**File đi REST, trạng thái và lệnh đi MQTT.** Chúng tôi đo thật qua đường mạng
+đang dùng: gói MQTT 1,6 MB mất ~0,9 giây, nhưng **2 MB thì tắc hẳn** và còn
+làm nghẽn broker. Nên mọi thứ là file — gói test case, log, trace CAN — phải
+đi HTTP.
 
-| Cách | Kết quả |
+**Bench phải được đăng ký trước trên Console.** Qauto gửi lên với một mã bench
+chưa đăng ký thì Console **bỏ qua trong im lặng**, không báo lỗi. Đây là cố ý
+(gõ sai một ký tự sẽ sinh bench rác), nhưng xin lưu ý khi gỡ lỗi.
+
+**Hiện chưa có xác thực.** Không API key, không token. Sẽ có sau, và sẽ báo
+trước.
+
+---
+
+## 1. Địa chỉ server
+
+Xin thêm **một ô cấu hình duy nhất** trong Settings, cạnh ô `Vincode`:
+
+| Ô | Ví dụ |
 | --- | --- |
-| Tham số dòng lệnh | Đã thử. `Qauto.exe --help` không in gì; truyền đường dẫn `.tc` vào bản đang chạy lẫn bản mới khởi động đều **không được nhận** |
-| Cổng mạng / named pipe | Qauto không mở cái nào |
-| File association `.tc` | Không đăng ký |
-| Bỏ file vào `AutoTests/` | Qauto **chỉ quét lúc khởi động**, phải tắt mở lại mới thấy |
-| UI Automation | Chạy được, nhưng xem mục "Vì sao cách hiện tại không bền" bên dưới |
+| `Server` | `vinfast.tail1cbef5.ts.net` |
+| `BenchId` | `VIVI-01` |
 
-## Đề nghị: 4 topic
-
-Đặt dưới namespace riêng để không lẫn với 14 topic xe hiện có.
+Từ `Server`, Qauto tự dựng hai địa chỉ: **[cần xác nhận]**
 
 ```
-autolab/{bench_id}/cmd       Console → Qauto
-autolab/{bench_id}/ack       Qauto → Console
-autolab/{bench_id}/status    Qauto → Console   (retained + Last Will)
-autolab/{bench_id}/result    Qauto → Console
+MQTT : tcp://<Server>:1883
+REST : http://<Server>:5000
 ```
 
-`{bench_id}` là **mã bench do Console cấp** khi đăng ký, ví dụ `QAUTO-01`.
-Cần **một ô cấu hình mới trong Settings** để tester điền, đặt cạnh ô `Vincode`.
+Một ô thay vì ba, vì hiện hai dịch vụ nằm cùng một máy. Nếu đội Qauto muốn
+tách riêng thì cho ba ô cũng được, chúng tôi không vướng gì.
 
-**Vì sao không dùng luôn `{vincode}` sẵn có.** Đã cân nhắc và loại: `Vincode`
-đi theo **chiếc xe / con MHU**, còn bench thì **giữ nguyên danh tính khi thay
-MHU** — đây là việc xảy ra thật trong xưởng. Lấy `vincode` làm khoá topic thì
-mỗi lần thay MHU là Console mất dấu con bench, lịch sử test đứt làm hai mảnh
-mà không có gì báo. Mã bench do người đăng ký thì bền qua việc thay linh kiện.
+`BenchId` là mã do Console cấp khi đăng ký bench. **Không dùng `Vincode`** làm
+định danh: Vincode đi theo xe/MHU, mà thay MHU thì bench vẫn giữ nguyên danh
+tính — lấy Vincode làm khoá sẽ làm lịch sử test đứt làm hai mảnh.
 
-Vẫn **gửi `vincode` trong payload `status`** (xem dưới) — Console dùng nó để
-đối chiếu và cảnh báo khi xe trong bench khác với hồ sơ đã đăng ký, chứ không
-dùng làm khoá định danh.
+Hai điều mong Qauto làm khi nối:
 
-Hai điều kiện cần bảo đảm:
+- **Thử lại có giãn dần** khi broker chưa lên, đừng chết ở lần nối đầu.
+- **Đặt Last Will** (xem mục 2) — đây là thứ tạo ra trạng thái "Mất kết nối"
+  trên Console.
 
-- Mỗi máy đều đã điền mã bench trong Settings.
-- Hai bench không trùng mã. Console cấp mã nên chuyện này do Console lo.
+---
 
-### `cmd` — Console gửi xuống
+## 2. Thông tin Qauto gửi lên
+
+```
+Topic : bench/<model>/<BenchId>/status
+QoS   : 1        Retained : có
+```
+
+`<model>` là dòng xe trong bench, viết thường và thay khoảng trắng bằng gạch
+nối: `VF8New ME` → `vf8new-me`. Lấy từ một ô cấu hình nữa, hoặc để trống cũng
+được — Console khớp theo `BenchId`, không theo model.
 
 ```json
 {
-  "cmd_id": "9f3a1c20",
-  "action": "run",
-  "params": {
-    "test_cases": ["AutoTests/9VN_all_language/9VI_VN/[TC002-...].tc"],
-    "folder": null,
-    "repeat": 1
+  "bench_id": "VIVI-01",
+  "state": "idle",
+  "host": "DESKTOP-A300NSF",
+  "qauto_version": "QAuto_V2.6.10.2",
+  "vincode": "VF3xxxxxxxxxxxxxxx",
+  "can_connected": true,
+  "mhu_connected": false,
+  "dbc_loaded": 1,
+  "dbc_missing": 16,
+  "current": { "cmd_id": null, "test_case": null, "step": null },
+  "detail": "Rảnh, sẵn sàng nhận lệnh",
+  "ts": 1758700000000
+}
+```
+
+`state` nhận đúng năm giá trị: `idle`, `running`, `busy_local`, `error`,
+`offline`. Dùng `busy_local` khi có người đang ngồi thao tác tay tại bench.
+
+**Gửi khi trạng thái đổi, và ít nhất mỗi 30 giây** dù không đổi.
+
+**Last Will** — broker tự phát khi Qauto tắt hoặc đứt mạng, cùng topic,
+retained:
+
+```json
+{ "bench_id": "VIVI-01", "host": "DESKTOP-A300NSF", "state": "offline", "ts": null }
+```
+
+### Bốn trường chúng tôi tha thiết nhất
+
+Đây là những thứ **chỉ Qauto biết**, và mỗi cái đang là một lỗ hổng im lặng:
+
+| Trường | Vì sao cần |
+| --- | --- |
+| `can_connected` | Không có nó, Console báo "Sẵn sàng" cho cả bench **chưa cắm dây vào xe**. Chúng tôi đo được adapter cắm vào máy tính, nhưng không biết máy có nối với bench hay không |
+| `dbc_loaded` / `dbc_missing` | Trên một máy bench thật, **16 trong 17 đường dẫn DBC trong `user.config` trỏ vào file không tồn tại**. Qauto vẫn mở, vẫn chạy, vẫn báo `Pass`. Không ai biết |
+| `mhu_connected` | Bài test dựa vào thao tác ADB sẽ không làm gì cả mà vẫn báo `Pass` |
+| `qauto_version` | Bench trong xưởng không cùng phiên bản |
+
+`host` là tên máy tính (`Environment.MachineName`). Console đối chiếu với tên
+máy đã khai cho bench để phát hiện có người mang máy sang bench khác mà quên
+đổi cấu hình.
+
+---
+
+## 3. Nhận tin có test plan để tải
+
+```
+Topic : bench/+/<BenchId>/cmd      ← nghe ký tự đại diện ở chỗ model
+QoS   : 1        Retained : không
+```
+
+Nghe `+` ở chỗ model là **quan trọng**: khi người dùng đổi dòng xe của bench
+trên Console, topic đổi theo. Bám cứng model thì lệnh rơi vào topic không ai
+nghe, và Console sẽ báo nhầm thành "bench không phản hồi".
+
+### Lệnh
+
+```json
+{
+  "cmd_id": "a1b2c3d4e5f6g7h8",
+  "action": "run_plan",
+  "plan": {
+    "id": 12,
+    "ten": "Warning VF8 — bộ đầy đủ",
+    "goi": {
+      "url": "http://vinfast.tail1cbef5.ts.net:5000/api/test-cases/1/tai",
+      "sha256": "cb53ab8f8316384e6ac3cddb0707485e08a54ae6a4b9dabef06e274410b00308",
+      "ten_thu_muc": "Warning_VF8"
+    },
+    "test_cases": [
+      "Warning_VF8/[TC002-VF89FL-ID801] Verify warning.tc",
+      "Warning_VF8/[TC003-VF89FL-ID802] Verify warning.tc"
+    ],
+    "dung_khi_fail": false,
+    "lap_lai": 1
   },
   "issued_by": "long.pt",
   "ts": 1758700000000
 }
 ```
 
-`action` cần tối thiểu: `run`, `stop`, `get_info`.
+Các bước mong Qauto làm:
 
-Trong `params` của `run`, **một trong hai**:
-- `test_cases` — danh sách đường dẫn cụ thể, chạy theo thứ tự
-- `folder` — chạy **toàn bộ** test case trong thư mục đó
+1. Tải `plan.goi.url` qua HTTP, **kiểm `sha256`**. Lệch thì dừng, báo lỗi, và
+   **tuyệt đối không giải nén**. Gói hỏng mà vẫn chạy thì Qauto vẫn báo `Pass`
+   trên một bài không còn đúng nữa.
+2. Giải nén vào `AutoTests/<ten_thu_muc>/`, ghi đè nếu đã có. Gói là **ZIP**.
+3. Chạy lần lượt các bài trong `test_cases`, theo đúng thứ tự.
 
-Hai kiểu này ứng với hai cách người dùng thao tác trên Console: chọn từng bài,
-hoặc chọn cả thư mục.
+`test_cases` rỗng nghĩa là **chạy toàn bộ** thư mục vừa giải nén.
 
-### `ack` — Qauto trả lời ngay, trước khi chạy
+Danh sách bài do Console giữ và gửi xuống, **không** nằm trong gói **[cần xác
+nhận]** — để sửa được plan trên web mà không phải nén lại gói.
+
+`action` cần tối thiểu: `run_plan`, `stop`, `get_info`.
+
+### Trả lời ngay — phần quan trọng nhất
+
+```
+Topic : bench/<model>/<BenchId>/ack      QoS 1, không retained
+```
 
 ```json
-{ "cmd_id": "9f3a1c20", "status": "rejected",
+{ "cmd_id": "a1b2c3d4e5f6g7h8", "status": "rejected",
   "reason": "mhu_not_connected",
   "detail": "There is no connected device MHU",
   "ts": 1758700000400 }
 ```
 
-**Đây là phần chúng tôi tha thiết nhất.** Xin Qauto **kiểm điều kiện rồi mới
-nhận lệnh**, và từ chối tường minh khi thiếu:
+`status`: `accepted` hoặc `rejected`. Trả **trước khi bắt đầu chạy**.
+
+**Xin Qauto kiểm điều kiện rồi mới nhận lệnh**, và từ chối tường minh khi
+thiếu:
 
 | `reason` | Khi nào |
 | --- | --- |
-| `can_not_connected` | Chưa nối CAN |
+| `can_not_connected` | Chưa nối CAN, hoặc chưa cắm vào bench |
 | `mhu_not_connected` | Chưa thấy MHU |
-| `test_case_not_found` | Không có bài đó |
+| `dbc_missing` | Thiếu file DBC mà bài test cần |
+| `test_case_not_found` | Không có bài đó trong gói |
 | `busy` | Đang chạy bài khác, hoặc có người thao tác tại chỗ |
-| `resource_missing` | Thiếu tài nguyên, ví dụ thư viện ảnh mẫu `C:\Tools\WMC_icon\` |
+| `resource_missing` | Thiếu tài nguyên khác, ví dụ thư viện ảnh mẫu |
 
-Lý do xin điều này: hôm 24/09 chúng tôi chạy bài
-`[TC002-VF89FL-ID801] Verify warning ...` trên một bench **chưa cắm MHU**. Qauto
-báo:
-
-```
-RESULT: Fail:
-WRONG CONTENT in Car Buddy
-WRONG CONTENT in Alerts App
-WRONG ICON in Car Buddy
-WRONG ICON in Alerts App
-```
-
-Người ngồi tại bench nhìn là biết ngay bench chưa sẵn sàng. Nhưng **người ở xa
-chỉ nhận được bốn dòng đó và sẽ mở bug cho sản phẩm** — trong khi thật ra chưa
-hề nhìn được màn hình. Thông tin phân biệt hai chuyện nằm ở dòng
-`End UI: There is no connected device MHU` trong log từng bước, không nằm trong
-verdict.
+Lý do xin điều này: chúng tôi đã chạy một bài kiểm tra cảnh báo trên bench
+**chưa cắm MHU**. Qauto báo `RESULT: Fail` với `WRONG CONTENT in Car Buddy`.
+Người đọc kết quả từ xa sẽ hiểu là xe sai, trong khi thật ra là **không có gì
+để nhìn**. Thông tin phân biệt hai chuyện nằm trong log từng bước, không nằm
+trong verdict.
 
 Từ chối trước khi chạy thì không sinh ra kết quả sai lệch nào cả.
 
-### `status` — retained, kiêm Last Will
+---
+
+## 4. Trả kết quả chạy
+
+Kết quả đi **hai đường**, vì tóm tắt thì nhỏ còn bằng chứng thì lớn.
+
+### 4a. Tóm tắt — MQTT
+
+```
+Topic : bench/<model>/<BenchId>/result      QoS 1, không retained
+```
 
 ```json
 {
-  "bench_id": "QAUTO-01",
-  "vincode": "VF3xxxxxxxxxxxxxxx",
-  "state": "idle",
-  "qauto_version": "QAuto_V2.6.10.2",
-  "can_connected": true,
-  "mhu_connected": false,
-  "current": { "cmd_id": null, "test_case": null, "step": null },
-  "ts": 1758700000000
+  "cmd_id": "a1b2c3d4e5f6g7h8",
+  "test_case": "Warning_VF8/[TC002-VF89FL-ID801] Verify warning.tc",
+  "verdict": "pass",
+  "duration_s": 11.3,
+  "reason": null,
+  "ts": 1758700045000
 }
 ```
 
-`state`: `idle` | `running` | `busy_local` | `error` | `offline`.
+Gửi **một gói cho mỗi bài**, ngay khi bài đó xong — đừng gom lại cuối plan.
+Người ở xa cần thấy tiến độ.
 
-`busy_local` nghĩa là có kỹ sư đang ngồi thao tác trực tiếp — Console sẽ không
-gửi lệnh vào, tránh giành máy với người.
+`verdict` nhận bốn giá trị: `pass`, `fail`, `warning`, `unknown`.
 
-Xin đặt **Last Will** trên chính topic này với `state: "offline"`, để Console
-biết ngay khi máy bench mất điện hay đứt mạng, không phải chờ hết hạn.
+**`unknown` không phải `fail`.** Nếu Qauto ghi ra một trạng thái mà tài liệu
+này chưa liệt kê, xin gửi `unknown` kèm chuỗi gốc trong `reason`, đừng quy về
+`fail`. Chúng tôi chưa từng thấy một lượt trượt trong log nên chưa biết Qauto
+ghi chữ gì khi hỏng.
 
-### `result` — mỗi bài một bản tin
+### 4b. Bằng chứng chi tiết — REST
 
-```json
-{
-  "cmd_id": "9f3a1c20",
-  "test_case": "[TC002-VF89FL-ID801-Not apply for Legacy] Verify warning ...",
-  "verdict": "fail",
-  "reasons": ["WRONG CONTENT in Car Buddy", "WRONG ICON in Alerts App"],
-  "steps": [
-    { "no": 4, "name": "Check warning icon in Car Buddy",
-      "result": "fail", "note": "There is no connected device MHU" }
-  ],
-  "duration_ms": 13400,
-  "artifacts": { "folder": "Output/OutputLog/2026-09-24-09-17-20/..." },
-  "ts": 1758700013400
-}
+```
+POST http://<Server>:5000/api/runs/<cmd_id>/report
+Content-Type: multipart/form-data
 ```
 
-Hai chỗ xin lưu ý:
+| Trường | Nội dung |
+| --- | --- |
+| `test_case` | Tên bài, khớp với gói tóm tắt |
+| `file` | Một hoặc nhiều file. Nhận nhiều lần cùng tên trường |
 
-**`verdict` xin có 4 giá trị**: `pass`, `fail`, `warning`, `unknown`. Hiện chúng
-tôi chỉ thấy `Pass` và `Fail`; `warning` và `unknown` giúp phân biệt "chạy xong
-nhưng có ngờ vực" với "không kết luận được".
+Xin gửi những file Qauto vốn đã sinh ra cho mỗi lượt chạy:
 
-**`steps` xin kèm `note` của từng bước.** Đây là chỗ chứa câu giải thích thật.
-Chỉ có verdict thì người ở xa không phân biệt được "sản phẩm sai" với "bench
-chưa sẵn sàng".
+```
+Output/OutputLog/<...>/<TenTestCase>/<...>/
+    TestCaseLog.txt      ~35 KB
+    CAN1.txt             2 MB cho lượt 40 giây, hàng chục MB cho lượt 20 phút
+    Can_<...>.blf
+```
 
-## Hai thứ xin thêm nếu được, không bắt buộc
+**Vì sao không đi MQTT:** `CAN1.txt` một lượt 40 giây đã 2 MB, mà chúng tôi đo
+được gói MQTT 2 MB là tắc. Lượt dài 20 phút sinh 828.726 frame thì còn lớn hơn
+nhiều.
 
-**`action: "reload"`** — nạp lại danh mục test case mà không phải tắt mở Qauto.
-Hiện mỗi lần đẩy bộ test case mới xuống bench, chúng tôi phải tắt Qauto, mở lại,
-vào Settings chọn CAN, `Connect All`, `Apply` — chín bước, vài chục giây, và
-đóng mất cửa sổ của người đang dùng.
+Gửi được lúc nào thì gửi, **không cần đúng lúc bài vừa xong**. Mạng đứt thì
+gửi lại sau; Console chống trùng theo `cmd_id` và tên bài, nên gửi lại hai lần
+không sao.
 
-**`action: "get_info"`** → trả về danh sách test case hiện có và phiên bản
-Qauto, để Console không phải đoán trên bench đang có gì.
+Endpoint này Console **chưa làm xong** — sẽ báo khi sẵn sàng. Mục 4a thì đã
+chạy được ngay.
 
-## Vì sao cách hiện tại không bền
+---
 
-Chúng tôi đã chạy được bằng UI Automation: gọi `InvokePattern.Invoke()` lên nút
-Chạy, 69 mili giây sau Qauto chạy thật. Nhưng:
+## Tóm tắt những gì cần ở Qauto
 
-- **19 nút trên giao diện đều không có `Name` lẫn `AutomationId`**, chỉ phân
-  biệt được bằng toạ độ. Trong vòng vài tiếng ngày 24/09, cửa sổ Qauto dời chỗ
-  và đổi tỉ lệ (nút rộng 44 px thành 35 px) — toạ độ chúng tôi đo buổi sáng đã
-  sai buổi chiều.
-- **Cây test case không chọn được bằng UIA.** Các mục chỉ là `Text` trần, không
-  có `SelectionItemPattern` lẫn `InvokePattern`. Muốn chọn một bài cụ thể thì
-  phải bấm chuột theo toạ độ — tức giành con trỏ của kỹ sư đang ngồi đó.
-- Mỗi bản Qauto mới, chúng tôi phải đo lại toạ độ từ đầu.
+| Việc | Đường |
+| --- | --- |
+| Một ô `Server` + một ô `BenchId` trong Settings | — |
+| Gửi `status` khi đổi và mỗi 30 giây, kèm Last Will | MQTT, retained |
+| Nghe `bench/+/<BenchId>/cmd`, trả `ack` ngay | MQTT |
+| Tải gói, kiểm sha256, giải nén, chạy theo danh sách | HTTP + tại chỗ |
+| Gửi `result` từng bài | MQTT |
+| Upload log và trace CAN | HTTP multipart |
 
-Có 4 topic trên thì toàn bộ phần này biến mất.
-
-## Liên hệ
-
-Nhóm Bench Console. Sẵn sàng trao đổi chi tiết payload, và sẵn sàng thử bản
-nháp trên bench thật ngay khi có.
+Mọi câu hỏi xin liên hệ nhóm Bench Console. Chúng tôi có sẵn một agent Python
+chạy đúng giao thức này để đội Qauto đối chiếu khi cần.
