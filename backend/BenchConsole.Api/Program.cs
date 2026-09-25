@@ -26,6 +26,7 @@ builder.Services.AddScoped<BenchCommandPublisher>();
 
 // Singleton: chỉ giữ đường dẫn thư mục, không giữ trạng thái theo request.
 builder.Services.AddSingleton<KhoGoiTestCase>();
+builder.Services.AddSingleton<KhoBaoCao>();
 
 // ---------------------------------------------------------------- web
 builder.Services.AddControllers();

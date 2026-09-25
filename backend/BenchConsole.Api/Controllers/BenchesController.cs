@@ -152,7 +152,18 @@ public class BenchesController(
 
     [HttpPost("{code}/start")]
     public Task<ActionResult<CommandAcceptedDto>> Start(string code, StartTestRequest req, CancellationToken ct)
-        => Dispatch(code, "start_test", req.TestCase, req.Plan, req.IssuedBy, ct);
+        // Gắn sẵn địa chỉ nộp báo cáo vào lệnh, để máy bench không phải cấu
+        // hình thêm một URL nữa — nó chỉ cần biết broker. Console vốn đã biết
+        // địa chỉ mà máy bench với tới được (GoiTestCase:BaseUrlChoAgent).
+        => Dispatch(code, "start_test", req.TestCase, req.Plan, req.IssuedBy, ct,
+            UrlBaoCao() is { } url ? new Dictionary<string, object?> { ["report_url"] = url } : null);
+
+    /// <summary>Mẫu URL nộp báo cáo, `{cmd_id}` do máy bench thay vào.</summary>
+    private string? UrlBaoCao()
+    {
+        var goc = cfg["GoiTestCase:BaseUrlChoAgent"]?.TrimEnd('/');
+        return string.IsNullOrWhiteSpace(goc) ? null : $"{goc}/api/runs/{{cmd_id}}/report";
+    }
 
     [HttpPost("{code}/stop")]
     public Task<ActionResult<CommandAcceptedDto>> Stop(string code, [FromQuery] string? by, CancellationToken ct)

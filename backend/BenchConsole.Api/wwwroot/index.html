@@ -152,6 +152,14 @@
 
   <section>
     <div class="sec-head">
+      <h2>Báo cáo nhận về</h2>
+      <span class="count" id="bc-count"></span>
+    </div>
+    <div id="bc-area"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
       <h2>Cảnh báo đang mở</h2>
       <span class="count" id="alert-count"></span>
     </div>
@@ -288,16 +296,18 @@ async function load(){
   if (state) params.set("state", state);
 
   try {
-    const [benches, alerts, goi] = await Promise.all([
+    const [benches, alerts, goi, baoCao] = await Promise.all([
       api("/api/benches" + (params.toString() ? "?" + params.toString() : "")),
       api("/api/alerts"),
       api("/api/test-cases"),
+      api("/api/runs/bao-cao/gan-day?limit=20"),
     ]);
     showErr(null);
     benchesHienTai = benches;
     renderBenches(benches);
     renderAlerts(alerts);
     renderGoi(goi);
+    renderBaoCao(baoCao);
   } catch(e){
     showErr("Không tải được dữ liệu: " + e.message);
   }
@@ -382,6 +392,29 @@ function renderGoi(rows){
       el("th", {}, "Gói"), el("th", {}, "Số bài"), el("th", {}, "Dung lượng"),
       el("th", {}, "sha256"), el("th", {}, "Tải lên"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...rows.map(goiRow)));
+  area.appendChild(table);
+}
+
+function renderBaoCao(rows){
+  const area = document.getElementById("bc-area");
+  document.getElementById("bc-count").textContent = rows.length + " file";
+  area.innerHTML = "";
+  if (!rows.length){
+    area.appendChild(el("div", {class:"empty"},
+      "Chưa nhận được báo cáo nào. Đẩy gói xuống bench rồi bấm Chạy."));
+    return;
+  }
+  const table = el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Bench"), el("th", {}, "Bài"), el("th", {}, "File"),
+      el("th", {}, "Cỡ"), el("th", {}, "Nhận lúc"), el("th", {}, ""))),
+    el("tbody", {}, ...rows.map(b => el("tr", {},
+      el("td", {}, el("span", {class:"code"}, b.benchCode)),
+      el("td", {}, b.testCase || "—"),
+      el("td", {}, b.tenFile),
+      el("td", {}, kbGon(b.kichThuoc)),
+      el("td", {}, new Date(b.nhanLuc).toLocaleString("vi-VN")),
+      el("td", {}, el("a", {href: API + `/api/runs/report/${b.id}/tai`}, "Tải về"))))));
   area.appendChild(table);
 }
 

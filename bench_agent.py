@@ -310,6 +310,137 @@ def _bo_vo_boc(ten_muc: list[str]) -> str:
     return goc.pop() if len(goc) == 1 else ""
 
 
+# --------------------------------------------------------------------------
+# Nguồn file kết quả
+#
+# ĐÂY LÀ CHỖ DUY NHẤT phải sửa khi chuyển từ chạy giả lập sang chạy thật. Mọi
+# phần còn lại của luồng — nhận lệnh, nộp báo cáo, trả verdict — không cần biết
+# file đến từ đâu.
+# --------------------------------------------------------------------------
+
+OUTPUT_QAUTO_MAC_DINH = r"D:\Qauto_2610\Qauto_2610\Output\OutputLog"
+
+
+def _ket_qua_tu_sinh(test_case: str | None, cmd_id: str) -> list[str]:
+    """Sinh một file mô tả lượt chạy giả lập.
+
+    Dùng khi chưa nối được test thật. Nội dung nói THẲNG là giả lập — nhét một
+    file trông giống log thật vào đây là gieo dữ liệu giả vào lịch sử, mà kiểu
+    hỏng im lặng đó đắt hơn nhiều so với việc không có file nào.
+    """
+    fd, ra = tempfile.mkstemp(suffix=".txt", prefix="ket-qua-gia-lap-")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("===== BÁO CÁO GIẢ LẬP — KHÔNG PHẢI KẾT QUẢ TEST THẬT =====\n")
+        f.write(f"bench     : {TEN_MAY}\n")
+        f.write(f"cmd_id    : {cmd_id}\n")
+        f.write(f"test_case : {test_case or '(không nêu)'}\n")
+        f.write(f"sinh lúc  : {datetime.now().isoformat(timespec='seconds')}\n")
+        f.write("\nAgent chưa điều khiển được Qauto nên không có lượt chạy nào.\n"
+                "File này chỉ để chứng minh đường nộp báo cáo đã thông.\n")
+    return [ra]
+
+
+def _ket_qua_tu_qauto(thu_muc_output: str) -> list[str]:
+    """Lấy toàn bộ file của lượt chạy MỚI NHẤT trong Output/OutputLog.
+
+    Cấu trúc Qauto sinh ra:
+        OutputLog/<yyyy-MM-dd-HH-mm-ss>/<TenTestCase>/<HH-mm-ss-fff>/
+    Đọc theo thư mục này thì tránh hẳn chuyện Qauto xoay log, và mỗi lượt chạy
+    là một bộ file độc lập.
+    """
+    if not os.path.isdir(thu_muc_output):
+        raise GoiHong(f"Không thấy thư mục Output của Qauto: {thu_muc_output}")
+
+    luot = []
+    for goc, _, files in os.walk(thu_muc_output):
+        if files:
+            luot.append((os.path.getmtime(goc), goc, files))
+    if not luot:
+        raise GoiHong(f"Chưa có lượt chạy nào trong {thu_muc_output}")
+
+    _, goc, files = max(luot)
+    return [os.path.join(goc, f) for f in files]
+
+
+def tim_file_ket_qua(spec: str, test_case: str | None, cmd_id: str) -> list[str]:
+    """Quy ra danh sách file để nộp lên Console.
+
+    `spec` nhận ba dạng:
+        tu-sinh          sinh file mô tả — luôn có, dùng khi chạy giả lập
+        qauto[:<đường>]  lượt chạy mới nhất trong Output/OutputLog của Qauto
+        mau:<đường>      một file, hoặc mọi file trong một thư mục
+    """
+    spec = (spec or "tu-sinh").strip()
+
+    if spec == "tu-sinh":
+        return _ket_qua_tu_sinh(test_case, cmd_id)
+
+    if spec == "qauto" or spec.startswith("qauto:"):
+        duong = spec[6:] if spec.startswith("qauto:") else OUTPUT_QAUTO_MAC_DINH
+        return _ket_qua_tu_qauto(duong)
+
+    if spec.startswith("mau:"):
+        duong = spec[4:]
+        if os.path.isdir(duong):
+            ra = [os.path.join(duong, f) for f in sorted(os.listdir(duong))
+                  if os.path.isfile(os.path.join(duong, f))]
+            if not ra:
+                raise GoiHong(f"Thư mục mẫu rỗng: {duong}")
+            return ra
+        if os.path.isfile(duong):
+            return [duong]
+        raise GoiHong(f"Không thấy file hay thư mục mẫu: {duong}")
+
+    raise GoiHong(f"Không hiểu --ket-qua={spec!r}. Dùng tu-sinh, qauto, "
+                  "qauto:<đường dẫn> hoặc mau:<đường dẫn>")
+
+
+def nop_bao_cao(url: str, duong_dan: list[str], test_case: str | None,
+                bench_code: str) -> int:
+    """Đẩy file bằng chứng lên Console bằng multipart, chỉ dùng thư viện chuẩn.
+
+    Không dùng `requests` vì máy bench trong xưởng thường bị khoá, cài thêm gói
+    là phiền. Dựng multipart bằng tay chỉ tốn chừng hai chục dòng.
+    """
+    ranh = "----BenchConsole" + os.urandom(12).hex()
+    than = bytearray()
+    CRLF = b"\r\n"
+
+    def truong(ten: str, gia_tri: str) -> None:
+        than.extend(b"--" + ranh.encode() + CRLF)
+        than.extend(f'Content-Disposition: form-data; name="{ten}"'.encode() + CRLF + CRLF)
+        than.extend(gia_tri.encode("utf-8") + CRLF)
+
+    if test_case:
+        truong("testCase", test_case)
+    truong("benchCode", bench_code)
+
+    for d in duong_dan:
+        ten = os.path.basename(d)
+        than.extend(b"--" + ranh.encode() + CRLF)
+        than.extend(
+            f'Content-Disposition: form-data; name="file"; filename="{ten}"'.encode()
+            + CRLF + b"Content-Type: application/octet-stream" + CRLF + CRLF)
+        with open(d, "rb") as f:
+            than.extend(f.read())
+        than.extend(CRLF)
+
+    than.extend(b"--" + ranh.encode() + b"--" + CRLF)
+
+    req = urllib.request.Request(
+        url, data=bytes(than), method="POST",
+        headers={"Content-Type": f"multipart/form-data; boundary={ranh}"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+            return r.status
+    except urllib.error.HTTPError as ex:
+        chi_tiet = ex.read()[:200].decode("utf-8", "replace")
+        raise GoiHong(f"Console trả HTTP {ex.code} khi nhận báo cáo: {chi_tiet}") from ex
+    except urllib.error.URLError as ex:
+        raise GoiHong(f"Không với tới Console ở {url}: {ex.reason}") from ex
+
+
 def sha256_file(duong_dan: str) -> str:
     """Băm theo khối, không nạp cả file vào RAM."""
     h = hashlib.sha256()
@@ -675,6 +806,11 @@ class BenchAgent:
         self.adb = args.adb
         self.log = DocLogQauto(args.qauto_log)
         self.autotests = getattr(args, "autotests", AUTOTESTS_MAC_DINH)
+        self.ket_qua = getattr(args, "ket_qua", "tu-sinh")
+        self.gia_lap_giay = getattr(args, "gia_lap_giay", 2.0)
+        self.console = getattr(args, "console", None)
+        # Tên bài đang chạy giả lập, để gói status báo "đang chạy" cho đúng.
+        self.dang_gia_lap: str | None = None
 
         self.trang_thai_cu: dict | None = None
         self.lan_gui_cuoi = 0.0
@@ -744,6 +880,10 @@ class BenchAgent:
 
         if action == "deploy_testcase":
             self._nhan_goi(cmd_id, lenh)
+            return
+
+        if action in ("start_test", "run_plan"):
+            self._chay_test(cmd_id, lenh)
             return
 
         # Mọi lệnh còn lại đều dính câu hỏi #1 trong CLAUDE.md: chưa ra lệnh cho
@@ -820,6 +960,90 @@ class BenchAgent:
             if tam and os.path.exists(tam):
                 os.unlink(tam)
 
+    def _chay_test(self, cmd_id: str, lenh: dict) -> None:
+        """Nhận lệnh chạy test.
+
+        Hiện agent CHƯA điều khiển được Qauto, nên đây là chạy giả lập: nó chờ
+        một nhịp rồi nộp file kết quả lấy theo `--ket-qua`. Mục đích là chứng
+        minh cả vòng đã khép kín — đẩy gói xuống, ra lệnh chạy, nhận báo cáo về
+        — để khi Qauto làm được client thì chỉ còn thay đúng phần chạy.
+
+        Verdict trả về là `unknown`, KHÔNG phải `pass`. Chạy giả lập mà báo pass
+        là gieo kết quả giả vào lịch sử test, đúng kiểu hỏng im lặng mà dự án
+        này đã dính nhiều lần.
+        """
+        test_case = lenh.get("test_case") or (lenh.get("plan") or {}).get("ten")
+
+        # Địa chỉ nộp báo cáo do Console gắn sẵn vào lệnh, nên máy bench không
+        # phải cấu hình thêm URL nào. `--console` chỉ là đường lui khi chạy tay.
+        mau_url = lenh.get("report_url")
+        if not mau_url and self.console:
+            mau_url = self.console.rstrip("/") + "/api/runs/{cmd_id}/report"
+        if not mau_url:
+            self._gui("ack", {
+                "cmd_id": cmd_id, "status": "rejected",
+                "reason": "Lệnh không có report_url và agent chưa đặt --console, "
+                          "không biết nộp kết quả về đâu",
+            })
+            return
+
+        self._gui("ack", {"cmd_id": cmd_id, "status": "accepted"})
+        threading.Thread(target=self._lam_chay_test,
+                         args=(cmd_id, test_case, mau_url.replace("{cmd_id}", cmd_id)),
+                         daemon=True).start()
+
+    def _lam_chay_test(self, cmd_id: str, test_case: str | None, url: str) -> None:
+        t0 = time.time()
+        tam = []
+        try:
+            # Chờ một nhịp cho giống lượt chạy thật, để người xem trên Console
+            # kịp thấy bench chuyển sang "đang chạy" rồi mới có kết quả.
+            self.dang_gia_lap = test_case or "(không nêu)"
+            self.lan_gui_cuoi = 0.0            # ép gửi status ngay
+            time.sleep(self.gia_lap_giay)
+
+            files = tim_file_ket_qua(self.ket_qua, test_case, cmd_id)
+            # File tự sinh nằm ở thư mục tạm, dọn sau khi nộp xong.
+            tam = [f for f in files if os.path.basename(f).startswith("ket-qua-gia-lap-")]
+
+            ma = nop_bao_cao(url, files, test_case, self.id)
+            print(f"[{self.id}] đã nộp {len(files)} file báo cáo (HTTP {ma})")
+
+            self._gui("result", {
+                "cmd_id": cmd_id,
+                "test_case": test_case,
+                # KHÔNG bịa pass. Chưa chạy test thật thì không biết kết quả.
+                "verdict": "unknown",
+                "duration_s": round(time.time() - t0, 2),
+                "reason": "chạy giả lập — agent chưa điều khiển được Qauto",
+                "detail": {"so_file_bao_cao": len(files),
+                           "nguon_ket_qua": self.ket_qua},
+            })
+        except GoiHong as ex:
+            print(f"[{self.id}] chạy {test_case} hỏng: {ex}")
+            self._gui("result", {
+                "cmd_id": cmd_id, "test_case": test_case,
+                "verdict": "unknown",
+                "duration_s": round(time.time() - t0, 2),
+                "reason": str(ex),
+            })
+        except Exception as ex:                        # noqa: BLE001
+            print(f"[{self.id}] lỗi không lường khi chạy {test_case}: {ex!r}")
+            self._gui("result", {
+                "cmd_id": cmd_id, "test_case": test_case,
+                "verdict": "unknown",
+                "duration_s": round(time.time() - t0, 2),
+                "reason": f"Lỗi không lường: {ex!r}",
+            })
+        finally:
+            self.dang_gia_lap = None
+            self.lan_gui_cuoi = 0.0
+            for f in tam:
+                try:
+                    os.unlink(f)
+                except OSError:
+                    pass
+
     def _gui(self, leaf: str, payload: dict, retain: bool = False) -> None:
         payload.setdefault("ts", bay_gio())
         self.client.publish(f"{self.prefix}/{leaf}",
@@ -841,6 +1065,13 @@ class BenchAgent:
                 })
 
         tt = suy_trang_thai(self.doc_cam_bien(), self.log.dang_chay)
+
+        # Lượt chạy giả lập đè lên trạng thái đọc từ cảm biến. Không có chỗ này
+        # thì Console vẫn hiện "Sẵn sàng" suốt lúc agent đang chạy lệnh, và
+        # người ở xa không thấy lệnh mình vừa bấm có tác dụng gì.
+        if self.dang_gia_lap:
+            tt = {"state": "running", "test_case": self.dang_gia_lap,
+                  "detail": "Đang chạy giả lập — chưa điều khiển Qauto thật"}
 
         # Chỉ gửi khi trạng thái đổi, hoặc tới nhịp tim. Bench đứng yên hàng
         # giờ mà cứ 5 giây một gói retained là làm broker và DB bẩn vô ích.
@@ -893,6 +1124,12 @@ def main():
     ap.add_argument("--adb", default=ADB_QAUTO_MAC_DINH)
     ap.add_argument("--autotests", default=AUTOTESTS_MAC_DINH,
                     help="thư mục AutoTests của Qauto, nơi bung gói test case")
+    ap.add_argument("--ket-qua", default="tu-sinh", dest="ket_qua",
+                    help="nguồn file kết quả: tu-sinh | qauto | qauto:<đường> | mau:<đường>")
+    ap.add_argument("--gia-lap-giay", type=float, default=2.0, dest="gia_lap_giay",
+                    help="số giây giả vờ chạy trước khi nộp kết quả")
+    ap.add_argument("--console", default=None,
+                    help="địa chỉ Console, chỉ cần khi lệnh không mang report_url")
     ap.add_argument("--interval", type=float, default=5.0,
                     help="giây giữa hai lần đọc cảm biến")
     ap.add_argument("--heartbeat", type=float, default=30.0,

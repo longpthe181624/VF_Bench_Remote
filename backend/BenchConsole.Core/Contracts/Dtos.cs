@@ -131,3 +131,17 @@ public record GoiTestCaseDto(
 /// máy A từ lúc tải lên, agent sẽ tự tải về qua REST.
 /// </summary>
 public record TrienKhaiGoiRequest(int GoiId, string? IssuedBy);
+
+/// <summary>Một file bằng chứng của lượt chạy, hiển thị trên Console.</summary>
+public record BaoCaoChayDto(
+    int Id,
+    string CmdId,
+    string BenchCode,
+    string? TestCase,
+    string TenFile,
+    long KichThuoc,
+    DateTimeOffset NhanLuc)
+{
+    public static BaoCaoChayDto From(BaoCaoChay b) => new(
+        b.Id, b.CmdId, b.BenchCode, b.TestCase, b.TenFile, b.KichThuoc, b.NhanLuc);
+}

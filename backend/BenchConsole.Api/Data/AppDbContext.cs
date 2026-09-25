@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TelemetrySample> TelemetrySamples => Set<TelemetrySample>();
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<GoiTestCase> GoiTestCases => Set<GoiTestCase>();
+    public DbSet<BaoCaoChay> BaoCaoChays => Set<BaoCaoChay>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -71,6 +72,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.TenFileGoc).HasMaxLength(260).IsRequired();
             e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
             e.Property(x => x.NguoiTaiLen).HasMaxLength(128);
+        });
+
+        b.Entity<BaoCaoChay>(e =>
+        {
+            // Truy vấn chính: lấy mọi file của một lệnh. Và chống trùng khi máy
+            // bench gửi lại sau khi mạng đứt — cùng lệnh, cùng tên file, cùng
+            // nội dung thì chỉ giữ một bản.
+            e.HasIndex(x => new { x.CmdId, x.TenFile, x.Sha256 }).IsUnique();
+            e.Property(x => x.CmdId).HasMaxLength(64).IsRequired();
+            e.Property(x => x.BenchCode).HasMaxLength(64).IsRequired();
+            e.Property(x => x.TestCase).HasMaxLength(256);
+            e.Property(x => x.TenFile).HasMaxLength(260).IsRequired();
+            e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
         });
 
         b.Entity<Alert>(e =>
