@@ -57,6 +57,11 @@ services:
       ConnectionStrings__Default: "Server=sql,1433;Database=BenchConsole;User Id=sa;Password=Bench!Console1;TrustServerCertificate=True;Encrypt=True"
       Mqtt__Host: mqtt
       Mqtt__Port: "1883"
+      # Địa chỉ máy bench dùng để tải gói test case về. Khai ở đây thay vì chỉ
+      # để trong appsettings.json, vì appsettings bị nướng vào ảnh Docker —
+      # mang ảnh sang máy khác là agent tải sai chỗ. Dùng tên MagicDNS chứ
+      # không phải IP thô, để đổi IP Tailscale không phải sửa lại.
+      GoiTestCase__BaseUrlChoAgent: "${BENCH_BASE_URL:-http://vinfast.tail1cbef5.ts.net:5000}"
     ports:
       # Địa chỉ trói cổng 5000, đặt qua biến API_BIND trong file .env.
       # Mặc định `127.0.0.1` = chỉ chính máy A gọi được.
@@ -72,8 +77,16 @@ services:
       # người cần dùng đều đã ở trong tailnet, còn mạng công ty thì không với
       # tới. Xem docs/api.md mục 9 — xác thực vẫn là điều kiện để đi xa hơn.
       - "${API_BIND:-127.0.0.1}:5000:8080"
+    volumes:
+      # /app/App_Data giữ HAI thứ người dùng gửi lên: gói test case trong
+      # goi-test-case/ và file kết quả bench gửi về trong bao-cao/. Không gắn
+      # volume thì dựng lại container là mất sạch cả hai, TRONG KHI bảng
+      # GoiTestCases và BaoCaoChays vẫn còn nguyên dòng nhờ volume sql-data.
+      # Console sẽ liệt kê gói và báo cáo mà tải về không có file.
+      - goi-data:/app/App_Data
     restart: unless-stopped
 
 volumes:
   mqtt-data:
   sql-data:
+  goi-data:
