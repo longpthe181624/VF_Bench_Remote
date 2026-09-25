@@ -58,13 +58,20 @@ services:
       Mqtt__Host: mqtt
       Mqtt__Port: "1883"
     ports:
-      # CỐ Ý chỉ mở cho localhost. Backend hiện KHÔNG có xác thực — `issuedBy`
-      # và `by` là tham số người gọi tự khai. Mở ra mạng công ty lúc này nghĩa
-      # là ai cũng ra lệnh chạy test lên bench thật được, dưới tên bất kỳ.
-      # docs/api.md mục 9 đặt xác thực là điều kiện trước khi ra khỏi localhost.
+      # Địa chỉ trói cổng 5000, đặt qua biến API_BIND trong file .env.
+      # Mặc định `127.0.0.1` = chỉ chính máy A gọi được.
       #
-      # Khi đã có xác thực thì đổi dòng dưới thành "0.0.0.0:5000:8080".
-      - "127.0.0.1:5000:8080"
+      # Backend hiện KHÔNG có xác thực — `issuedBy` và `by` là tham số người
+      # gọi tự khai. Nên chọn địa chỉ trói là chọn ai được ra lệnh chạy test:
+      #
+      #   127.0.0.1        chỉ máy A                      (mặc định, an toàn nhất)
+      #   100.69.35.102    mọi máy trong tailnet          ← nên dùng
+      #   0.0.0.0          cả mạng công ty lẫn tailnet    (đừng, khi chưa có đăng nhập)
+      #
+      # Trói vào ĐÚNG địa chỉ Tailscale là chỗ đứng hợp lý lúc này: bench và
+      # người cần dùng đều đã ở trong tailnet, còn mạng công ty thì không với
+      # tới. Xem docs/api.md mục 9 — xác thực vẫn là điều kiện để đi xa hơn.
+      - "${API_BIND:-127.0.0.1}:5000:8080"
     restart: unless-stopped
 
 volumes:
