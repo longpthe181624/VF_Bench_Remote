@@ -811,6 +811,8 @@ class BenchAgent:
         self.console = getattr(args, "console", None)
         # Tên bài đang chạy giả lập, để gói status báo "đang chạy" cho đúng.
         self.dang_gia_lap: str | None = None
+        # Chỉ nhắc một lần chuyện thiếu --console, đừng rải kín màn hình.
+        self._da_nhac_console = False
 
         self.trang_thai_cu: dict | None = None
         self.lan_gui_cuoi = 0.0
@@ -1044,6 +1046,48 @@ class BenchAgent:
                 except OSError:
                     pass
 
+    def _tu_dong_nop(self, cmd_id: str, test_case: str | None) -> None:
+        """Có kết quả là đẩy file lên ngay, không chờ ai ra lệnh.
+
+        Đường nộp báo cáo lúc nhận lệnh thì lấy `report_url` ngay trong lệnh.
+        Còn lượt chạy do người ngồi tại bench tự bấm thì không có lệnh nào cả,
+        nên phải biết trước địa chỉ Console — đó là việc của `--console`.
+
+        Thiếu `--console` thì vẫn gửi tóm tắt qua MQTT như cũ, chỉ mất phần
+        file. Nói một lần rồi thôi, đừng để nó rải kín màn hình mỗi lượt chạy.
+        """
+        if not self.console:
+            if not self._da_nhac_console:
+                print(f"[{self.id}] có kết quả nhưng chưa đặt --console, "
+                      "chỉ gửi tóm tắt, không đẩy được file")
+                self._da_nhac_console = True
+            return
+
+        url = self.console.rstrip("/") + f"/api/runs/{cmd_id}/report"
+        threading.Thread(target=self._lam_tu_dong_nop,
+                         args=(cmd_id, test_case, url), daemon=True).start()
+
+    def _lam_tu_dong_nop(self, cmd_id: str, test_case: str | None, url: str) -> None:
+        tam = []
+        try:
+            files = tim_file_ket_qua(self.ket_qua, test_case, cmd_id)
+            tam = [f for f in files if os.path.basename(f).startswith("ket-qua-gia-lap-")]
+            ma = nop_bao_cao(url, files, test_case, self.id)
+            print(f"[{self.id}] tự đẩy {len(files)} file của {test_case} (HTTP {ma})")
+        except GoiHong as ex:
+            # Không đẩy được file thì tóm tắt vẫn đã lên rồi, không mất kết quả.
+            # Nhưng phải nói ra, đừng nuốt — im lặng ở đây nghĩa là bằng chứng
+            # biến mất mà không ai biết.
+            print(f"[{self.id}] không đẩy được file của {test_case}: {ex}")
+        except Exception as ex:                        # noqa: BLE001
+            print(f"[{self.id}] lỗi không lường khi tự đẩy file: {ex!r}")
+        finally:
+            for f in tam:
+                try:
+                    os.unlink(f)
+                except OSError:
+                    pass
+
     def _gui(self, leaf: str, payload: dict, retain: bool = False) -> None:
         payload.setdefault("ts", bay_gio())
         self.client.publish(f"{self.prefix}/{leaf}",
@@ -1055,7 +1099,12 @@ class BenchAgent:
     def mot_vong(self) -> dict:
         for sk in self.log.doc_moi():
             if sk["loai"] == "ket_thuc":
+                # Lượt này KHÔNG do Console ra lệnh — người ngồi tại bench tự
+                # bấm chạy. Tự sinh một cmd_id để gói tóm tắt và đám file đẩy
+                # lên sau còn ghép được với nhau.
+                cmd_id = "tu-dong-" + os.urandom(6).hex()
                 self._gui("result", {
+                    "cmd_id": cmd_id,
                     "test_case": sk["test_case"],
                     "verdict": sk["verdict"],
                     "duration_s": sk["duration_s"],
@@ -1063,6 +1112,8 @@ class BenchAgent:
                     # gặp lượt trượt đầu tiên mà chưa biết nó ghi chữ gì.
                     "detail": {"qauto_status": sk["verdict_tho"]},
                 })
+                # Có kết quả là đẩy file lên ngay, không chờ ai bấm gì.
+                self._tu_dong_nop(cmd_id, sk["test_case"])
 
         tt = suy_trang_thai(self.doc_cam_bien(), self.log.dang_chay)
 

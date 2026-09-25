@@ -40,7 +40,7 @@ backend/                     C# .NET 8 + SQL Server (xem backend/README.md)
   BenchConsole.Core.SmokeTest/  92 phép kiểm tra, chạy không cần NuGet/DB/broker
 bench_simulator.py           5 bench giả lập, mỗi con một kết nối + Last Will riêng
 bench_agent.py               agent thật trên máy bench — đọc log Qauto, dò PCAN, không bịa số
-bench_agent_test.py         107 phép kiểm tra: đọc log, suy trạng thái, bung gói
+bench_agent_test.py         113 phép kiểm tra: đọc log, suy trạng thái, bung gói
 docker-compose.yml           mosquitto 1883, SQL Server 14330
 docs/api.md                  danh sách REST API cần có, bản Markdown
 docs/BenchConsole.docx       bản Word cho team đọc, sinh từ api.md rồi sửa tay
@@ -93,7 +93,7 @@ Windows 11 + Docker Desktop + PowerShell, và Git Bash cho tool Bash.
 - Simulator 5 bench nối từ máy B sang broker máy A qua LAN.
 - `dotnet build` qua với MQTTnet + EF Core thật.
 - SmokeTest 92/92 đạt, dùng payload thật bắt từ simulator.
-- `bench_agent_test.py` 107/107 đạt, trong đó có phép chạy trên **log thật** của
+- `bench_agent_test.py` 113/113 đạt, trong đó có phép chạy trên **log thật** của
   Qauto: nhận đúng 4 lượt chạy, 4 verdict, không dính bẫy dòng CRC.
 - `bench_agent.py --once` đọc đúng trạng thái máy bench thật (lúc thử thì
   adapter CAN đã rút, agent báo `error / can_adapter_missing` — đúng).
@@ -690,6 +690,29 @@ Bốn chặng đầu đã có từ trước. Chặng cuối là phần mới:
   bằng chứng đi.
 - Lệnh `start` mang sẵn `report_url` xuống, nên máy bench **không phải cấu hình
   thêm URL nào**.
+
+### Có kết quả là đẩy file lên ngay, không chờ ai ra lệnh
+
+Hai đường sinh ra kết quả, và **cả hai đều tự đẩy file**:
+
+| Đường | cmd_id | Địa chỉ nộp lấy ở đâu |
+| --- | --- | --- |
+| Console ra lệnh chạy | Console cấp | `report_url` gắn sẵn trong lệnh |
+| Người ngồi tại bench tự bấm | Agent tự sinh `tu-dong-<hex>` | `--console` |
+
+Đường thứ hai là chỗ trước đây hụt: log Qauto báo xong một lượt thì agent chỉ
+gửi **tóm tắt** qua MQTT, file thì nằm lại máy bench. Nay nó tự đẩy luôn.
+
+`cmd_id` tự sinh được gửi kèm **trong chính gói tóm tắt**, nên đám file đẩy lên
+sau ghép được về đúng lượt chạy. Không có nó thì báo cáo thành mồ côi.
+
+**Thiếu `--console` thì vẫn gửi tóm tắt**, chỉ mất phần file, và agent nhắc
+đúng một lần chứ không rải kín màn hình. Mất file thì tệ, nhưng mất luôn cả
+kết quả còn tệ hơn.
+
+```bash
+python bench_agent.py --host 100.69.35.102 --id VIVI-01 --model VF6     --console http://vinfast.tail1cbef5.ts.net:5000 --ket-qua qauto
+```
 
 ### Nguồn file kết quả phải tháo lắp được
 

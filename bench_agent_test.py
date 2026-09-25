@@ -703,6 +703,72 @@ try:
     Check(nhan_duoc.get("duong_dan") == "/api/runs/run777/report",
           "phải nộp báo cáo vào đúng đường dẫn mang cmd_id thật")
     Check(ag3.dang_gia_lap is None, "chạy xong phải xoá cờ đang chạy")
+
+    # ---- tự động: log Qauto báo xong một lượt -> đẩy file lên ngay
+    print()
+    print("── Có kết quả là tự đẩy file, không chờ ai ra lệnh")
+
+    log_gia = os.path.join(tempfile.mkdtemp(), "log.txt")
+    open(log_gia, "w", encoding="utf-8").write("")
+
+    args_tu = types.SimpleNamespace(
+        id="VIVI-01", model="VF6", interval=5.0, heartbeat=20.0,
+        adb=os.path.join(tempfile.mkdtemp(), "adb.exe"),
+        qauto_log=log_gia, autotests=tempfile.mkdtemp(),
+        ket_qua=f"mau:{mot_file}", gia_lap_giay=0.1,
+        console=f"http://127.0.0.1:{cong_bc}")
+    ag4 = BenchAgent(args_tu)
+    gui4 = []
+    ag4.client = types.SimpleNamespace(
+        publish=lambda topic, payload, qos=0, retain=False:
+            gui4.append((topic, json.loads(payload))))
+    # Không dò phần cứng trong test: chậm, và không phải thứ đang kiểm.
+    ag4.doc_cam_bien = lambda: {"kenh_can": [{"handle": "0x051", "ten": "x",
+                                              "controller": 0, "tinh_trang": "available"}],
+                                "adapter_usb": [], "can_bi_chiem": False,
+                                "qauto": {"danh_gia": "san_sang"}, "mhu": []}
+
+    ag4.log.doc_moi()                      # nuốt phần đã có, bắt đầu từ trạng thái sạch
+    nhan_duoc.clear()
+    with open(log_gia, "a", encoding="utf-8") as f:
+        f.write(MAU)
+    ag4.mot_vong()
+
+    for _ in range(100):
+        if nhan_duoc.get("duong_dan"):
+            break
+        time.sleep(0.05)
+
+    kq4 = [b for t, b in gui4 if t.endswith("/result")]
+    Check(len(kq4) == 1, f"log báo xong một lượt thì phải gửi một result, nhận {len(kq4)}")
+    Check(kq4[0]["verdict"] == "pass",
+          "lượt thật trong log ghi Pass thì verdict phải là pass")
+    # cmd_id tự sinh là thứ ghép gói tóm tắt với đám file đẩy lên sau.
+    cmd_tu = kq4[0].get("cmd_id")
+    Check(bool(cmd_tu) and cmd_tu.startswith("tu-dong-"),
+          f"lượt không do Console ra lệnh phải tự sinh cmd_id, nhận {cmd_tu!r}")
+    Check(nhan_duoc.get("duong_dan") == f"/api/runs/{cmd_tu}/report",
+          "file phải đẩy vào đúng cmd_id vừa gửi trong gói tóm tắt")
+    Check(b"RESULT: Pass" in nhan_duoc.get("than", b""),
+          "nội dung file kết quả phải lên tới Console")
+
+    # Thiếu --console thì vẫn phải gửi tóm tắt, chỉ mất phần file — đừng chết.
+    args_khong = types.SimpleNamespace(**{**vars(args_tu), "console": None,
+                                          "qauto_log": os.path.join(tempfile.mkdtemp(), "log.txt")})
+    open(args_khong.qauto_log, "w", encoding="utf-8").write("")
+    ag5 = BenchAgent(args_khong)
+    gui5 = []
+    ag5.client = types.SimpleNamespace(
+        publish=lambda topic, payload, qos=0, retain=False:
+            gui5.append((topic, json.loads(payload))))
+    ag5.doc_cam_bien = ag4.doc_cam_bien
+    ag5.log.doc_moi()
+    with open(args_khong.qauto_log, "a", encoding="utf-8") as f:
+        f.write(MAU)
+    ag5.mot_vong()
+    Check(any(t.endswith("/result") for t, _ in gui5),
+          "thiếu --console vẫn phải gửi tóm tắt, không được mất luôn kết quả")
+
 finally:
     may_bc.shutdown()
     may_bc.server_close()

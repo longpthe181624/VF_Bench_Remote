@@ -359,7 +359,23 @@ function goiRow(g){
       showToast(`Đã gửi gói ${g.ten} tới ${chon.value} (cmd ${r.cmdId})`);
       showErr(null);
     } catch(e){ showErr(e.message); }
-  }}, "Đẩy xuống bench");
+  }}, "Đẩy xuống");
+
+  // Nút chạy đặt ngay hàng gói: tên bài chính là tên gói, khỏi bắt người dùng
+  // gõ lại thứ vừa đẩy xuống. Gõ tay là sai chính tả, mà sai thì bench từ chối
+  // với lý do "không có bài đó" — mất thời gian mò.
+  const chayBtn = el("button", {onclick: async () => {
+    if (!chon.value){ showErr("Chưa chọn bench để chạy."); return; }
+    try {
+      const r = await api(`/api/benches/${chon.value}/start`, {
+        method:"POST",
+        body: JSON.stringify({testCase: g.ten, plan: null, issuedBy: "console-tam"}),
+      });
+      showToast(`Đã ra lệnh chạy ${g.ten} trên ${chon.value} (cmd ${r.cmdId})`);
+      showErr(null);
+      load();
+    } catch(e){ showErr(e.message); }
+  }}, "Chạy");
 
   const xoaBtn = el("button", {class:"ghost", onclick: async () => {
     if (!confirm(`Xoá gói ${g.ten}?`)) return;
@@ -373,7 +389,7 @@ function goiRow(g){
     el("td", {}, kbGon(g.kichThuoc)),
     el("td", {}, el("span", {class:"meta"}, g.sha256.slice(0,12))),
     el("td", {}, new Date(g.taiLenLuc).toLocaleString("vi-VN")),
-    el("td", {}, el("div", {class:"actions"}, chon, dayBtn, xoaBtn)),
+    el("td", {}, el("div", {class:"actions"}, chon, dayBtn, chayBtn, xoaBtn)),
   );
 }
 
