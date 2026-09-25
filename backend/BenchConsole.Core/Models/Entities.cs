@@ -161,3 +161,29 @@ public class GoiTestCase
     public string? NguoiTaiLen { get; set; }
     public DateTimeOffset TaiLenLuc { get; set; }
 }
+
+/// <summary>
+/// Một file bằng chứng của một lượt chạy: log từng bước, trace CAN, ảnh chụp…
+///
+/// Tách khỏi <see cref="Run"/> vì một lượt chạy đẻ ra nhiều file, và file thì
+/// nằm trên đĩa chứ không trong DB — trace CAN một lượt 40 giây đã 2 MB.
+/// </summary>
+public class BaoCaoChay
+{
+    public int Id { get; set; }
+
+    /// <summary>Khoá ghép về đúng lệnh đã gửi. Cũng là khoá chống trùng.</summary>
+    public string CmdId { get; set; } = "";
+
+    public string BenchCode { get; set; } = "";
+    public string? TestCase { get; set; }
+
+    /// <summary>Tên file gốc máy bench gửi lên, ví dụ `TestCaseLog.txt`.</summary>
+    public string TenFile { get; set; } = "";
+
+    /// <summary>Vừa là khoá tra file trên đĩa, vừa để chống trùng khi gửi lại.</summary>
+    public string Sha256 { get; set; } = "";
+
+    public long KichThuoc { get; set; }
+    public DateTimeOffset NhanLuc { get; set; }
+}

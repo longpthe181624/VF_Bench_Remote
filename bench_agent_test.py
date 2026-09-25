@@ -526,15 +526,26 @@ try:
     Check(not os.path.exists(os.path.join(autotests_gia, "Goi_Hong")),
           "gói sha lệch TUYỆT ĐỐI không được bung ra AutoTests/")
 
-    # Lệnh chạy test vẫn phải bị từ chối tường minh, chưa làm được.
+    # Lệnh lạ vẫn phải bị từ chối tường minh, kèm tên lệnh.
     da_gui.clear()
     ag2._khi_co_lenh(None, None, types.SimpleNamespace(
-        payload=json.dumps({"cmd_id": "run1", "action": "start_test"}).encode()))
+        payload=json.dumps({"cmd_id": "la1", "action": "flash_ecu"}).encode()))
     tc = [b for t, b in da_gui if t.endswith("/ack")]
     Check(len(tc) == 1 and tc[0]["status"] == "rejected",
-          "lệnh start_test vẫn phải bị từ chối, chưa điều khiển được Qauto")
-    Check("start_test" in tc[0]["reason"],
+          "lệnh agent không làm được phải bị từ chối, không im lặng")
+    Check("flash_ecu" in tc[0]["reason"],
           "lý do từ chối phải nói rõ lệnh nào không làm được")
+
+    # start_test KHÔNG có report_url và agent không đặt --console: phải từ chối
+    # chứ đừng nhận rồi im, vì nó không biết nộp kết quả về đâu.
+    da_gui.clear()
+    ag2._khi_co_lenh(None, None, types.SimpleNamespace(
+        payload=json.dumps({"cmd_id": "run0", "action": "start_test"}).encode()))
+    r0 = [b for t, b in da_gui if t.endswith("/ack")]
+    Check(len(r0) == 1 and r0[0]["status"] == "rejected",
+          "start_test thiếu report_url phải bị từ chối")
+    Check("report_url" in r0[0]["reason"],
+          "lý do phải nói rõ là thiếu report_url")
 
     # Lệnh thiếu trường: từ chối ngay, không được ném exception làm chết callback.
     da_gui.clear()
@@ -547,6 +558,154 @@ try:
 finally:
     may_chu2.shutdown()
     may_chu2.server_close()
+
+# ------------------------------------------- nguồn file kết quả và nộp báo cáo
+print()
+print("── Nguồn file kết quả (chỗ duy nhất phải sửa khi có test thật)")
+
+from bench_agent import nop_bao_cao, tim_file_ket_qua
+
+# tu-sinh: luôn ra file, và nội dung phải NÓI RÕ là giả lập. Nhét một file
+# trông giống log thật vào lịch sử test là kiểu hỏng im lặng đắt nhất.
+f_sinh = tim_file_ket_qua("tu-sinh", "bai_thu", "cmd123")
+Check(len(f_sinh) == 1 and os.path.exists(f_sinh[0]),
+      "tu-sinh phải ra đúng một file có thật")
+noi_dung = open(f_sinh[0], encoding="utf-8").read()
+Check("GIẢ LẬP" in noi_dung, "file tự sinh phải tự khai là giả lập")
+Check("cmd123" in noi_dung and "bai_thu" in noi_dung,
+      "file tự sinh phải mang cmd_id và tên bài để truy ngược được")
+
+# mau:<file>
+thu_muc_mau = tempfile.mkdtemp(prefix="mau-kq-")
+mot_file = os.path.join(thu_muc_mau, "TestCaseLog.txt")
+open(mot_file, "w", encoding="utf-8").write("RESULT: Pass")
+open(os.path.join(thu_muc_mau, "CAN1.txt"), "w", encoding="utf-8").write("frame")
+Check(tim_file_ket_qua(f"mau:{mot_file}", None, "c") == [mot_file],
+      "mau:<file> phải trả đúng file đó")
+Check(len(tim_file_ket_qua(f"mau:{thu_muc_mau}", None, "c")) == 2,
+      "mau:<thư mục> phải trả mọi file trong thư mục")
+
+# qauto: lấy lượt chạy MỚI NHẤT, không phải lượt đầu tiên gặp
+goc_out = tempfile.mkdtemp(prefix="outlog-")
+cu = os.path.join(goc_out, "2026-09-24-10-00-00", "BaiCu", "10-00-00-000")
+moi = os.path.join(goc_out, "2026-09-25-15-00-00", "BaiMoi", "15-00-00-000")
+for d in (cu, moi):
+    os.makedirs(d)
+    open(os.path.join(d, "TestCaseLog.txt"), "w", encoding="utf-8").write("x")
+os.utime(cu, (1_600_000_000, 1_600_000_000))
+os.utime(moi, (1_700_000_000, 1_700_000_000))
+lay = tim_file_ket_qua(f"qauto:{goc_out}", None, "c")
+Check(len(lay) == 1 and "BaiMoi" in lay[0],
+      f"qauto phải lấy lượt MỚI NHẤT, nhận {lay}")
+
+for xau in ("khong-hieu", "mau:D:/khong-ton-tai-dau", "qauto:D:/khong-co-dau"):
+    try:
+        tim_file_ket_qua(xau, None, "c")
+        Check(False, f"spec {xau!r} phải bị từ chối")
+    except GoiHong:
+        Check(True, f"spec {xau!r} bị từ chối đúng")
+
+print()
+print("── Nộp báo cáo lên Console qua multipart")
+
+import http.server
+
+nhan_duoc = {}
+
+
+class NhanBaoCao(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        dai = int(self.headers.get("Content-Length", 0))
+        than = self.rfile.read(dai)
+        nhan_duoc["duong_dan"] = self.path
+        nhan_duoc["ctype"] = self.headers.get("Content-Type", "")
+        nhan_duoc["than"] = than
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b"[]")
+
+    def log_message(self, *a):
+        pass
+
+
+may_bc = socketserver.TCPServer(("127.0.0.1", 0), NhanBaoCao)
+cong_bc = may_bc.server_address[1]
+threading.Thread(target=may_bc.serve_forever, daemon=True).start()
+try:
+    url_bc = f"http://127.0.0.1:{cong_bc}/api/runs/cmd999/report"
+    ma = nop_bao_cao(url_bc, [mot_file], "bai_thu", "VIVI-01")
+    Check(ma == 200, "nộp báo cáo phải trả HTTP 200")
+    Check(nhan_duoc["duong_dan"] == "/api/runs/cmd999/report",
+          "phải POST đúng đường dẫn có cmd_id")
+    Check("multipart/form-data; boundary=" in nhan_duoc["ctype"],
+          "phải gửi đúng multipart kèm boundary")
+    than = nhan_duoc["than"]
+    Check(b'name="file"; filename="TestCaseLog.txt"' in than,
+          "thân multipart phải mang tên file gốc")
+    Check(b"RESULT: Pass" in than, "nội dung file phải đi trọn vẹn")
+    Check(b'name="benchCode"' in than and b"VIVI-01" in than,
+          "phải kèm mã bench để Console ghép được khi chưa có lệnh khớp")
+
+    # Console trả lỗi thì agent phải nói rõ mã HTTP, đừng nuốt.
+    class TraLoi500(NhanBaoCao):
+        def do_POST(self):
+            self.send_response(500); self.end_headers(); self.wfile.write(b"vo")
+    may_loi = socketserver.TCPServer(("127.0.0.1", 0), TraLoi500)
+    cong_loi = may_loi.server_address[1]
+    threading.Thread(target=may_loi.serve_forever, daemon=True).start()
+    try:
+        nop_bao_cao(f"http://127.0.0.1:{cong_loi}/x", [mot_file], None, "B")
+        Check(False, "Console trả 500 thì nop_bao_cao phải ném GoiHong")
+    except GoiHong as ex:
+        Check("500" in str(ex), "lỗi phải nói rõ mã HTTP 500")
+    finally:
+        may_loi.shutdown(); may_loi.server_close()
+
+    # ---- cả vòng: nhận lệnh chạy -> nộp báo cáo -> trả verdict
+    print()
+    print("── Agent nhận lệnh chạy test (giả lập, không cần broker)")
+
+    args_chay = types.SimpleNamespace(
+        id="VIVI-01", model="VF6", interval=5.0, heartbeat=20.0,
+        adb=os.path.join(tempfile.mkdtemp(), "adb.exe"),
+        qauto_log=os.path.join(tempfile.mkdtemp(), "log.txt"),
+        autotests=tempfile.mkdtemp(),
+        ket_qua=f"mau:{mot_file}", gia_lap_giay=0.1, console=None)
+    ag3 = BenchAgent(args_chay)
+    gui3 = []
+    ag3.client = types.SimpleNamespace(
+        publish=lambda topic, payload, qos=0, retain=False:
+            gui3.append((topic, json.loads(payload))))
+
+    nhan_duoc.clear()
+    ag3._khi_co_lenh(None, None, types.SimpleNamespace(payload=json.dumps({
+        "cmd_id": "run777", "action": "start_test", "test_case": "bai_thu",
+        "report_url": f"http://127.0.0.1:{cong_bc}/api/runs/{{cmd_id}}/report",
+    }).encode()))
+
+    for _ in range(100):
+        if any(t.endswith("/result") for t, _ in gui3):
+            break
+        time.sleep(0.05)
+
+    ack3 = [b for t, b in gui3 if t.endswith("/ack")]
+    kq3 = [b for t, b in gui3 if t.endswith("/result")]
+    Check(len(ack3) == 1 and ack3[0]["status"] == "accepted",
+          "phải ack accepted ngay, trước khi chạy")
+    Check(len(kq3) == 1, "chạy xong phải gửi đúng một gói result")
+    Check(kq3[0]["cmd_id"] == "run777", "result phải ghép về đúng lệnh")
+    # Điểm quan trọng nhất của cả phép kiểm này.
+    Check(kq3[0]["verdict"] == "unknown",
+          "chạy giả lập TUYỆT ĐỐI không được báo pass — đó là bịa kết quả test")
+    Check("giả lập" in (kq3[0].get("reason") or ""),
+          "result phải nói rõ đây là chạy giả lập")
+    Check(nhan_duoc.get("duong_dan") == "/api/runs/run777/report",
+          "phải nộp báo cáo vào đúng đường dẫn mang cmd_id thật")
+    Check(ag3.dang_gia_lap is None, "chạy xong phải xoá cờ đang chạy")
+finally:
+    may_bc.shutdown()
+    may_bc.server_close()
 
 # ------------------------------------------------------------------ tổng kết
 print("\n" + "=" * 51)

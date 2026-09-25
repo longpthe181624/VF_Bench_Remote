@@ -40,7 +40,7 @@ backend/                     C# .NET 8 + SQL Server (xem backend/README.md)
   BenchConsole.Core.SmokeTest/  92 phép kiểm tra, chạy không cần NuGet/DB/broker
 bench_simulator.py           5 bench giả lập, mỗi con một kết nối + Last Will riêng
 bench_agent.py               agent thật trên máy bench — đọc log Qauto, dò PCAN, không bịa số
-bench_agent_test.py          82 phép kiểm tra: đọc log, suy trạng thái, bung gói
+bench_agent_test.py         107 phép kiểm tra: đọc log, suy trạng thái, bung gói
 docker-compose.yml           mosquitto 1883, SQL Server 14330
 docs/api.md                  danh sách REST API cần có, bản Markdown
 docs/BenchConsole.docx       bản Word cho team đọc, sinh từ api.md rồi sửa tay
@@ -93,7 +93,7 @@ Windows 11 + Docker Desktop + PowerShell, và Git Bash cho tool Bash.
 - Simulator 5 bench nối từ máy B sang broker máy A qua LAN.
 - `dotnet build` qua với MQTTnet + EF Core thật.
 - SmokeTest 92/92 đạt, dùng payload thật bắt từ simulator.
-- `bench_agent_test.py` 82/82 đạt, trong đó có phép chạy trên **log thật** của
+- `bench_agent_test.py` 107/107 đạt, trong đó có phép chạy trên **log thật** của
   Qauto: nhận đúng 4 lượt chạy, 4 verdict, không dính bẫy dòng CRC.
 - `bench_agent.py --once` đọc đúng trạng thái máy bench thật (lúc thử thì
   adapter CAN đã rút, agent báo `error / can_adapter_missing` — đúng).
@@ -669,6 +669,72 @@ vẫn cố ý giữ `127.0.0.1:5000:8080` — muốn mở thì sửa tường mi
 `appsettings.json`, mặc định `http://100.69.35.102:5000` (máy A qua Tailscale).
 Không cấu hình thì endpoint triển khai trả 500 kèm lý do, chứ không gửi xuống
 một URL mà agent không với tới.
+
+## Vòng khép kín chạy giả lập — làm 25/09
+
+Luồng demo, chưa cần test thật:
+
+```
+tải gói lên  →  đẩy xuống bench  →  bấm Chạy  →  máy B nộp file kết quả  →  hiện trên web
+```
+
+Bốn chặng đầu đã có từ trước. Chặng cuối là phần mới:
+
+- `POST /api/runs/{cmdId}/report` — multipart, nhận **file bất kỳ**, không kiểm
+  định dạng. Khác hẳn kho gói test case (chỉ ZIP): gói thì agent còn phải bung
+  ra nên phải ép định dạng, còn báo cáo thì bench gửi gì nhận nấy — log, trace
+  CAN, `.blf`, ảnh chụp. Ép định dạng ở đây là tự chặn mình về sau.
+- Chống trùng theo `(cmd_id, tên file, sha256)`. Mạng đứt rồi gửi lại y hệt thì
+  không đẻ thêm dòng.
+- Nhận cả khi `cmdId` chưa có lệnh nào khớp — thà giữ file mồ côi còn hơn vứt
+  bằng chứng đi.
+- Lệnh `start` mang sẵn `report_url` xuống, nên máy bench **không phải cấu hình
+  thêm URL nào**.
+
+### Nguồn file kết quả phải tháo lắp được
+
+Chỗ duy nhất phải sửa khi chuyển sang test thật là hàm `tim_file_ket_qua()`
+trong `bench_agent.py`. Đổi bằng tham số `--ket-qua`:
+
+| Giá trị | Lấy file ở đâu |
+| --- | --- |
+| `tu-sinh` (mặc định) | Sinh một file mô tả — luôn có, dùng khi chạy giả lập |
+| `qauto` | Lượt chạy mới nhất trong `Output/OutputLog` |
+| `qauto:<đường dẫn>` | Như trên, thư mục khác |
+| `mau:<đường dẫn>` | Một file, hoặc mọi file trong một thư mục |
+
+Mọi phần còn lại — nhận lệnh, nộp báo cáo, trả verdict — không biết file đến
+từ đâu, nên đổi nguồn không đụng tới chúng.
+
+### Chạy giả lập KHÔNG được báo `pass`
+
+Verdict trả về là `unknown` kèm `reason` nói rõ là giả lập. Báo `pass` cho một
+lượt chưa hề chạy là gieo kết quả giả vào lịch sử test — đúng kiểu hỏng im
+lặng mà dự án này đã dính nhiều lần, và tệ hơn hẳn việc không có kết quả. File
+tự sinh cũng tự khai ngay dòng đầu rằng nó là giả lập.
+
+### Lại phải tạo bảng bằng tay
+
+`EnsureCreatedAsync()` không thêm bảng vào database đã có, giống hệt lần
+`GoiTestCases`. Chạy trên máy A một lần:
+
+```sql
+CREATE TABLE BaoCaoChays (
+    Id         int IDENTITY(1,1) PRIMARY KEY,
+    CmdId      nvarchar(64)   NOT NULL,
+    BenchCode  nvarchar(64)   NOT NULL,
+    TestCase   nvarchar(256)  NULL,
+    TenFile    nvarchar(260)  NOT NULL,
+    Sha256     nvarchar(64)   NOT NULL,
+    KichThuoc  bigint         NOT NULL,
+    NhanLuc    datetimeoffset NOT NULL
+);
+CREATE UNIQUE INDEX IX_BaoCaoChays_CmdId_TenFile_Sha256
+    ON BaoCaoChays(CmdId, TenFile, Sha256);
+```
+
+Hai lần liên tiếp phải làm tay là đủ tín hiệu: **nên chuyển sang EF migration**
+trước khi thêm bảng thứ ba.
 
 ## Model và mã bench — chốt 24/09
 
