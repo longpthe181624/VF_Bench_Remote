@@ -51,6 +51,20 @@ tách riêng thì cho ba ô cũng được, chúng tôi không vướng gì.
 định danh: Vincode đi theo xe/MHU, mà thay MHU thì bench vẫn giữ nguyên danh
 tính — lấy Vincode làm khoá sẽ làm lịch sử test đứt làm hai mảnh.
 
+**Kiểm địa chỉ đã đúng chưa, không cần viết code:** máy A đang chạy, gọi thử
+từ máy bench là ra ngay.
+
+```
+curl http://vinfast.tail1cbef5.ts.net:5000/health
+```
+
+Trả `{"ok":true,...}` là địa chỉ đúng và mạng thông.
+
+**Địa chỉ nộp báo cáo thì KHÔNG cần cấu hình.** Console gắn sẵn `report_url`
+vào từng lệnh chạy (xem mục 3), Qauto chỉ việc dùng đúng chuỗi đó. Ô `Server`
+cần cho hai việc: nối MQTT, và nộp báo cáo của những lượt **người ngồi tại
+bench tự bấm chạy** — lượt đó không có lệnh nào nên không có `report_url`.
+
 Hai điều mong Qauto làm khi nối:
 
 - **Thử lại có giãn dần** khi broker chưa lên, đừng chết ở lần nối đầu.
@@ -148,10 +162,14 @@ nghe, và Console sẽ báo nhầm thành "bench không phản hồi".
     "dung_khi_fail": false,
     "lap_lai": 1
   },
+  "report_url": "http://vinfast.tail1cbef5.ts.net:5000/api/runs/a1b2c3d4e5f6g7h8/report",
   "issued_by": "long.pt",
   "ts": 1758700000000
 }
 ```
+
+`report_url` là chỗ nộp bằng chứng của đúng lệnh này (mục 4b). Console điền
+sẵn, Qauto không phải tự ghép URL.
 
 Các bước mong Qauto làm:
 
@@ -245,8 +263,12 @@ Content-Type: multipart/form-data
 
 | Trường | Nội dung |
 | --- | --- |
-| `test_case` | Tên bài, khớp với gói tóm tắt |
-| `file` | Một hoặc nhiều file. Nhận nhiều lần cùng tên trường |
+| `file` | Một hoặc nhiều file. Lặp lại cùng tên trường này |
+| `testCase` | Tên bài, khớp với gói tóm tắt ở 4a |
+| `benchCode` | Mã bench. Dự phòng khi Console chưa có lệnh khớp `cmd_id` |
+
+Ba trường này là **camelCase**, khác payload MQTT dùng snake_case — đó là quy
+ước của hai tầng khác nhau, không phải lỗi đánh máy.
 
 Xin gửi những file Qauto vốn đã sinh ra cho mỗi lượt chạy:
 
@@ -265,8 +287,26 @@ Gửi được lúc nào thì gửi, **không cần đúng lúc bài vừa xong*
 gửi lại sau; Console chống trùng theo `cmd_id` và tên bài, nên gửi lại hai lần
 không sao.
 
-Endpoint này Console **chưa làm xong** — sẽ báo khi sẵn sàng. Mục 4a thì đã
-chạy được ngay.
+**Endpoint này ĐÃ CHẠY và đã nhận file thật** (25/09). Không phải kế hoạch —
+đội Qauto thử được ngay hôm nay, không cần chờ chúng tôi làm gì thêm.
+
+Đã kiểm từ một máy bench thật: nộp file lên, Console lưu lại, rồi tải ngược về
+đọc đúng nguyên vẹn nội dung. Thử nhanh bằng một lệnh:
+
+```
+curl -F "benchCode=VIVI-01" -F "testCase=thu" -F "file=@TestCaseLog.txt"      http://vinfast.tail1cbef5.ts.net:5000/api/runs/thu-001/report
+```
+
+Xem lại thứ vừa nộp:
+
+```
+curl http://vinfast.tail1cbef5.ts.net:5000/api/runs/thu-001/report
+```
+
+Ba trường nhận đúng tên này: `file` (lặp lại được nhiều lần), `testCase`,
+`benchCode`. Trần **256 MB cho mỗi file**.
+
+Mục 4a cũng đã chạy được ngay.
 
 ---
 
@@ -280,6 +320,8 @@ chạy được ngay.
 | Tải gói, kiểm sha256, giải nén, chạy theo danh sách | HTTP + tại chỗ |
 | Gửi `result` từng bài | MQTT |
 | Upload log và trace CAN | HTTP multipart |
+
+Phía Console đã sẵn sàng cả bốn mục. Chỗ còn thiếu duy nhất là đầu Qauto.
 
 Mọi câu hỏi xin liên hệ nhóm Bench Console. Chúng tôi có sẵn một agent Python
 chạy đúng giao thức này để đội Qauto đối chiếu khi cần.

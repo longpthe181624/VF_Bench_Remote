@@ -114,7 +114,11 @@ public class RunsController(
             .FirstOrDefaultAsync(c => c.CmdId == cmdId, ct);
 
         var benchCode = lenh?.Bench?.Code ?? form.BenchCode ?? "?";
-        var ra = new List<BaoCaoChayDto>();
+
+        // Giữ ENTITY chứ không dựng DTO ngay: trước SaveChanges thì Id vẫn là 0,
+        // nên DTO dựng sớm sẽ trả id=0 ra ngoài và ai dùng nó để tải file sẽ
+        // tải hụt. Dựng DTO sau khi lưu, lúc DB đã cấp Id thật.
+        var rows = new List<BaoCaoChay>();
 
         foreach (var f in form.File)
         {
@@ -129,7 +133,7 @@ public class RunsController(
             // trả về bản ghi cũ chứ không đẻ thêm dòng.
             var da = await db.BaoCaoChays.FirstOrDefaultAsync(
                 b => b.CmdId == cmdId && b.TenFile == tenFile && b.Sha256 == luu.Sha256, ct);
-            if (da is not null) { ra.Add(BaoCaoChayDto.From(da)); continue; }
+            if (da is not null) { rows.Add(da); continue; }
 
             var bc = new BaoCaoChay
             {
@@ -142,14 +146,14 @@ public class RunsController(
                 NhanLuc = DateTimeOffset.UtcNow,
             };
             db.BaoCaoChays.Add(bc);
-            ra.Add(BaoCaoChayDto.From(bc));
+            rows.Add(bc);
         }
 
         await db.SaveChangesAsync(ct);
         log.LogInformation("Nhận {So} file báo cáo cho lệnh {CmdId} từ {Bench}",
-            ra.Count, cmdId, benchCode);
+            rows.Count, cmdId, benchCode);
 
-        return ra;
+        return rows.Select(BaoCaoChayDto.From).ToList();
     }
 
     /// <summary>Danh sách file bằng chứng của một lệnh.</summary>
