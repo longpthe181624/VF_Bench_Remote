@@ -204,6 +204,7 @@ public class BenchesController(
             ["goi"] = new Dictionary<string, object?>
             {
                 ["id"] = goi.Id,
+                ["loai"] = goi.Loai,
                 ["ten"] = goi.Ten,
                 ["url"] = $"{goc}/api/test-cases/{goi.Id}/tai",
                 ["sha256"] = goi.Sha256,
@@ -212,7 +213,10 @@ public class BenchesController(
             },
         };
 
-        return await Dispatch(code, "deploy_testcase", goi.Ten, null, req.IssuedBy, ct, them);
+        // Hai loại gói đi hai action khác nhau, để agent khỏi phải đoán từ nội
+        // dung gói — đoán sai là bung vào sai thư mục trên máy bench.
+        return await Dispatch(code, LoaiGoi.Action(goi.Loai), goi.Ten, null,
+                              req.IssuedBy, ct, them);
     }
 
     private async Task<ActionResult<CommandAcceptedDto>> Dispatch(

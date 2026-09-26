@@ -136,14 +136,20 @@
     </div>
 
     <form class="addbench" id="goi-form" enctype="multipart/form-data">
-      <input id="goi-ten" placeholder="Tên thư mục trong AutoTests/" style="width:240px" required>
+      <select id="goi-loai">
+        <option value="testcase">Gói test case</option>
+        <option value="config">Gói cấu hình Qauto</option>
+      </select>
+      <input id="goi-ten" placeholder="Tên thư mục bung ra trên máy bench" style="width:240px" required>
       <input id="goi-file" type="file" accept=".zip,application/zip" required>
       <input id="goi-by" placeholder="Người tải lên" style="width:140px">
       <button type="submit">Tải lên</button>
       <button type="button" id="goi-cancel">Huỷ</button>
       <div class="meta" style="flex-basis:100%">
-        Nén thư mục test case thành <b>ZIP</b> (không phải 7z). Tên gói chính là
-        tên thư mục sẽ bung ra trong <code>AutoTests/</code> trên máy bench.
+        Nén thành <b>ZIP</b> (không phải 7z). Tên gói là tên thư mục sẽ bung ra
+        trên máy bench: gói test case vào <code>AutoTests/</code>, gói cấu hình
+        vào thư mục cấu hình riêng. Gói test case phải có ít nhất một
+        <code>.tc</code>; gói cấu hình thì không cần.
       </div>
     </form>
 
@@ -356,7 +362,7 @@ function goiRow(g){
         method:"POST",
         body: JSON.stringify({goiId: g.id, issuedBy: "console-tam"}),
       });
-      showToast(`Đã gửi gói ${g.ten} tới ${chon.value} (cmd ${r.cmdId})`);
+      showToast(`Đã gửi gói ${g.loai === "config" ? "cấu hình" : "test case"} ${g.ten} tới ${chon.value} (cmd ${r.cmdId})`);
       showErr(null);
     } catch(e){ showErr(e.message); }
   }}, "Đẩy xuống");
@@ -364,7 +370,10 @@ function goiRow(g){
   // Nút chạy đặt ngay hàng gói: tên bài chính là tên gói, khỏi bắt người dùng
   // gõ lại thứ vừa đẩy xuống. Gõ tay là sai chính tả, mà sai thì bench từ chối
   // với lý do "không có bài đó" — mất thời gian mò.
-  const chayBtn = el("button", {onclick: async () => {
+  //
+  // Gói cấu hình KHÔNG có nút này: chạy một gói cấu hình là vô nghĩa, để nút ở
+  // đó chỉ dẫn người dùng bấm rồi nhận lỗi.
+  const chayBtn = g.loai === "config" ? null : el("button", {onclick: async () => {
     if (!chon.value){ showErr("Chưa chọn bench để chạy."); return; }
     try {
       const r = await api(`/api/benches/${chon.value}/start`, {
@@ -385,7 +394,8 @@ function goiRow(g){
 
   return el("tr", {},
     el("td", {}, el("div", {class:"code"}, g.ten), el("div", {class:"sub"}, g.tenFileGoc)),
-    el("td", {}, g.soTestCase + " bài"),
+    el("td", {}, g.loai === "config" ? "cấu hình" : "test case"),
+    el("td", {}, g.loai === "config" ? "—" : g.soTestCase + " bài"),
     el("td", {}, kbGon(g.kichThuoc)),
     el("td", {}, el("span", {class:"meta"}, g.sha256.slice(0,12))),
     el("td", {}, new Date(g.taiLenLuc).toLocaleString("vi-VN")),
@@ -405,7 +415,8 @@ function renderGoi(rows){
   }
   const table = el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", {}, "Gói"), el("th", {}, "Số bài"), el("th", {}, "Dung lượng"),
+      el("th", {}, "Gói"), el("th", {}, "Loại"), el("th", {}, "Số bài"),
+      el("th", {}, "Dung lượng"),
       el("th", {}, "sha256"), el("th", {}, "Tải lên"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...rows.map(goiRow)));
   area.appendChild(table);
@@ -505,6 +516,7 @@ goiForm.addEventListener("submit", async (ev) => {
   const fd = new FormData();
   fd.append("file", f);
   fd.append("ten", document.getElementById("goi-ten").value.trim());
+  fd.append("loai", document.getElementById("goi-loai").value);
   const by = document.getElementById("goi-by").value.trim();
   if (by) fd.append("nguoiTaiLen", by);
 
@@ -516,7 +528,9 @@ goiForm.addEventListener("submit", async (ev) => {
       throw new Error(msg);
     }
     const g = await res.json();
-    showToast(`Đã nhận gói ${g.ten}: ${g.soTestCase} bài`);
+    showToast(g.loai === "config"
+      ? `Đã nhận gói cấu hình ${g.ten}`
+      : `Đã nhận gói test case ${g.ten}: ${g.soTestCase} bài`);
     showErr(null);
     goiForm.reset();
     goiForm.classList.remove("show");

@@ -49,7 +49,12 @@ public class KhoGoiTestCase
     /// Nhận luồng tải lên, kiểm rồi cất. Ném <see cref="GoiKhongHopLe"/> kèm câu
     /// giải thích khi gói không dùng được.
     /// </summary>
-    public async Task<KetQuaLuuGoi> LuuAsync(Stream nguon, CancellationToken ct)
+    /// <param name="batBuocCoTestCase">
+    /// Gói testcase rỗng bài là gói sai nên phải chặn. Gói config thì không
+    /// chứa `.tc` nào cả — bắt buộc ở đó là từ chối oan.
+    /// </param>
+    public async Task<KetQuaLuuGoi> LuuAsync(
+        Stream nguon, CancellationToken ct, bool batBuocCoTestCase = true)
     {
         // Ghi ra file tạm trước: phải đọc lại toàn bộ để tính sha và đếm số bài,
         // mà luồng HTTP thì không tua lại được.
@@ -78,8 +83,10 @@ public class KhoGoiTestCase
                 if (lyDo is not null) throw new GoiKhongHopLe(lyDo);
             }
 
+            // Vẫn đếm dù không bắt buộc: đây đồng thời là phép thử "ZIP này có
+            // mở được không". Chữ ký PK đúng mà cấu trúc hỏng thì phải chặn ở máy A.
             var soTc = DemTestCase(tam);
-            if (soTc == 0)
+            if (batBuocCoTestCase && soTc == 0)
                 throw new GoiKhongHopLe(
                     "Gói không chứa file .tc hay .mtc nào. Kiểm tra lại thư mục đã nén.");
 

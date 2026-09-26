@@ -37,10 +37,10 @@ backend/                     C# .NET 8 + SQL Server (xem backend/README.md)
   BenchConsole.Core/         KHÔNG phụ thuộc gói ngoài nào — entity, parser, DTO
   BenchConsole.Api/          EF Core, MQTTnet, SignalR, REST
     wwwroot/index.html       giao diện tạm, backend tự phục vụ ở /
-  BenchConsole.Core.SmokeTest/  92 phép kiểm tra, chạy không cần NuGet/DB/broker
+  BenchConsole.Core.SmokeTest/ 102 phép kiểm tra, chạy không cần NuGet/DB/broker
 bench_simulator.py           5 bench giả lập, mỗi con một kết nối + Last Will riêng
 bench_agent.py               agent thật trên máy bench — đọc log Qauto, dò PCAN, không bịa số
-bench_agent_test.py         113 phép kiểm tra: đọc log, suy trạng thái, bung gói
+bench_agent_test.py         121 phép kiểm tra: đọc log, suy trạng thái, bung gói
 docker-compose.yml           mosquitto 1883, SQL Server 14330
 docs/api.md                  danh sách REST API cần có, bản Markdown
 docs/BenchConsole.docx       bản Word cho team đọc, sinh từ api.md rồi sửa tay
@@ -92,8 +92,8 @@ Windows 11 + Docker Desktop + PowerShell, và Git Bash cho tool Bash.
 
 - Simulator 5 bench nối từ máy B sang broker máy A qua LAN.
 - `dotnet build` qua với MQTTnet + EF Core thật.
-- SmokeTest 92/92 đạt, dùng payload thật bắt từ simulator.
-- `bench_agent_test.py` 113/113 đạt, trong đó có phép chạy trên **log thật** của
+- SmokeTest 102/102 đạt, dùng payload thật bắt từ simulator.
+- `bench_agent_test.py` 121/121 đạt, trong đó có phép chạy trên **log thật** của
   Qauto: nhận đúng 4 lượt chạy, 4 verdict, không dính bẫy dòng CRC.
 - `bench_agent.py --once` đọc đúng trạng thái máy bench thật (lúc thử thì
   adapter CAN đã rút, agent báo `error / can_adapter_missing` — đúng).
@@ -758,6 +758,82 @@ CREATE UNIQUE INDEX IX_BaoCaoChays_CmdId_TenFile_Sha256
 
 Hai lần liên tiếp phải làm tay là đủ tín hiệu: **nên chuyển sang EF migration**
 trước khi thêm bảng thứ ba.
+
+## Gói cấu hình và kho theo user — làm 26/09
+
+### Gói cấu hình: cùng đường vận chuyển, khác thư mục đích
+
+Qauto cần cấu hình, nhưng **ta không quan tâm nó cấu hình thế nào**. Việc của
+Console chỉ là: user gửi một ZIP xuống, agent bung ra trên máy bench. Cơ chế y
+hệt đẩy test case.
+
+Gói nay có trường `Loai`: `testcase` hoặc `config` (xem `LoaiGoi` trong Core).
+Khác nhau đúng ba chỗ:
+
+| | testcase | config |
+| --- | --- | --- |
+| Action MQTT | `deploy_testcase` | `deploy_config` |
+| Agent bung vào | `--autotests` | `--config-dir` |
+| Bắt buộc có `.tc` | có | **không** |
+
+Chỗ cuối là cái dễ quên: gói cấu hình không chứa `.tc` nào, mà luật cũ từ chối
+gói 0 bài — bắt buộc ở đó là từ chối oan.
+
+**Đích của gói cấu hình CHƯA CHỐT** — chưa biết Qauto đọc cấu hình ở đâu. Nên
+agent bung vào một thư mục riêng (`D:\Qauto_2610\ConfigTuConsole`, đổi bằng
+`--config-dir`) thay vì đoán rồi rải file vào giữa thư mục Qauto. Gói
+`result` trả về **đường dẫn tuyệt đối** nơi nó vừa nằm, để người ở xa thấy
+chính xác file đi đâu chứ không chỉ nghe "đã bung xong".
+
+Đã kiểm: gói cấu hình **không lọt vào `AutoTests/`** và gói test case không lọt
+sang thư mục cấu hình. Quan trọng vì Qauto quét `AutoTests/` để dựng cây test
+case — rải file cấu hình vào đấy là làm bẩn danh sách bài.
+
+Duy nhất theo cặp `(Loai, Ten)` chứ không theo `Ten` trơn: gói testcase và gói
+config cùng tên là hai thứ khác nhau, bung vào hai chỗ khác nhau.
+
+### Kho theo user: dựng chỗ chứa trước, nội dung chốt sau
+
+`POST /api/kho/{nguoiDung}` multipart, `GET /api/kho/{nguoiDung}`,
+`GET /api/kho/tep/{id}/tai`, `DELETE /api/kho/tep/{id}`.
+
+**Chưa chốt sẽ chứa gì**, nên cố ý không kiểm định dạng và không có trường nào
+mô tả loại nội dung — thêm bây giờ là đoán, mà đoán sai thì sau phải đổi schema.
+
+**`nguoiDung` KHÔNG phải ranh giới bảo mật.** Backend chưa có xác thực nên đó
+là chuỗi bên gọi tự khai, chỉ dùng làm nhãn phân loại — ai cũng đọc và ghi được
+kho của người khác. Đừng cất thứ gì riêng tư vào đây cho tới khi có đăng nhập.
+
+`KhoNguoiDung` viết riêng dù gần giống `KhoBaoCao`. Lý do không gom lại: kho
+báo cáo **đang chạy thật trên máy A**, mà tầng Api chưa có phép kiểm tự động
+nào che, nên gom lại là đánh cược vào thứ đang hoạt động. Hợp nhất khi có kiểm
+thử cho tầng này.
+
+### Lần thứ BA phải sửa schema bằng tay
+
+`EnsureCreatedAsync()` không nâng cấp database đã có. Chạy trên máy A:
+
+```sql
+ALTER TABLE GoiTestCases ADD Loai nvarchar(16) NOT NULL DEFAULT 'testcase';
+DROP INDEX IX_GoiTestCases_Ten ON GoiTestCases;
+CREATE UNIQUE INDEX IX_GoiTestCases_Loai_Ten ON GoiTestCases(Loai, Ten);
+
+CREATE TABLE TepNguoiDungs (
+    Id         int IDENTITY(1,1) PRIMARY KEY,
+    NguoiDung  nvarchar(128)  NOT NULL,
+    TenFile    nvarchar(260)  NOT NULL,
+    Sha256     nvarchar(64)   NOT NULL,
+    KichThuoc  bigint         NOT NULL,
+    MoTa       nvarchar(512)  NULL,
+    TaiLenLuc  datetimeoffset NOT NULL
+);
+CREATE UNIQUE INDEX IX_TepNguoiDungs_NguoiDung_TenFile_Sha256
+    ON TepNguoiDungs(NguoiDung, TenFile, Sha256);
+```
+
+Ba lần liên tiếp làm tay, lần này còn phải đổi cả index. **Chuyển sang EF
+migration trước khi thêm bảng thứ tư** — chi phí đang dồn lại, và một câu SQL
+gõ sai trên máy A thì không có gì bắt được.
 
 ## Model và mã bench — chốt 24/09
 

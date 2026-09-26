@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<GoiTestCase> GoiTestCases => Set<GoiTestCase>();
     public DbSet<BaoCaoChay> BaoCaoChays => Set<BaoCaoChay>();
+    public DbSet<TepNguoiDung> TepNguoiDungs => Set<TepNguoiDung>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -65,9 +66,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<GoiTestCase>(e =>
         {
-            // Tên gói là tên thư mục trong AutoTests/ trên máy bench. Trùng tên
-            // là gói sau bung đè lên gói trước ở bench — nên chặn ngay từ đây.
-            e.HasIndex(x => x.Ten).IsUnique();
+            // Tên gói là tên thư mục agent bung ra trên máy bench. Trùng tên là
+            // gói sau đè lên gói trước, nên chặn ngay từ đây. Duy nhất theo
+            // (loại, tên): gói testcase và gói config cùng tên là hai thứ khác
+            // nhau, bung vào hai thư mục khác nhau, không đè nhau.
+            e.HasIndex(x => new { x.Loai, x.Ten }).IsUnique();
+            e.Property(x => x.Loai).HasMaxLength(16).IsRequired();
             e.Property(x => x.Ten).HasMaxLength(TenGoi.DaiToiDa).IsRequired();
             e.Property(x => x.TenFileGoc).HasMaxLength(260).IsRequired();
             e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
@@ -85,6 +89,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.TestCase).HasMaxLength(256);
             e.Property(x => x.TenFile).HasMaxLength(260).IsRequired();
             e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+        });
+
+        b.Entity<TepNguoiDung>(e =>
+        {
+            // Truy vấn chính: lấy kho của một người. Và chống trùng khi tải lại
+            // đúng file cũ — cùng người, cùng tên, cùng nội dung thì một bản ghi.
+            e.HasIndex(x => new { x.NguoiDung, x.TenFile, x.Sha256 }).IsUnique();
+            e.Property(x => x.NguoiDung).HasMaxLength(128).IsRequired();
+            e.Property(x => x.TenFile).HasMaxLength(260).IsRequired();
+            e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            e.Property(x => x.MoTa).HasMaxLength(512);
         });
 
         b.Entity<Alert>(e =>

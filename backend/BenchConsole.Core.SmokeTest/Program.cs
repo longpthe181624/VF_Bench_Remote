@@ -327,6 +327,40 @@ var goiDto = GoiTestCaseDto.From(goi);
 Check(goiDto.Ten == "Warning_VF8" && goiDto.SoTestCase == 12 && goiDto.Sha256.Length == 64,
       "GoiTestCaseDto phải mang đủ tên, số bài và sha256 để Console hiện được");
 
+Console.WriteLine();
+Console.WriteLine("── Loại gói: testcase hay config");
+
+Check(LoaiGoi.ChuanHoa(null) == LoaiGoi.TestCase,
+      "để trống loại thì coi là testcase — giữ tương thích với gói tải lên trước đây");
+Check(LoaiGoi.ChuanHoa("  CONFIG ") == LoaiGoi.Config,
+      "loại phải chuẩn hoá được chữ hoa và khoảng trắng");
+Check(LoaiGoi.LyDoTuChoi("testcase") is null && LoaiGoi.LyDoTuChoi("config") is null,
+      "hai loại hợp lệ phải được nhận");
+Check(LoaiGoi.LyDoTuChoi(null) is null, "để trống không phải lỗi");
+Check(LoaiGoi.LyDoTuChoi("cauhinh") is not null,
+      "loại lạ phải bị từ chối, đừng im lặng coi như testcase");
+Check(LoaiGoi.LyDoTuChoi("cauhinh")?.Contains("config") == true,
+      "lý do từ chối phải liệt kê các loại hợp lệ");
+
+// Hai loại đi hai action khác nhau để agent khỏi phải đoán từ nội dung gói —
+// đoán sai là bung vào sai thư mục trên máy bench.
+Check(LoaiGoi.Action(LoaiGoi.TestCase) == "deploy_testcase",
+      "gói testcase phải ra action deploy_testcase");
+Check(LoaiGoi.Action(LoaiGoi.Config) == "deploy_config",
+      "gói config phải ra action deploy_config");
+Check(LoaiGoi.Action(null!) == "deploy_testcase",
+      "loại trống cũng phải ra action hợp lệ, không được trả rỗng");
+
+var goiCfg = new GoiTestCase
+{
+    Id = 9, Loai = LoaiGoi.Config, Ten = "Cauhinh_VF8",
+    TenFileGoc = "cauhinh.zip", Sha256 = new string('b', 64),
+    KichThuoc = 4096, SoTestCase = 0, TaiLenLuc = DateTimeOffset.UtcNow,
+};
+var dtoCfg = GoiTestCaseDto.From(goiCfg);
+Check(dtoCfg.Loai == LoaiGoi.Config && dtoCfg.SoTestCase == 0,
+      "gói config có 0 bài test là bình thường, DTO phải mang đúng loại");
+
 // ---------------------------------------------------------------- kết quả
 Console.WriteLine($"\n{'='}{new string('=', 50)}");
 if (failures.Count == 0)

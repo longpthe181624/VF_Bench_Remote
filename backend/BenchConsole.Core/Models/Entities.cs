@@ -140,7 +140,13 @@ public class GoiTestCase
 {
     public int Id { get; set; }
 
-    /// <summary>Tên thư mục sẽ bung ra trong `AutoTests/` trên máy bench.</summary>
+    /// <summary>
+    /// `testcase` hoặc `config` — xem <see cref="Messaging.LoaiGoi"/>. Quyết
+    /// định agent bung gói vào thư mục nào trên máy bench.
+    /// </summary>
+    public string Loai { get; set; } = Messaging.LoaiGoi.TestCase;
+
+    /// <summary>Tên thư mục sẽ bung ra trên máy bench.</summary>
     public string Ten { get; set; } = "";
 
     /// <summary>Tên file gốc người dùng tải lên, chỉ để hiển thị.</summary>
@@ -155,7 +161,10 @@ public class GoiTestCase
 
     public long KichThuoc { get; set; }
 
-    /// <summary>Số file .tc/.mtc đếm được lúc tải lên. Gói 0 bài là gói sai.</summary>
+    /// <summary>
+    /// Số file .tc/.mtc đếm được lúc tải lên. Gói testcase mà 0 bài là gói
+    /// sai nên bị từ chối; gói config thì bình thường bằng 0.
+    /// </summary>
     public int SoTestCase { get; set; }
 
     public string? NguoiTaiLen { get; set; }
@@ -186,4 +195,35 @@ public class BaoCaoChay
 
     public long KichThuoc { get; set; }
     public DateTimeOffset NhanLuc { get; set; }
+}
+
+/// <summary>
+/// Một file trong kho riêng của người dùng.
+///
+/// Chứa gì thì CHƯA CHỐT — hiện chỉ dựng sẵn chỗ chứa. Vì vậy không có trường
+/// nào mô tả loại nội dung: thêm bây giờ là đoán, mà đoán sai thì sau phải đổi
+/// schema.
+/// </summary>
+public class TepNguoiDung
+{
+    public int Id { get; set; }
+
+    /// <summary>
+    /// Người sở hữu file. Hiện là chuỗi bên gọi TỰ KHAI — backend chưa có xác
+    /// thực nên đây KHÔNG phải ranh giới bảo mật, chỉ là nhãn phân loại. Ai
+    /// cũng đọc và ghi được kho của người khác. Phải siết lại khi có đăng nhập.
+    /// </summary>
+    public string NguoiDung { get; set; } = "";
+
+    public string TenFile { get; set; } = "";
+
+    /// <summary>Khoá tra file trên đĩa, và để chống trùng khi tải lên lại.</summary>
+    public string Sha256 { get; set; } = "";
+
+    public long KichThuoc { get; set; }
+
+    /// <summary>Ghi chú tuỳ ý của người tải lên.</summary>
+    public string? MoTa { get; set; }
+
+    public DateTimeOffset TaiLenLuc { get; set; }
 }

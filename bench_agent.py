@@ -50,6 +50,11 @@ LOG_QAUTO_MAC_DINH = r"D:\Qauto_2610\Qauto_2610\Logs\log.txt"
 ADB_QAUTO_MAC_DINH = r"D:\Qauto_2610\Qauto_2610\ADB\adb.exe"
 AUTOTESTS_MAC_DINH = r"D:\Qauto_2610\Qauto_2610\AutoTests"
 
+# Chỗ bung gói cấu hình. Đích thật trong Qauto CHƯA CHỐT — chưa biết nó đọc
+# cấu hình ở đâu — nên để riêng một thư mục thay vì đoán rồi rải file vào
+# giữa thư mục Qauto. Đổi bằng --config-dir khi đã biết.
+CONFIG_DIR_MAC_DINH = r"D:\Qauto_2610\ConfigTuConsole"
+
 # Trần kích thước gói, phải khớp KhoGoiTestCase.KichThuocToiDa bên C#.
 # Kiểm cả hai đầu: máy A chặn lúc tải lên, agent chặn lúc tải về — giữa hai
 # đầu còn một chặng mạng và một cấu hình có thể lệch.
@@ -806,6 +811,7 @@ class BenchAgent:
         self.adb = args.adb
         self.log = DocLogQauto(args.qauto_log)
         self.autotests = getattr(args, "autotests", AUTOTESTS_MAC_DINH)
+        self.config_dir = getattr(args, "config_dir", CONFIG_DIR_MAC_DINH)
         self.ket_qua = getattr(args, "ket_qua", "tu-sinh")
         self.gia_lap_giay = getattr(args, "gia_lap_giay", 2.0)
         self.console = getattr(args, "console", None)
@@ -880,8 +886,8 @@ class BenchAgent:
         cmd_id = lenh.get("cmd_id", "?")
         action = lenh.get("action", "")
 
-        if action == "deploy_testcase":
-            self._nhan_goi(cmd_id, lenh)
+        if action in ("deploy_testcase", "deploy_config"):
+            self._nhan_goi(cmd_id, lenh, action)
             return
 
         if action in ("start_test", "run_plan"):
@@ -899,11 +905,13 @@ class BenchAgent:
                       "và nhận gói test case, chưa điều khiển được Qauto/VDSA",
         })
 
-    def _nhan_goi(self, cmd_id: str, lenh: dict) -> None:
-        """Nhận lệnh đẩy gói test case xuống.
+    def _nhan_goi(self, cmd_id: str, lenh: dict, action: str) -> None:
+        """Nhận lệnh đẩy một gói xuống — gói test case hoặc gói cấu hình.
 
-        Đây là lệnh DUY NHẤT agent làm được lúc này, vì nó chỉ động tới file —
-        không cần điều khiển Qauto nên không vướng câu hỏi #1.
+        Hai loại đi cùng một đường: tải qua HTTP, kiểm sha256, bung ZIP. Khác
+        đúng một chỗ là **thư mục đích**, nên chỗ đó là tham số chứ không cắm
+        cứng. Đích của gói cấu hình còn chưa chốt (chưa biết Qauto đọc cấu hình
+        ở đâu), nên nó phải đổi được bằng `--config-dir` mà không sửa code.
 
         Tải rồi bung mất vài giây tới vài chục giây. Làm ngay trong callback là
         chẹn luôn vòng lặp mạng của paho, quá keepalive thì broker cắt kết nối
@@ -920,20 +928,28 @@ class BenchAgent:
             })
             return
 
+        dich = self.config_dir if action == "deploy_config" else self.autotests
+
         # Nhận trước rồi làm, để Console biết lệnh đã tới chứ không phải rơi mất.
         self._gui("ack", {"cmd_id": cmd_id, "status": "accepted"})
-        threading.Thread(target=self._lam_goi, args=(cmd_id, url, sha, ten),
+        threading.Thread(target=self._lam_goi,
+                         args=(cmd_id, url, sha, ten, dich, action),
                          daemon=True).start()
 
-    def _lam_goi(self, cmd_id: str, url: str, sha: str, ten: str) -> None:
+    def _lam_goi(self, cmd_id: str, url: str, sha: str, ten: str,
+                 dich: str, action: str) -> None:
         tam = None
         try:
             tam = tai_goi(url, sha)
-            kq = bung_goi_test_case(tam, self.autotests, ten)
-            print(f"[{self.id}] đã bung gói {ten}: {kq['so_test_case']} bài")
+            kq = bung_goi_test_case(tam, dich, ten)
+            # Trả cả đường dẫn TUYỆT ĐỐI nơi gói vừa nằm. Với gói cấu hình thì
+            # đích đến chưa chốt, nên người ở xa cần thấy chính xác nó đi đâu
+            # chứ không chỉ nghe "đã bung xong".
+            kq["duong_dan"] = os.path.abspath(os.path.join(dich, ten))
+            print(f"[{self.id}] đã bung {action} {ten} vào {kq['duong_dan']}")
             self._gui("result", {
                 "cmd_id": cmd_id,
-                "action": "deploy_testcase",
+                "action": action,
                 "verdict": "pass",
                 "test_case": ten,
                 "detail": kq,
@@ -944,7 +960,7 @@ class BenchAgent:
             print(f"[{self.id}] gói {ten} hỏng: {ex}")
             self._gui("result", {
                 "cmd_id": cmd_id,
-                "action": "deploy_testcase",
+                "action": action,
                 "verdict": "fail",
                 "test_case": ten,
                 "reason": str(ex),
@@ -953,7 +969,7 @@ class BenchAgent:
             print(f"[{self.id}] lỗi không lường khi nhận gói {ten}: {ex!r}")
             self._gui("result", {
                 "cmd_id": cmd_id,
-                "action": "deploy_testcase",
+                "action": action,
                 "verdict": "fail",
                 "test_case": ten,
                 "reason": f"Lỗi không lường: {ex!r}",
@@ -1175,6 +1191,9 @@ def main():
     ap.add_argument("--adb", default=ADB_QAUTO_MAC_DINH)
     ap.add_argument("--autotests", default=AUTOTESTS_MAC_DINH,
                     help="thư mục AutoTests của Qauto, nơi bung gói test case")
+    ap.add_argument("--config-dir", default=CONFIG_DIR_MAC_DINH, dest="config_dir",
+                    help="thư mục bung gói cấu hình. Đích thật trong Qauto chưa chốt, "
+                         "nên tạm để riêng một chỗ rồi đổi sau")
     ap.add_argument("--ket-qua", default="tu-sinh", dest="ket_qua",
                     help="nguồn file kết quả: tu-sinh | qauto | qauto:<đường> | mau:<đường>")
     ap.add_argument("--gia-lap-giay", type=float, default=2.0, dest="gia_lap_giay",

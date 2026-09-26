@@ -111,6 +111,7 @@ public record CommandAcceptedDto(string CmdId, string Status, DateTimeOffset Iss
 /// <summary>Một gói test case đã tải lên, hiển thị trên Console.</summary>
 public record GoiTestCaseDto(
     int Id,
+    string Loai,
     string Ten,
     string TenFileGoc,
     string Sha256,
@@ -120,7 +121,7 @@ public record GoiTestCaseDto(
     DateTimeOffset TaiLenLuc)
 {
     public static GoiTestCaseDto From(GoiTestCase g) => new(
-        g.Id, g.Ten, g.TenFileGoc, g.Sha256, g.KichThuoc, g.SoTestCase,
+        g.Id, g.Loai, g.Ten, g.TenFileGoc, g.Sha256, g.KichThuoc, g.SoTestCase,
         g.NguoiTaiLen, g.TaiLenLuc);
 }
 
@@ -144,4 +145,17 @@ public record BaoCaoChayDto(
 {
     public static BaoCaoChayDto From(BaoCaoChay b) => new(
         b.Id, b.CmdId, b.BenchCode, b.TestCase, b.TenFile, b.KichThuoc, b.NhanLuc);
+}
+
+/// <summary>Một file trong kho riêng của người dùng.</summary>
+public record TepNguoiDungDto(
+    int Id,
+    string NguoiDung,
+    string TenFile,
+    long KichThuoc,
+    string? MoTa,
+    DateTimeOffset TaiLenLuc)
+{
+    public static TepNguoiDungDto From(TepNguoiDung t) => new(
+        t.Id, t.NguoiDung, t.TenFile, t.KichThuoc, t.MoTa, t.TaiLenLuc);
 }

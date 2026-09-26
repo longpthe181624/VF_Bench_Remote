@@ -704,6 +704,82 @@ try:
           "phải nộp báo cáo vào đúng đường dẫn mang cmd_id thật")
     Check(ag3.dang_gia_lap is None, "chạy xong phải xoá cờ đang chạy")
 
+    # ---- gói cấu hình: cùng đường vận chuyển, khác thư mục đích
+    print()
+    print("── Đẩy gói cấu hình xuống (đích khác gói test case)")
+
+    autotests_kt = tempfile.mkdtemp(prefix="autotests-kt-")
+    configdir_kt = tempfile.mkdtemp(prefix="configdir-kt-")
+
+    # Server ở mục trước đã đóng, nên dựng riêng một cái cho mục này.
+    may_cfg = socketserver.TCPServer(("127.0.0.1", 0), phuc_vu)
+    cong_cfg = may_cfg.server_address[1]
+    threading.Thread(target=may_cfg.serve_forever, daemon=True).start()
+    goc_cfg = f"http://127.0.0.1:{cong_cfg}"
+
+    goi_cfg = os.path.join(kho_tam, "cauhinh.zip")
+    with zipfile.ZipFile(goi_cfg, "w") as z:
+        z.writestr("Cauhinh_VF8/user.config", "<configuration/>")
+        z.writestr("Cauhinh_VF8/LogConfigs.json", "{}")
+    sha_cfg = hashlib.sha256(open(goi_cfg, "rb").read()).hexdigest()
+
+    args_cfg = types.SimpleNamespace(
+        id="VIVI-01", model="VF6", interval=5.0, heartbeat=20.0,
+        adb=os.path.join(tempfile.mkdtemp(), "adb.exe"),
+        qauto_log=os.path.join(tempfile.mkdtemp(), "log.txt"),
+        autotests=autotests_kt, config_dir=configdir_kt,
+        ket_qua="tu-sinh", gia_lap_giay=0.1, console=None)
+    ag6 = BenchAgent(args_cfg)
+    gui6 = []
+    ag6.client = types.SimpleNamespace(
+        publish=lambda topic, payload, qos=0, retain=False:
+            gui6.append((topic, json.loads(payload))))
+
+    ag6._khi_co_lenh(None, None, types.SimpleNamespace(payload=json.dumps({
+        "cmd_id": "cfg001", "action": "deploy_config",
+        "goi": {"loai": "config", "ten": "Cauhinh_VF8",
+                "url": f"{goc_cfg}/cauhinh.zip", "sha256": sha_cfg},
+    }).encode()))
+    for _ in range(100):
+        if any(t.endswith("/result") for t, _ in gui6):
+            break
+        time.sleep(0.05)
+
+    kq6 = [b for t, b in gui6 if t.endswith("/result")]
+    Check(len(kq6) == 1 and kq6[0]["verdict"] == "pass",
+          f"bung gói cấu hình phải thành công, nhận {kq6}")
+    Check(kq6[0]["action"] == "deploy_config",
+          "result phải mang đúng action deploy_config để Console phân biệt được")
+
+    ra_cfg = os.path.join(configdir_kt, "Cauhinh_VF8")
+    Check(os.path.isdir(ra_cfg), "gói cấu hình phải bung vào THƯ MỤC CẤU HÌNH")
+    Check(sorted(os.listdir(ra_cfg)) == ["LogConfigs.json", "user.config"],
+          "hai file cấu hình phải nằm đúng chỗ")
+    # Điểm cốt lõi: không được lẫn sang AutoTests, vì Qauto quét thư mục đó để
+    # dựng cây test case — rải file cấu hình vào đấy là làm bẩn danh sách bài.
+    Check(os.listdir(autotests_kt) == [],
+          "gói cấu hình TUYỆT ĐỐI không được bung vào AutoTests/")
+    Check(kq6[0]["detail"].get("duong_dan") == os.path.abspath(ra_cfg),
+          "result phải nói rõ đường dẫn tuyệt đối, vì đích đến còn chưa chốt")
+
+    # Gói test case vẫn phải vào AutoTests như cũ, không bị đổi theo.
+    gui6.clear()
+    ag6._khi_co_lenh(None, None, types.SimpleNamespace(payload=json.dumps({
+        "cmd_id": "tc001", "action": "deploy_testcase",
+        "goi": {"loai": "testcase", "ten": "Warning_VF8",
+                "url": f"{goc_cfg}/tot.zip", "sha256": sha_that},
+    }).encode()))
+    for _ in range(100):
+        if any(t.endswith("/result") for t, _ in gui6):
+            break
+        time.sleep(0.05)
+    Check(os.path.isdir(os.path.join(autotests_kt, "Warning_VF8")),
+          "gói test case vẫn phải vào AutoTests/")
+    Check(not os.path.exists(os.path.join(configdir_kt, "Warning_VF8")),
+          "gói test case không được lọt sang thư mục cấu hình")
+
+    may_cfg.shutdown(); may_cfg.server_close()
+
     # ---- tự động: log Qauto báo xong một lượt -> đẩy file lên ngay
     print()
     print("── Có kết quả là tự đẩy file, không chờ ai ra lệnh")

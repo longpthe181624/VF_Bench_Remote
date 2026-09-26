@@ -21,6 +21,9 @@ public sealed class TaiLenGoiForm
     public IFormFile? File { get; set; }
     public string Ten { get; set; } = "";
     public string? NguoiTaiLen { get; set; }
+
+    /// <summary>`testcase` (mặc định) hoặc `config`.</summary>
+    public string? Loai { get; set; }
 }
 
 /// <summary>
@@ -43,9 +46,13 @@ public class TestCasesController(
     ILogger<TestCasesController> log) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<List<GoiTestCaseDto>>> List(CancellationToken ct)
+    public async Task<ActionResult<List<GoiTestCaseDto>>> List(
+        [FromQuery] string? loai, CancellationToken ct = default)
     {
-        var rows = await db.GoiTestCases.AsNoTracking()
+        var q = db.GoiTestCases.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(loai)) q = q.Where(g => g.Loai == loai);
+
+        var rows = await q
             .OrderByDescending(g => g.TaiLenLuc)
             .Take(200)
             .ToListAsync(ct);
@@ -74,17 +81,24 @@ public class TestCasesController(
         if (lyDoTen is not null)
             return BadRequest(new { error = lyDoTen });
 
+        var lyDoLoai = LoaiGoi.LyDoTuChoi(form.Loai);
+        if (lyDoLoai is not null)
+            return BadRequest(new { error = lyDoLoai });
+
+        var loai = LoaiGoi.ChuanHoa(form.Loai);
         ten = ten.Trim();
 
-        // Chặn trùng tên trước khi tốn công đọc hết file lên đĩa.
-        if (await db.GoiTestCases.AnyAsync(g => g.Ten == ten, ct))
-            return Conflict(new { error = $"Đã có gói tên '{ten}'. Xoá gói cũ hoặc đặt tên khác." });
+        // Chặn trùng trước khi tốn công đọc hết file lên đĩa. Trùng theo cặp
+        // (loại, tên) — gói testcase và gói config cùng tên là hai thứ khác nhau.
+        if (await db.GoiTestCases.AnyAsync(g => g.Loai == loai && g.Ten == ten, ct))
+            return Conflict(new { error = $"Đã có gói {loai} tên '{ten}'. Xoá gói cũ hoặc đặt tên khác." });
 
         KetQuaLuuGoi luu;
         try
         {
             await using var s = file.OpenReadStream();
-            luu = await kho.LuuAsync(s, ct);
+            // Gói config không chứa file .tc nào, nên không bắt buộc ở đó.
+            luu = await kho.LuuAsync(s, ct, batBuocCoTestCase: loai == LoaiGoi.TestCase);
         }
         catch (GoiKhongHopLe ex)
         {
@@ -93,6 +107,7 @@ public class TestCasesController(
 
         var goi = new GoiTestCase
         {
+            Loai = loai,
             Ten = ten,
             TenFileGoc = Path.GetFileName(file.FileName),
             Sha256 = luu.Sha256,
@@ -104,8 +119,8 @@ public class TestCasesController(
         db.GoiTestCases.Add(goi);
         await db.SaveChangesAsync(ct);
 
-        log.LogInformation("Đã nhận gói {Ten}: {So} bài, {KB} KB, sha {Sha}",
-            goi.Ten, goi.SoTestCase, goi.KichThuoc / 1024, goi.Sha256[..8]);
+        log.LogInformation("Đã nhận gói {Loai} {Ten}: {So} bài, {KB} KB, sha {Sha}",
+            goi.Loai, goi.Ten, goi.SoTestCase, goi.KichThuoc / 1024, goi.Sha256[..8]);
 
         return CreatedAtAction(nameof(Get), new { id = goi.Id }, GoiTestCaseDto.From(goi));
     }
