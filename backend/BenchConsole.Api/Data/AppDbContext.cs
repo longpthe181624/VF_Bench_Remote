@@ -15,6 +15,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<BaoCaoChay> BaoCaoChays => Set<BaoCaoChay>();
     public DbSet<TepNguoiDung> TepNguoiDungs => Set<TepNguoiDung>();
 
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<Bench>(e =>
@@ -100,6 +106,57 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.TenFile).HasMaxLength(260).IsRequired();
             e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
             e.Property(x => x.MoTa).HasMaxLength(512);
+        });
+
+        // ------------------------------------------------ xác thực, phân quyền
+
+        b.Entity<User>(e =>
+        {
+            // Đăng nhập bằng email nên nó phải duy nhất. Không có index này
+            // thì hai tài khoản cùng email, và đăng nhập trả về cái nào là
+            // tuỳ thứ tự trong bảng.
+            e.HasIndex(x => x.Email).IsUnique();
+            e.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            e.Property(x => x.HoTen).HasMaxLength(128).IsRequired();
+            e.Property(x => x.MatKhauHash).HasMaxLength(256).IsRequired();
+            e.Property(x => x.RefreshToken).HasMaxLength(256);
+        });
+
+        b.Entity<Role>(e =>
+        {
+            e.HasIndex(x => x.Ma).IsUnique();
+            e.Property(x => x.Ma).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Ten).HasMaxLength(128).IsRequired();
+            e.Property(x => x.MoTa).HasMaxLength(512);
+        });
+
+        b.Entity<Permission>(e =>
+        {
+            e.HasIndex(x => x.Ma).IsUnique();
+            e.Property(x => x.Ma).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Module).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Action).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Ten).HasMaxLength(256).IsRequired();
+        });
+
+        b.Entity<UserRole>(e =>
+        {
+            e.HasKey(x => new { x.UserId, x.RoleId });
+            // Xoá user thì gỡ luôn vai trò đã gán. Để lại dòng mồ côi thì lần
+            // sau tạo user trùng Id sẽ thừa hưởng quyền của người cũ.
+            e.HasOne(x => x.User).WithMany(x => x.UserRoles)
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Role).WithMany(x => x.UserRoles)
+                .HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<RolePermission>(e =>
+        {
+            e.HasKey(x => new { x.RoleId, x.PermissionId });
+            e.HasOne(x => x.Role).WithMany(x => x.RolePermissions)
+                .HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Permission).WithMany(x => x.RolePermissions)
+                .HasForeignKey(x => x.PermissionId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Alert>(e =>

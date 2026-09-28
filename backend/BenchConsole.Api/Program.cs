@@ -67,6 +67,12 @@ using (var scope = app.Services.CreateScope())
     // xem mục "Chuyển sang EF migration" trong CLAUDE.md.
     await db.Database.MigrateAsync();
 
+    // Quyền, vai trò và tài khoản quản trị đầu tiên chạy ở MỌI môi trường,
+    // khác DevSeed. Không có nó thì máy thật dựng xong là không ai đăng nhập
+    // được, mà cũng không có cách nào tạo người dùng đầu tiên.
+    await AuthSeed.RunAsync(db, app.Configuration,
+        app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AuthSeed"));
+
     if (app.Environment.IsDevelopment())
         await DevSeed.RunAsync(db);
 }
