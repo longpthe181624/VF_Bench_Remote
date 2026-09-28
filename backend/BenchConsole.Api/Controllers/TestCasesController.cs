@@ -1,8 +1,11 @@
+using BenchConsole.Api.Auth;
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Services;
+using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
 using BenchConsole.Core.Messaging;
 using BenchConsole.Core.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,12 +43,14 @@ public sealed class TaiLenGoiForm
 /// </summary>
 [ApiController]
 [Route("api/test-cases")]
+[Authorize]
 public class TestCasesController(
     AppDbContext db,
     KhoGoiTestCase kho,
     ILogger<TestCasesController> log) : ControllerBase
 {
     [HttpGet]
+    [HasPermission(MaQuyen.TestCaseView)]
     public async Task<ActionResult<List<GoiTestCaseDto>>> List(
         [FromQuery] string? loai, CancellationToken ct = default)
     {
@@ -86,6 +91,14 @@ public class TestCasesController(
             return BadRequest(new { error = lyDoLoai });
 
         var loai = LoaiGoi.ChuanHoa(form.Loai);
+
+        // Quyền ở đây phụ thuộc DỮ LIỆU chứ không phụ thuộc endpoint, nên
+        // không gắn [HasPermission] được: chỉ biết cần quyền nào sau khi đọc
+        // request. Gói test case và gói cấu hình là hai việc khác nhau.
+        var quyenCan = loai == LoaiGoi.Config ? MaQuyen.ConfigUpload : MaQuyen.TestCaseUpload;
+        if (!User.CoQuyen(quyenCan))
+            return Forbid();
+
         ten = ten.Trim();
 
         // Chặn trùng trước khi tốn công đọc hết file lên đĩa. Trùng theo cặp
@@ -113,7 +126,10 @@ public class TestCasesController(
             Sha256 = luu.Sha256,
             KichThuoc = luu.KichThuoc,
             SoTestCase = luu.SoTestCase,
-            NguoiTaiLen = nguoiTaiLen,
+            // Lấy từ token, KHÔNG lấy tham số người gọi tự khai. Trước khi có
+            // xác thực, trường này là chuỗi bất kỳ ai cũng điền được nên
+            // không truy trách nhiệm được.
+            NguoiTaiLen = User.Email() ?? nguoiTaiLen,
             TaiLenLuc = DateTimeOffset.UtcNow,
         };
         db.GoiTestCases.Add(goi);
@@ -126,6 +142,7 @@ public class TestCasesController(
     }
 
     [HttpGet("{id:int}")]
+    [HasPermission(MaQuyen.TestCaseView)]
     public async Task<ActionResult<GoiTestCaseDto>> Get(int id, CancellationToken ct)
     {
         var goi = await db.GoiTestCases.AsNoTracking().FirstOrDefaultAsync(g => g.Id == id, ct);
@@ -138,6 +155,9 @@ public class TestCasesController(
     /// Không đặt dưới xác thực vì backend hiện chưa có xác thực nào cả — xem
     /// ghi chú ở `Program.cs` về việc mở Kestrel ra ngoài localhost.
     /// </summary>
+    // ĐỂ MỞ CÓ CHỦ Ý. Qauto tải gói test case về từ đây và Qauto KHÔNG
+    // xác thực. Gắn [Authorize] vào đây là gãy luồng đẩy gói xuống bench.
+    [AllowAnonymous]
     [HttpGet("{id:int}/tai")]
     public async Task<IActionResult> Tai(int id, CancellationToken ct)
     {
@@ -157,6 +177,7 @@ public class TestCasesController(
     }
 
     [HttpDelete("{id:int}")]
+    [HasPermission(MaQuyen.TestCaseDelete)]
     public async Task<IActionResult> Xoa(int id, CancellationToken ct)
     {
         var goi = await db.GoiTestCases.FirstOrDefaultAsync(g => g.Id == id, ct);

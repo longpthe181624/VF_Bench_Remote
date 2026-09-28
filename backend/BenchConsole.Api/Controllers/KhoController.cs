@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
+using BenchConsole.Core.Auth;
+using BenchConsole.Api.Auth;
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Services;
 using BenchConsole.Core.Contracts;
@@ -13,13 +16,17 @@ namespace BenchConsole.Api.Controllers;
 /// **Chưa chốt sẽ chứa gì** — đây là chỗ chứa và đường vận chuyển dựng trước,
 /// nội dung định sau. Nên endpoint nhận file bất kỳ, không kiểm định dạng.
 ///
-/// CẢNH BÁO: `nguoiDung` là chuỗi bên gọi tự khai, backend chưa có xác thực.
-/// Nó là NHÃN PHÂN LOẠI, không phải ranh giới bảo mật — ai cũng đọc và ghi
-/// được kho của người khác. Đừng cất thứ gì riêng tư vào đây cho tới khi có
-/// đăng nhập.
+/// `nguoiDung` trên đường dẫn ĐÃ CÓ ranh giới thật từ 28/09: chỉ xem và ghi
+/// được kho của chính mình, trừ khi có `KHO.VIEW_ALL` hoặc là Admin. Danh tính
+/// lấy từ token chứ không phải từ đường dẫn.
+///
+/// RBAC thuần không diễn tả được quyền sở hữu — `KHO.VIEW` chỉ nói được là có
+/// xem kho hay không, không nói được xem kho của AI. Nên phần này kiểm trong
+/// thân hàm chứ không gắn [HasPermission] ở đầu.
 /// </summary>
 [ApiController]
 [Route("api/kho")]
+[Authorize]
 public class KhoController(
     AppDbContext db,
     KhoNguoiDung kho,
@@ -29,6 +36,9 @@ public class KhoController(
     public async Task<ActionResult<List<TepNguoiDungDto>>> List(
         string nguoiDung, CancellationToken ct)
     {
+        if (!QuyenTruyCap.XemDuocKho(User.Quyen(), User.VaiTro(), User.Email(), nguoiDung))
+            return Forbid();
+
         var rows = await db.TepNguoiDungs.AsNoTracking()
             .Where(t => t.NguoiDung == nguoiDung)
             .OrderByDescending(t => t.TaiLenLuc)
@@ -44,6 +54,16 @@ public class KhoController(
     {
         if (string.IsNullOrWhiteSpace(nguoiDung))
             return BadRequest(new { error = "Thiếu tên người dùng." });
+
+        if (!User.CoQuyen(MaQuyen.KhoUpload)) return Forbid();
+
+        // Chỉ tải được vào kho CỦA MÌNH. Không có quyền nào cho phép ghi vào
+        // kho người khác — `KHO.VIEW_ALL` chỉ mở phần XEM. Đẩy file vào kho
+        // người khác là mạo danh, khác hẳn việc đọc.
+        var laKhoCuaMinh = string.Equals(User.Email(), nguoiDung.Trim(),
+                                         StringComparison.OrdinalIgnoreCase);
+        if (!laKhoCuaMinh && !User.LaAdmin())
+            return Forbid();
         if (form.File is null || form.File.Count == 0)
             return BadRequest(new { error = "Không có file nào." });
 
@@ -91,6 +111,11 @@ public class KhoController(
         var tep = await db.TepNguoiDungs.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
         if (tep is null) return NotFound();
 
+        // Kiểm theo CHỦ của file, không theo tham số nào trên đường dẫn — id
+        // là số tuần tự nên đoán được, không kiểm là ai cũng tải file người khác.
+        if (!QuyenTruyCap.XemDuocKho(User.Quyen(), User.VaiTro(), User.Email(), tep.NguoiDung))
+            return Forbid();
+
         var duongDan = kho.DuongDan(tep.Sha256);
         if (!System.IO.File.Exists(duongDan))
             return NotFound(new { error = "Bản ghi còn nhưng file đã mất trên đĩa." });
@@ -104,6 +129,14 @@ public class KhoController(
     {
         var tep = await db.TepNguoiDungs.FirstOrDefaultAsync(t => t.Id == id, ct);
         if (tep is null) return NotFound();
+
+        if (!User.CoQuyen(MaQuyen.KhoDelete)) return Forbid();
+
+        // Xoá thì chặt hơn xem: chỉ file của mình, trừ Admin. `KHO.VIEW_ALL`
+        // không mở quyền xoá.
+        var laCuaMinh = string.Equals(User.Email(), tep.NguoiDung,
+                                      StringComparison.OrdinalIgnoreCase);
+        if (!laCuaMinh && !User.LaAdmin()) return Forbid();
 
         db.TepNguoiDungs.Remove(tep);
         await db.SaveChangesAsync(ct);

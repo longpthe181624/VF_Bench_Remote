@@ -1,5 +1,8 @@
+using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
+using BenchConsole.Api.Auth;
 using BenchConsole.Api.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,9 +11,11 @@ namespace BenchConsole.Api.Controllers;
 /// <summary>Màn Cảnh báo. Cảnh báo do luồng MQTT tự mở và tự đóng.</summary>
 [ApiController]
 [Route("api/alerts")]
+[Authorize]
 public class AlertsController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
+    [HasPermission(MaQuyen.BenchView)]
     public async Task<ActionResult<List<AlertDto>>> List(
         [FromQuery] bool includeClosed = false, CancellationToken ct = default)
     {
@@ -32,6 +37,7 @@ public class AlertsController(AppDbContext db) : ControllerBase
     /// sự hồi phục, để không ai bấm cho mất dấu đỏ rồi quên mất sự cố.
     /// </summary>
     [HttpPost("{id:int}/ack")]
+    [HasPermission(MaQuyen.BenchUpdate)]
     public async Task<ActionResult<AlertDto>> Acknowledge(
         int id, [FromQuery] string? by, CancellationToken ct)
     {

@@ -89,8 +89,21 @@
     <h1>Bench Console</h1>
     <span class="badge">giao diện tạm</span>
     <span class="grow"></span>
+    <span class="meta" id="ai-day"></span>
+    <button id="dang-xuat" class="ghost" style="display:none">Đăng xuất</button>
     <span class="meta" id="clock"></span>
   </header>
+
+  <section id="man-dang-nhap" style="display:none">
+    <div class="sec-head"><h2>Đăng nhập</h2></div>
+    <form class="addbench show" id="dn-form">
+      <input id="dn-email" type="email" placeholder="email" style="width:240px" required>
+      <input id="dn-mk" type="password" placeholder="mật khẩu" style="width:200px" required>
+      <button type="submit">Đăng nhập</button>
+    </form>
+  </section>
+
+  <div id="man-chinh">
   <div class="meta">Trang tạm gọi thẳng REST API — dùng thay Swagger cho các thao tác thường ngày. Tự làm mới mỗi 5 giây.</div>
 
   <div class="err" id="err"></div>
@@ -195,12 +208,40 @@
     <div id="alert-area"></div>
   </section>
 
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
 const API = "";
+
+// Phiên đăng nhập. Giữ trong localStorage để F5 không phải đăng nhập lại.
+// Đây là giao diện TẠM — bản thật nên dùng cookie HttpOnly, localStorage đọc
+// được bằng JavaScript nên kịch bản XSS lấy được token.
+const KHOA_PHIEN = "benchconsole.phien";
+let phien = null;
+try { phien = JSON.parse(localStorage.getItem(KHOA_PHIEN) || "null"); } catch {}
+
+function luuPhien(p){
+  phien = p;
+  try { p ? localStorage.setItem(KHOA_PHIEN, JSON.stringify(p))
+          : localStorage.removeItem(KHOA_PHIEN); } catch {}
+}
+
+/// Người đang đăng nhập có quyền này không.
+///
+/// CHỈ để ẩn/hiện cho đỡ rối mắt. KHÔNG phải bảo vệ — mở DevTools là gọi
+/// thẳng API được. Chỗ chặn thật là [HasPermission] phía server.
+function coQuyen(ma){
+  if (!phien?.nguoiDung) return false;
+  if ((phien.nguoiDung.vaiTro || []).includes("Admin")) return true;
+  return (phien.nguoiDung.quyen || []).includes(ma);
+}
+
+function headerAuth(){
+  return phien?.accessToken ? {"Authorization": "Bearer " + phien.accessToken} : {};
+}
 const STATE_LABEL = {
   idle: "Sẵn sàng", running: "Đang chạy", error: "Lỗi",
   offline: "Mất kết nối", maintenance: "Bảo trì", unknown: "Chưa rõ"
@@ -242,9 +283,13 @@ function showErr(msg){
 
 async function api(path, opts){
   const res = await fetch(API + path, {
-    headers: {"Content-Type": "application/json"},
     ...opts,
+    headers: {"Content-Type": "application/json", ...headerAuth(), ...(opts?.headers || {})},
   });
+  // Token hết hạn hoặc bị thu hồi: đá về màn đăng nhập thay vì để người dùng
+  // nhìn một trang đầy lỗi đỏ mà không hiểu vì sao.
+  if (res.status === 401){ luuPhien(null); veManDangNhap(); throw new Error("Phiên hết hạn, đăng nhập lại."); }
+  if (res.status === 403) throw new Error("Bạn không có quyền làm việc này.");
   if (!res.ok){
     let msg = res.status + " " + res.statusText;
     try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
@@ -299,13 +344,15 @@ function benchRow(b){
     catch(e){ showErr(e.message); }
   }}, "Reset");
 
-  const delBtn = el("button", {class:"ghost", onclick: async () => {
+  const delBtn = !coQuyen("BENCH.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
     if (!confirm(`Xoá bench ${b.code}?`)) return;
     try { await api(`/api/benches/${b.code}`, {method:"DELETE"}); showToast(`Đã xoá ${b.code}`); load(); }
     catch(e){ showErr(e.message); }
   }}, "Xoá");
 
-  const actions = el("div", {class:"actions"}, testCaseInput, startBtn, stopBtn, resetBtn, delBtn);
+  // Không có quyền chạy thì giấu luôn cả ô nhập, để khỏi gõ xong mới biết.
+  const dieuKhien = coQuyen("BENCH.RUN") ? [testCaseInput, startBtn, stopBtn, resetBtn] : [];
+  const actions = el("div", {class:"actions"}, ...dieuKhien, delBtn);
 
   return el("tr", {},
     el("td", {}, el("div", {class:"code"}, b.code), el("div", {class:"sub"}, sub || "—")),
@@ -318,6 +365,10 @@ function benchRow(b){
 }
 
 async function load(){
+  // Chưa đăng nhập thì đừng gọi gì cả — gọi là nhận một loạt 401 rồi màn hình
+  // đầy chữ đỏ trong khi lý do thật chỉ là chưa đăng nhập.
+  if (!phien?.accessToken) return;
+
   const q = document.getElementById("q").value.trim();
   const state = document.getElementById("filter-state").value;
   const params = new URLSearchParams();
@@ -343,6 +394,7 @@ async function load(){
     renderGoi(goi);
     renderBaoCao(baoCao);
     renderKho(kho);
+    apDungQuyen();
   } catch(e){
     showErr("Không tải được dữ liệu: " + e.message);
   }
@@ -384,7 +436,8 @@ function goiRow(g){
     chon.appendChild(el("option", {value:b.code}, `${b.code} (${b.model})`));
   }
 
-  const dayBtn = el("button", {onclick: async () => {
+  const quyenDay = g.loai === "config" ? "CONFIG.DEPLOY" : "TESTCASE.DEPLOY";
+  const dayBtn = !coQuyen(quyenDay) ? null : el("button", {onclick: async () => {
     if (!chon.value){ showErr("Chưa chọn bench để đẩy gói."); return; }
     try {
       const r = await api(`/api/benches/${chon.value}/trien-khai`, {
@@ -402,7 +455,7 @@ function goiRow(g){
   //
   // Gói cấu hình KHÔNG có nút này: chạy một gói cấu hình là vô nghĩa, để nút ở
   // đó chỉ dẫn người dùng bấm rồi nhận lỗi.
-  const chayBtn = g.loai === "config" ? null : el("button", {onclick: async () => {
+  const chayBtn = (g.loai === "config" || !coQuyen("BENCH.RUN")) ? null : el("button", {onclick: async () => {
     if (!chon.value){ showErr("Chưa chọn bench để chạy."); return; }
     try {
       const r = await api(`/api/benches/${chon.value}/start`, {
@@ -415,7 +468,7 @@ function goiRow(g){
     } catch(e){ showErr(e.message); }
   }}, "Chạy");
 
-  const xoaBtn = el("button", {class:"ghost", onclick: async () => {
+  const xoaBtn = !coQuyen("TESTCASE.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
     if (!confirm(`Xoá gói ${g.ten}?`)) return;
     try { await api(`/api/test-cases/${g.id}`, {method:"DELETE"}); showToast(`Đã xoá gói ${g.ten}`); load(); }
     catch(e){ showErr(e.message); }
@@ -581,7 +634,7 @@ goiForm.addEventListener("submit", async (ev) => {
   if (by) fd.append("nguoiTaiLen", by);
 
   try {
-    const res = await fetch(API + "/api/test-cases", {method:"POST", body: fd});
+    const res = await fetch(API + "/api/test-cases", {method:"POST", body: fd, headers: headerAuth()});
     if (!res.ok){
       let msg = res.status + " " + res.statusText;
       try { const b = await res.json(); if (b?.error) msg = b.error; } catch {}
@@ -616,7 +669,7 @@ khoForm.addEventListener("submit", async (ev) => {
   if (mota) fd.append("moTa", mota);
 
   try {
-    const res = await fetch(API + `/api/kho/${encodeURIComponent(user)}`, {method:"POST", body: fd});
+    const res = await fetch(API + `/api/kho/${encodeURIComponent(user)}`, {method:"POST", body: fd, headers: headerAuth()});
     if (!res.ok){
       let msg = res.status + " " + res.statusText;
       try { const b = await res.json(); if (b?.error) msg = b.error; } catch {}
@@ -631,13 +684,75 @@ khoForm.addEventListener("submit", async (ev) => {
   } catch(e){ showErr(e.message); }
 });
 
+function veManDangNhap(){
+  document.getElementById("man-dang-nhap").style.display = "";
+  document.getElementById("man-chinh").style.display = "none";
+  document.getElementById("dang-xuat").style.display = "none";
+  document.getElementById("ai-day").textContent = "";
+}
+
+function veManChinh(){
+  document.getElementById("man-dang-nhap").style.display = "none";
+  document.getElementById("man-chinh").style.display = "";
+  document.getElementById("dang-xuat").style.display = "";
+  const nd = phien?.nguoiDung;
+  document.getElementById("ai-day").textContent =
+    nd ? `${nd.hoTen} · ${(nd.vaiTro || []).join(", ") || "không vai trò"}` : "";
+}
+
+/// Ẩn những mục người này không có quyền dùng.
+///
+/// Nhắc lại: đây là chuyện GIAO DIỆN cho đỡ rối, không phải bảo vệ. Server vẫn
+/// kiểm độc lập bằng [HasPermission] — hai lớp, không thay nhau được.
+function apDungQuyen(){
+  const an = (id, co) => {
+    const e = document.getElementById(id);
+    if (e) e.style.display = co ? "" : "none";
+  };
+  an("toggle-add", coQuyen("BENCH.CREATE"));
+  an("toggle-goi", coQuyen("TESTCASE.UPLOAD") || coQuyen("CONFIG.UPLOAD"));
+  an("kho-form", coQuyen("KHO.UPLOAD"));
+}
+
+document.getElementById("dn-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const email = document.getElementById("dn-email").value.trim();
+  const matKhau = document.getElementById("dn-mk").value;
+  try {
+    const res = await fetch(API + "/api/auth/login", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({email, matKhau}),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(body?.error || (res.status + " " + res.statusText));
+
+    luuPhien(body);
+    document.getElementById("dn-mk").value = "";
+    showErr(null);
+    veManChinh();
+    showToast(`Xin chào ${body.nguoiDung.hoTen}`);
+    load();
+  } catch(e){ showErr(e.message); }
+});
+
+document.getElementById("dang-xuat").addEventListener("click", () => {
+  luuPhien(null);
+  veManDangNhap();
+  showToast("Đã đăng xuất");
+});
+
 function tickClock(){
   document.getElementById("clock").textContent = new Date().toLocaleTimeString("vi-VN");
 }
 tickClock();
 setInterval(tickClock, 1000);
 
-load();
+// Có token cũ thì vào thẳng. Token hỏng hay hết hạn thì lần gọi API đầu tiên
+// trả 401 và api() tự đá về màn đăng nhập, nên không cần kiểm trước ở đây.
+if (phien?.accessToken){ veManChinh(); load(); } else { veManDangNhap(); }
+
+// Vòng làm mới tự bỏ qua khi chưa đăng nhập, xem đầu hàm load().
 setInterval(load, 5000);
 </script>
 </body>

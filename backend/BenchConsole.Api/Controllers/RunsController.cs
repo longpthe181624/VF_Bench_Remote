@@ -1,7 +1,10 @@
+using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
+using BenchConsole.Api.Auth;
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Services;
 using BenchConsole.Core.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,12 +13,14 @@ namespace BenchConsole.Api.Controllers;
 /// <summary>Màn Lịch sử: mọi lượt chạy của mọi bench.</summary>
 [ApiController]
 [Route("api/runs")]
+[Authorize]
 public class RunsController(
     AppDbContext db,
     KhoBaoCao kho,
     ILogger<RunsController> log) : ControllerBase
 {
     [HttpGet]
+    [HasPermission(MaQuyen.ReportView)]
     public async Task<ActionResult<object>> List(
         [FromQuery] string? bench,
         [FromQuery] string? verdict,
@@ -72,6 +77,7 @@ public class RunsController(
 
     /// <summary>Chi tiết một lượt chạy, kèm khối detail thô do bench gửi.</summary>
     [HttpGet("{id:int}")]
+    [HasPermission(MaQuyen.ReportView)]
     public async Task<ActionResult<object>> Get(int id, CancellationToken ct)
     {
         var run = await db.Runs.AsNoTracking().Include(r => r.Bench)
@@ -101,6 +107,10 @@ public class RunsController(
     /// gửi lại sau khi mạng đứt, lúc đó thứ tự về không còn bảo đảm. Thà giữ
     /// file mồ côi còn hơn vứt bằng chứng đi.
     /// </summary>
+    // ĐỂ MỞ CÓ CHỦ Ý. Qauto nộp báo cáo vào đây và Qauto KHÔNG xác thực —
+    // xác thực của dự án này là của web Console, quyền bên trong Qauto do
+    // chính Qauto lo. Đừng gắn [Authorize] vào đây, gắn là gãy luồng kết quả.
+    [AllowAnonymous]
     [HttpPost("{cmdId}/report")]
     [RequestSizeLimit(KhoBaoCao.KichThuocToiDa)]
     public async Task<ActionResult<List<BaoCaoChayDto>>> NhanBaoCao(
@@ -158,6 +168,7 @@ public class RunsController(
 
     /// <summary>Danh sách file bằng chứng của một lệnh.</summary>
     [HttpGet("{cmdId}/report")]
+    [HasPermission(MaQuyen.ReportView)]
     public async Task<ActionResult<List<BaoCaoChayDto>>> DanhSachBaoCao(
         string cmdId, CancellationToken ct)
     {
@@ -170,6 +181,7 @@ public class RunsController(
 
     /// <summary>Tải một file bằng chứng về.</summary>
     [HttpGet("report/{id:int}/tai")]
+    [HasPermission(MaQuyen.ReportView)]
     public async Task<IActionResult> TaiBaoCao(int id, CancellationToken ct)
     {
         var bc = await db.BaoCaoChays.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, ct);
@@ -185,6 +197,7 @@ public class RunsController(
 
     /// <summary>Báo cáo mới nhận gần đây, cho giao diện hiện lên.</summary>
     [HttpGet("bao-cao/gan-day")]
+    [HasPermission(MaQuyen.ReportView)]
     public async Task<ActionResult<List<BaoCaoChayDto>>> GanDay(
         [FromQuery] int limit = 20, CancellationToken ct = default)
     {

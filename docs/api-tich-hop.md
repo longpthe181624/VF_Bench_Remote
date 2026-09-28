@@ -7,9 +7,33 @@ Cập nhật 24/09/2026.
 
 ## 0. Ba điều phải đọc trước khi viết dòng code đầu tiên
 
-**API chưa có xác thực.** Không có API key, không có token. Trường `issuedBy`
-là do bên gọi tự khai và server không kiểm. Ai gọi được API thì ra lệnh chạy
-test, đẩy gói và xoá bench được. Đừng phơi địa chỉ này ra ngoài mạng nội bộ.
+**API ĐÃ CÓ xác thực từ 28/09.** Đây là thay đổi GÃY với bản trước.
+
+Lấy token rồi gắn vào mọi request:
+
+```
+POST /api/auth/login     {"email": "...", "matKhau": "..."}
+  -> {"accessToken": "...", "refreshToken": "...", "hetHanLuc": "..."}
+
+Authorization: Bearer <accessToken>
+```
+
+Access token sống **30 phút**. Hết hạn thì gọi `POST /api/auth/refresh` với
+`refreshToken` để lấy cặp mới — refresh token **xoay vòng**, cái cũ mất hiệu
+lực ngay, nên phải lưu lại cái mới mỗi lần.
+
+`GET /api/auth/me` trả về quyền của chính mình, dùng để ẩn/hiện chức năng.
+
+**Hai endpoint KHÔNG cần token**, vì máy chạy test gọi chúng và máy đó không
+đăng nhập:
+
+```
+GET  /api/test-cases/{id}/tai       tải gói test case về
+POST /api/runs/{cmdId}/report       nộp file kết quả
+```
+
+**`issuedBy` không còn tác dụng.** Danh tính nay lấy từ token; tham số đó giữ
+lại chỉ để không gãy bên gọi cũ, nhưng server bỏ qua nó.
 
 **Lệnh là bất đồng bộ.** Mọi endpoint ra lệnh đều trả **202 + `cmdId`** ngay
 lập tức, **không** chờ bench làm xong. Một lượt test có thể mất vài phút. Kết
@@ -26,7 +50,7 @@ thiết kế chứ không phải lỗi: gõ sai một ký tự sẽ sinh bench r
 | --- | --- |
 | Base URL | `http://<máy A>:5000` |
 | Kiểu dữ liệu | JSON, UTF-8. Riêng upload dùng `multipart/form-data` |
-| Xác thực | Không có |
+| Xác thực | JWT Bearer. Lấy token ở `POST /api/auth/login` |
 | Đặc tả máy đọc được | `GET /swagger/v1/swagger.json` |
 | Trang thử tay | `GET /swagger` |
 
@@ -217,6 +241,8 @@ cho mọi client.
 | Mã | Nghĩa | Nên làm gì |
 | --- | --- | --- |
 | `400` | Dữ liệu vào sai | Đọc `error`, sửa rồi gọi lại |
+| `401` | Chưa đăng nhập, token sai hoặc hết hạn | Gọi `/api/auth/refresh`, hỏng nữa thì đăng nhập lại |
+| `403` | Đã đăng nhập nhưng KHÔNG đủ quyền | Xin cấp quyền, thử lại không giúp gì |
 | `404` | Không có bench hoặc gói đó | Kiểm mã bench đã đăng ký chưa |
 | `409` | Xung đột — bench đang chạy, đang mất kết nối, hoặc trùng tên gói | Đừng thử lại ngay, tình trạng phải đổi trước |
 | `503` | Console không nối được broker MQTT | Thử lại sau, lỗi hạ tầng |

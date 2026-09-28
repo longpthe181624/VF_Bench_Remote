@@ -23,8 +23,21 @@ làm nghẽn broker. Nên mọi thứ là file — gói test case, log, trace CA
 chưa đăng ký thì Console **bỏ qua trong im lặng**, không báo lỗi. Đây là cố ý
 (gõ sai một ký tự sẽ sinh bench rác), nhưng xin lưu ý khi gỡ lỗi.
 
-**Hiện chưa có xác thực.** Không API key, không token. Sẽ có sau, và sẽ báo
-trước.
+**Console đã có đăng nhập từ 28/09, nhưng KHÔNG ảnh hưởng gì tới Qauto.**
+
+Xác thực đó là của **web Console** — để phân quyền người dùng trên giao diện.
+Quyền bên trong Qauto do chính Qauto lo, Console không đảm nhận.
+
+Hai endpoint trong tài liệu này **cố ý để mở, không cần token**:
+
+```
+GET  /api/test-cases/{id}/tai       tải gói test case về
+POST /api/runs/{cmd_id}/report      nộp file kết quả
+```
+
+Chúng được đánh dấu `[AllowAnonymous]` ngay trong mã nguồn kèm ghi chú, nên
+sẽ không bị khoá nhầm khi có người siết bảo mật về sau. Qauto không phải thêm
+gì cả.
 
 ---
 

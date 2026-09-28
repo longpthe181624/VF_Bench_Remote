@@ -1,8 +1,11 @@
+using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
+using BenchConsole.Api.Auth;
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Mqtt;
 using BenchConsole.Core.Messaging;
 using BenchConsole.Core.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +13,7 @@ namespace BenchConsole.Api.Controllers;
 
 [ApiController]
 [Route("api/benches")]
+[Authorize]
 public class BenchesController(
     AppDbContext db,
     BenchCommandPublisher publisher,
@@ -21,6 +25,7 @@ public class BenchesController(
     /// và vẫn trả được cả khi bench đang mất kết nối.
     /// </summary>
     [HttpGet]
+    [HasPermission(MaQuyen.BenchView)]
     public async Task<ActionResult<List<BenchDto>>> List(
         [FromQuery] string? state,
         [FromQuery] string? model,
@@ -61,6 +66,7 @@ public class BenchesController(
     }
 
     [HttpGet("{code}")]
+    [HasPermission(MaQuyen.BenchView)]
     public async Task<ActionResult<BenchDto>> Get(string code, CancellationToken ct)
     {
         var bench = await db.Benches.AsNoTracking()
@@ -69,6 +75,7 @@ public class BenchesController(
     }
 
     [HttpPost]
+    [HasPermission(MaQuyen.BenchCreate)]
     public async Task<ActionResult<BenchDto>> Create(CreateBenchRequest req, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.Model))
@@ -107,6 +114,7 @@ public class BenchesController(
     }
 
     [HttpPatch("{code}")]
+    [HasPermission(MaQuyen.BenchUpdate)]
     public async Task<ActionResult<BenchDto>> Update(string code, UpdateBenchRequest req, CancellationToken ct)
     {
         var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
@@ -135,6 +143,7 @@ public class BenchesController(
     }
 
     [HttpDelete("{code}")]
+    [HasPermission(MaQuyen.BenchDelete)]
     public async Task<IActionResult> Delete(string code, CancellationToken ct)
     {
         var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
@@ -151,6 +160,7 @@ public class BenchesController(
     // ------------------------------------------------------------ ra lệnh
 
     [HttpPost("{code}/start")]
+    [HasPermission(MaQuyen.BenchRun)]
     public Task<ActionResult<CommandAcceptedDto>> Start(string code, StartTestRequest req, CancellationToken ct)
         // Gắn sẵn địa chỉ nộp báo cáo vào lệnh, để máy bench không phải cấu
         // hình thêm một URL nữa — nó chỉ cần biết broker. Console vốn đã biết
@@ -166,10 +176,12 @@ public class BenchesController(
     }
 
     [HttpPost("{code}/stop")]
+    [HasPermission(MaQuyen.BenchRun)]
     public Task<ActionResult<CommandAcceptedDto>> Stop(string code, [FromQuery] string? by, CancellationToken ct)
         => Dispatch(code, "stop", null, null, by, ct);
 
     [HttpPost("{code}/reset")]
+    [HasPermission(MaQuyen.BenchRun)]
     public Task<ActionResult<CommandAcceptedDto>> Reset(string code, [FromQuery] string? by, CancellationToken ct)
         => Dispatch(code, "reset_bench", null, null, by, ct);
 
@@ -188,6 +200,10 @@ public class BenchesController(
         var goi = await db.GoiTestCases.AsNoTracking()
             .FirstOrDefaultAsync(g => g.Id == req.GoiId, ct);
         if (goi is null) return NotFound(new { error = $"Không có gói id {req.GoiId}" });
+
+        // Quyền tuỳ loại gói, chỉ biết sau khi tra database nên phải kiểm ở đây.
+        var quyenCan = goi.Loai == LoaiGoi.Config ? MaQuyen.ConfigDeploy : MaQuyen.TestCaseDeploy;
+        if (!User.CoQuyen(quyenCan)) return Forbid();
 
         // Agent nằm ở máy khác nên URL phải là địa chỉ nó với tới được. Cấu hình
         // tường minh, vì Request.Host ở đây thường là 'localhost' — agent tải
@@ -243,7 +259,12 @@ public class BenchesController(
 
         try
         {
-            var cmd = await publisher.SendAsync(bench, action, testCase, plan, by, them, ct);
+            // Danh tính lấy TỪ TOKEN. Tham số `by` người gọi tự khai chỉ còn là
+            // đường lui khi token không mang email, giữ để không ghi rỗng vào
+            // lịch sử.
+            var nguoiRaLenh = User.Email() ?? by;
+            var cmd = await publisher.SendAsync(bench, action, testCase, plan,
+                                                nguoiRaLenh, them, ct);
 
             // 202 chứ không phải 200: lệnh đã gửi, bench chưa xác nhận. Giao diện
             // theo tiếp bằng cmdId qua SignalR, không giữ HTTP request chờ test xong.
@@ -258,6 +279,7 @@ public class BenchesController(
     // ---------------------------------------------------------- dữ liệu đo
 
     [HttpGet("{code}/telemetry")]
+    [HasPermission(MaQuyen.BenchView)]
     public async Task<ActionResult<List<TelemetrySeriesDto>>> Telemetry(
         string code,
         [FromQuery] string? channel,
@@ -288,6 +310,7 @@ public class BenchesController(
     }
 
     [HttpGet("{code}/runs")]
+    [HasPermission(MaQuyen.ReportView)]
     public async Task<ActionResult<List<RunDto>>> Runs(
         string code, [FromQuery] int take = 50, CancellationToken ct = default)
     {
