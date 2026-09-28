@@ -32,6 +32,31 @@ public class KhoController(
     KhoNguoiDung kho,
     ILogger<KhoController> log) : ControllerBase
 {
+    /// <summary>
+    /// Kho của CHÍNH MÌNH. Không cần nêu tên ai — danh tính lấy từ token.
+    ///
+    /// Có đường riêng thay vì bắt giao diện tự ghép email vào URL: ghép tay là
+    /// sớm muộn có chỗ ghép nhầm, mà nhầm ở đây nghĩa là xem kho người khác.
+    /// </summary>
+    [HttpGet]
+    public async Task<ActionResult<List<TepNguoiDungDto>>> KhoCuaToi(CancellationToken ct)
+    {
+        if (!User.CoQuyen(MaQuyen.KhoView)) return Forbid();
+
+        var toi = User.Email();
+        if (string.IsNullOrWhiteSpace(toi))
+            return Unauthorized(new { error = "Token không mang email." });
+
+        return await LayKhoAsync(toi, ct);
+    }
+
+    /// <summary>Tải file vào kho của chính mình.</summary>
+    [HttpPost]
+    [RequestSizeLimit(KhoNguoiDung.KichThuocToiDa)]
+    public Task<ActionResult<List<TepNguoiDungDto>>> TaiLenKhoCuaToi(
+        [FromForm] TaiLenTepForm form, CancellationToken ct)
+        => TaiLen(User.Email() ?? "", form, ct);
+
     [HttpGet("{nguoiDung}")]
     public async Task<ActionResult<List<TepNguoiDungDto>>> List(
         string nguoiDung, CancellationToken ct)
@@ -39,6 +64,12 @@ public class KhoController(
         if (!QuyenTruyCap.XemDuocKho(User.Quyen(), User.VaiTro(), User.Email(), nguoiDung))
             return Forbid();
 
+        return await LayKhoAsync(nguoiDung, ct);
+    }
+
+    private async Task<ActionResult<List<TepNguoiDungDto>>> LayKhoAsync(
+        string nguoiDung, CancellationToken ct)
+    {
         var rows = await db.TepNguoiDungs.AsNoTracking()
             .Where(t => t.NguoiDung == nguoiDung)
             .OrderByDescending(t => t.TaiLenLuc)

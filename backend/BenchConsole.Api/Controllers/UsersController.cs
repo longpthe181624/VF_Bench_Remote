@@ -1,5 +1,6 @@
 using BenchConsole.Api.Auth;
 using BenchConsole.Api.Data;
+using BenchConsole.Api.Services;
 using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
 using BenchConsole.Core.Models;
@@ -20,7 +21,10 @@ namespace BenchConsole.Api.Controllers;
 [ApiController]
 [Route("api/users")]
 [Authorize]
-public class UsersController(AppDbContext db, ILogger<UsersController> log) : ControllerBase
+public class UsersController(
+    AppDbContext db,
+    KhoNguoiDung kho,
+    ILogger<UsersController> log) : ControllerBase
 {
     [HttpGet]
     [HasPermission(MaQuyen.UserView)]
@@ -170,9 +174,29 @@ public class UsersController(AppDbContext db, ILogger<UsersController> log) : Co
                 return BadRequest(new { error = "Đây là tài khoản Admin cuối cùng, không xoá được." });
         }
 
+        // Dọn kho của người này. Bảng TepNguoiDungs KHÔNG có khoá ngoại tới
+        // Users — chủ kho chỉ là chuỗi email — nên database không tự dọn hộ.
+        // Không làm ở đây thì bản ghi trỏ vào một email không còn ai, và file
+        // nằm lại trên đĩa vĩnh viễn.
+        //
+        // Chưa thêm khoá ngoại vì kho CHƯA CHỐT sẽ chứa gì; đổi schema trước
+        // khi biết nó giữ thứ gì là làm sớm. Khi chốt xong thì thay bằng khoá
+        // ngoại cascade và bỏ đoạn này.
+        var tepCuaHo = await db.TepNguoiDungs
+            .Where(t => t.NguoiDung == user.Email).ToListAsync(ct);
+        db.TepNguoiDungs.RemoveRange(tepCuaHo);
+
         db.Users.Remove(user);
         await db.SaveChangesAsync(ct);
-        log.LogWarning("{Ai} xoá người dùng {Email}", User.Email(), user.Email);
+
+        // Xoá file trên đĩa SAU khi lưu, và chỉ những file không còn ai dùng —
+        // hai người tải lên cùng một nội dung thì dùng chung một file.
+        foreach (var sha in tepCuaHo.Select(t => t.Sha256).Distinct())
+            if (!await db.TepNguoiDungs.AnyAsync(t => t.Sha256 == sha, ct))
+                kho.XoaFile(sha);
+
+        log.LogWarning("{Ai} xoá người dùng {Email} kèm {So} file trong kho",
+            User.Email(), user.Email, tepCuaHo.Count);
         return NoContent();
     }
 

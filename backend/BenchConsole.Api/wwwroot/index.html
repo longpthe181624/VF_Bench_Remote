@@ -185,16 +185,17 @@
     </div>
 
     <form class="addbench show" id="kho-form" enctype="multipart/form-data">
-      <input id="kho-user" placeholder="tên user" style="width:140px"
-             value="phamlong" required>
       <input id="kho-file" type="file" multiple required>
       <input id="kho-mota" placeholder="ghi chú (không bắt buộc)" style="width:200px">
-      <button type="submit">Tải lên</button>
-      <button type="button" id="kho-xem">Xem kho</button>
+      <button type="submit">Tải lên kho của tôi</button>
+      <span id="kho-chon-boc" style="display:none">
+        <span class="meta">Xem kho của</span>
+        <select id="kho-user"></select>
+      </span>
       <div class="meta" style="flex-basis:100%">
-        Nhận <b>file bất kỳ</b>, chưa chốt sẽ chứa gì.
-        <b>Tên user chưa phải ranh giới bảo mật</b> — backend chưa có đăng nhập,
-        ai cũng xem và xoá được kho của người khác.
+        Nhận <b>file bất kỳ</b>, chưa chốt sẽ chứa gì. Kho đi theo tài khoản
+        đang đăng nhập — tải lên luôn vào kho của mình, và chỉ ai có
+        <code>KHO.VIEW_ALL</code> mới xem được kho người khác.
       </div>
     </form>
 
@@ -322,6 +323,9 @@ let benchesHienTai = [];
 let dsVaiTro = [];
 let dsQuyen = [];
 let vaiTroDangSua = null;
+
+// Email của kho đang xem. Rỗng = kho của chính mình.
+let khoDangXem = "";
 
 function el(tag, attrs, ...children){
   const n = document.createElement(tag);
@@ -460,8 +464,10 @@ async function load(){
       api("/api/runs/bao-cao/gan-day?limit=20"),
       // Kho đi theo user nên phải biết xem kho của ai. Ô trống thì bỏ qua chứ
       // đừng gọi API với tên rỗng — server trả 400 và màn hình đầy chữ đỏ.
-      (document.getElementById("kho-user").value.trim()
-        ? api(`/api/kho/${encodeURIComponent(document.getElementById("kho-user").value.trim())}`)
+      // Không chọn ai thì xem kho của chính mình — không phải ghép email vào
+      // URL, ghép tay là sớm muộn có chỗ nhầm mà nhầm ở đây là xem kho người khác.
+      (coQuyen("KHO.VIEW")
+        ? (khoDangXem ? api(`/api/kho/${encodeURIComponent(khoDangXem)}`) : api("/api/kho"))
         : Promise.resolve([])),
       // Chỉ hỏi khi có quyền — không thì mỗi lần làm mới lại ăn một cặp 403.
       coQuyen("USER.VIEW") ? api("/api/users") : Promise.resolve([]),
@@ -478,6 +484,7 @@ async function load(){
     dsVaiTro = roles;
     dsQuyen = quyenDanhMuc;
     renderUsers(users);
+    dungOChonKho(users);
     renderRoles(roles);
     apDungQuyen();
   } catch(e){
@@ -595,7 +602,8 @@ function renderKho(rows){
   if (document.activeElement?.closest?.("#kho-form")) return;
 
   const area = document.getElementById("kho-area");
-  document.getElementById("kho-count").textContent = rows.length + " file";
+  document.getElementById("kho-count").textContent =
+    rows.length + " file · " + (khoDangXem ? "kho của " + khoDangXem : "kho của tôi");
   area.innerHTML = "";
   if (!rows.length){
     area.appendChild(el("div", {class:"empty"}, "Kho của user này chưa có file nào."));
@@ -618,6 +626,21 @@ function renderKho(rows){
           catch(e){ showErr(e.message); }
         }}, "Xoá")))))));
   area.appendChild(table);
+}
+
+/// Đổ danh sách người vào ô chọn kho. Chỉ ai có KHO.VIEW_ALL mới thấy ô này.
+function dungOChonKho(users){
+  const o = document.getElementById("kho-user");
+  if (!o || document.activeElement === o) return;
+
+  const dang = o.value;
+  o.innerHTML = "";
+  o.appendChild(el("option", {value:""}, "kho của tôi"));
+  for (const u of users){
+    if (u.email === phien?.nguoiDung?.email) continue;
+    o.appendChild(el("option", {value:u.email}, u.email));
+  }
+  o.value = dang;
 }
 
 function renderUsers(rows){
@@ -876,13 +899,14 @@ goiForm.addEventListener("submit", async (ev) => {
 });
 
 const khoForm = document.getElementById("kho-form");
-document.getElementById("kho-xem").addEventListener("click", () => load());
+document.getElementById("kho-user").addEventListener("change", (ev) => {
+  khoDangXem = ev.target.value;
+  load();
+});
 
 khoForm.addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const user = document.getElementById("kho-user").value.trim();
   const files = document.getElementById("kho-file").files;
-  if (!user){ showErr("Nhập tên user trước."); return; }
   if (!files.length){ showErr("Chưa chọn file."); return; }
 
   // Không dùng api() vì nó đặt sẵn Content-Type application/json, mà multipart
@@ -893,14 +917,16 @@ khoForm.addEventListener("submit", async (ev) => {
   if (mota) fd.append("moTa", mota);
 
   try {
-    const res = await fetch(API + `/api/kho/${encodeURIComponent(user)}`, {method:"POST", body: fd, headers: headerAuth()});
+    // Luôn vào kho của chính mình. Không có đường nào đẩy file vào kho
+    // người khác — đó là mạo danh, khác hẳn việc đọc.
+    const res = await fetch(API + "/api/kho", {method:"POST", body: fd, headers: headerAuth()});
     if (!res.ok){
       let msg = res.status + " " + res.statusText;
       try { const b = await res.json(); if (b?.error) msg = b.error; } catch {}
       throw new Error(msg);
     }
     const ds = await res.json();
-    showToast(`Đã nhận ${ds.length} file vào kho của ${user}`);
+    showToast(`Đã nhận ${ds.length} file vào kho của bạn`);
     showErr(null);
     document.getElementById("kho-file").value = "";
     document.getElementById("kho-mota").value = "";
@@ -938,6 +964,7 @@ function apDungQuyen(){
   };
   an("toggle-add", coQuyen("BENCH.CREATE"));
   an("sec-user", coQuyen("USER.VIEW"));
+  an("kho-chon-boc", coQuyen("KHO.VIEW_ALL"));
   an("sec-role", coQuyen("ROLE.VIEW"));
   an("toggle-user", coQuyen("USER.CREATE"));
   an("toggle-goi", coQuyen("TESTCASE.UPLOAD") || coQuyen("CONFIG.UPLOAD"));
