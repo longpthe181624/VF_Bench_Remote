@@ -185,3 +185,50 @@ public record DangNhapResponse(
     string RefreshToken,
     DateTimeOffset HetHanLuc,
     NguoiDungDto NguoiDung);
+
+// ------------------------------------------------- quản trị người dùng
+
+public record NguoiDungTomTatDto(
+    int Id,
+    string Email,
+    string HoTen,
+    List<string> VaiTro,
+    bool DangBiKhoa,
+    DateTimeOffset? KhoaDenLuc,
+    DateTimeOffset TaoLuc)
+{
+    public static NguoiDungTomTatDto From(User u, List<string> vaiTro) => new(
+        u.Id, u.Email, u.HoTen, vaiTro,
+        u.KhoaDenLuc is { } d && d > DateTimeOffset.UtcNow,
+        u.KhoaDenLuc, u.TaoLuc);
+}
+
+public record TaoNguoiDungRequest(
+    string Email, string HoTen, string MatKhau, List<string>? VaiTro);
+
+public record SuaNguoiDungRequest(string? HoTen);
+
+public record GanVaiTroRequest(List<string> VaiTro);
+
+public record DatLaiMatKhauRequest(string MatKhauMoi);
+
+// ------------------------------------------------- vai trò và quyền
+
+public record VaiTroDto(
+    int Id,
+    string Ma,
+    string Ten,
+    string? MoTa,
+    int SoNguoiDung,
+    List<string> Quyen)
+{
+    public static VaiTroDto From(Role r, int soNguoiDung, List<string> quyen) => new(
+        r.Id, r.Ma, r.Ten, r.MoTa, soNguoiDung, quyen);
+}
+
+public record TaoVaiTroRequest(string Ma, string Ten, string? MoTa, List<string>? Quyen);
+
+public record GanQuyenRequest(List<string> Quyen);
+
+/// <summary>Một quyền trong danh mục, để màn quản trị dựng danh sách chọn.</summary>
+public record QuyenDto(string Ma, string Module, string Action, string Ten);

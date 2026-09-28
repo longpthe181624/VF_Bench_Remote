@@ -200,6 +200,35 @@
     <div id="bc-area"></div>
   </section>
 
+  <section id="sec-user" style="display:none">
+    <div class="sec-head">
+      <h2>Người dùng</h2>
+      <span class="count" id="user-count"></span>
+      <span style="flex:1"></span>
+      <button id="toggle-user">+ Thêm người dùng</button>
+    </div>
+
+    <form class="addbench" id="user-form">
+      <input id="u-email" type="email" placeholder="email" style="width:200px" required>
+      <input id="u-hoten" placeholder="họ tên" style="width:160px">
+      <input id="u-mk" type="password" placeholder="mật khẩu (từ 8 ký tự)" style="width:180px" required>
+      <span class="meta" id="u-vaitro"></span>
+      <button type="submit">Tạo</button>
+      <button type="button" id="u-huy">Huỷ</button>
+    </form>
+
+    <div id="user-area"></div>
+  </section>
+
+  <section id="sec-role" style="display:none">
+    <div class="sec-head">
+      <h2>Vai trò</h2>
+      <span class="count" id="role-count"></span>
+    </div>
+    <div id="role-area"></div>
+    <div id="role-sua"></div>
+  </section>
+
   <section>
     <div class="sec-head">
       <h2>Cảnh báo đang mở</h2>
@@ -251,6 +280,12 @@ const STATE_LABEL = {
 const pendingTestCase = {};
 // Danh sách bench của lượt load gần nhất, dùng cho ô chọn bench khi đẩy gói.
 let benchesHienTai = [];
+
+// Danh sách vai trò và danh mục quyền của lượt load gần nhất. Dùng để dựng ô
+// chọn vai trò cho từng người và bảng tick quyền cho từng vai trò.
+let dsVaiTro = [];
+let dsQuyen = [];
+let vaiTroDangSua = null;
 
 function el(tag, attrs, ...children){
   const n = document.createElement(tag);
@@ -376,7 +411,7 @@ async function load(){
   if (state) params.set("state", state);
 
   try {
-    const [benches, alerts, goi, baoCao, kho] = await Promise.all([
+    const [benches, alerts, goi, baoCao, kho, users, roles, quyenDanhMuc] = await Promise.all([
       api("/api/benches" + (params.toString() ? "?" + params.toString() : "")),
       api("/api/alerts"),
       api("/api/test-cases"),
@@ -386,6 +421,10 @@ async function load(){
       (document.getElementById("kho-user").value.trim()
         ? api(`/api/kho/${encodeURIComponent(document.getElementById("kho-user").value.trim())}`)
         : Promise.resolve([])),
+      // Chỉ hỏi khi có quyền — không thì mỗi lần làm mới lại ăn một cặp 403.
+      coQuyen("USER.VIEW") ? api("/api/users") : Promise.resolve([]),
+      coQuyen("ROLE.VIEW") ? api("/api/roles") : Promise.resolve([]),
+      coQuyen("ROLE.VIEW") ? api("/api/permissions") : Promise.resolve([]),
     ]);
     showErr(null);
     benchesHienTai = benches;
@@ -394,6 +433,10 @@ async function load(){
     renderGoi(goi);
     renderBaoCao(baoCao);
     renderKho(kho);
+    dsVaiTro = roles;
+    dsQuyen = quyenDanhMuc;
+    renderUsers(users);
+    renderRoles(roles);
     apDungQuyen();
   } catch(e){
     showErr("Không tải được dữ liệu: " + e.message);
@@ -533,6 +576,145 @@ function renderKho(rows){
           catch(e){ showErr(e.message); }
         }}, "Xoá")))))));
   area.appendChild(table);
+}
+
+function renderUsers(rows){
+  if (document.activeElement?.closest?.("#user-form")) return;
+
+  document.getElementById("user-count").textContent = rows.length + " người";
+  const area = document.getElementById("user-area");
+  area.innerHTML = "";
+  if (!rows.length){
+    area.appendChild(el("div", {class:"empty"}, "Chưa có người dùng nào."));
+    return;
+  }
+
+  const table = el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Người dùng"), el("th", {}, "Vai trò"),
+      el("th", {}, "Trạng thái"), el("th", {}, "Tạo lúc"), el("th", {}, "Hành động"))),
+    el("tbody", {}, ...rows.map(u => {
+      // Mỗi vai trò một ô tick, đổi là lưu ngay. Ít vai trò nên không cần hộp
+      // thoại riêng.
+      const ticks = dsVaiTro.map(r => {
+        const box = el("input", {type:"checkbox"});
+        box.checked = (u.vaiTro || []).includes(r.ma);
+        box.disabled = !coQuyen("USER.UPDATE");
+        box.addEventListener("change", async () => {
+          const chon = dsVaiTro.filter(x => {
+            const e = document.getElementById(`vt-${u.id}-${x.ma}`);
+            return e ? e.checked : false;
+          }).map(x => x.ma);
+          try {
+            await api(`/api/users/${u.id}/roles`, {method:"PUT", body: JSON.stringify({vaiTro: chon})});
+            showToast(`Đã đổi vai trò của ${u.email}`);
+            showErr(null); load();
+          } catch(e){ showErr(e.message); box.checked = !box.checked; }
+        });
+        box.id = `vt-${u.id}-${r.ma}`;
+        return el("label", {class:"meta", style:"margin-right:10px"}, box, " " + r.ma);
+      });
+
+      const nut = [];
+      if (coQuyen("USER.UPDATE")){
+        nut.push(el("button", {onclick: async () => {
+          const duong = u.dangBiKhoa ? "unlock" : "lock";
+          try { await api(`/api/users/${u.id}/${duong}`, {method:"POST"});
+                showToast(u.dangBiKhoa ? "Đã mở khoá" : "Đã khoá"); showErr(null); load(); }
+          catch(e){ showErr(e.message); }
+        }}, u.dangBiKhoa ? "Mở khoá" : "Khoá"));
+
+        nut.push(el("button", {onclick: async () => {
+          const mk = prompt(`Mật khẩu mới cho ${u.email} (từ 8 ký tự):`);
+          if (!mk) return;
+          try { await api(`/api/users/${u.id}/reset-password`, {method:"POST", body: JSON.stringify({matKhauMoi: mk})});
+                showToast("Đã đặt lại mật khẩu, phiên cũ bị đăng xuất"); showErr(null); }
+          catch(e){ showErr(e.message); }
+        }}, "Đặt lại mật khẩu"));
+      }
+      if (coQuyen("USER.DELETE")){
+        nut.push(el("button", {class:"ghost", onclick: async () => {
+          if (!confirm(`Xoá ${u.email}?`)) return;
+          try { await api(`/api/users/${u.id}`, {method:"DELETE"}); showToast("Đã xoá"); showErr(null); load(); }
+          catch(e){ showErr(e.message); }
+        }}, "Xoá"));
+      }
+
+      return el("tr", {},
+        el("td", {}, el("div", {class:"code"}, u.email), el("div", {class:"sub"}, u.hoTen)),
+        el("td", {}, ...ticks),
+        el("td", {}, u.dangBiKhoa ? el("span", {class:"alert-msg"}, "đang khoá") : "bình thường"),
+        el("td", {}, new Date(u.taoLuc).toLocaleDateString("vi-VN")),
+        el("td", {}, el("div", {class:"actions"}, ...nut)));
+    })));
+  area.appendChild(table);
+}
+
+function renderRoles(rows){
+  document.getElementById("role-count").textContent = rows.length + " vai trò";
+  const area = document.getElementById("role-area");
+  area.innerHTML = "";
+  if (!rows.length) return;
+
+  const table = el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Vai trò"), el("th", {}, "Người giữ"),
+      el("th", {}, "Số quyền"), el("th", {}, "Hành động"))),
+    el("tbody", {}, ...rows.map(r => {
+      const nut = [];
+      // Vai trò Admin bỏ qua mọi kiểm tra quyền nên sửa bộ quyền của nó chỉ
+      // tạo ảo giác là đã hạn chế được gì đó. Server cũng từ chối.
+      if (coQuyen("ROLE.UPDATE") && r.ma !== "Admin"){
+        nut.push(el("button", {onclick: () => { vaiTroDangSua = r.id; veBangQuyen(r); }}, "Sửa quyền"));
+      }
+      if (coQuyen("ROLE.DELETE") && r.ma !== "Admin"){
+        nut.push(el("button", {class:"ghost", onclick: async () => {
+          if (!confirm(`Xoá vai trò ${r.ma}?`)) return;
+          try { await api(`/api/roles/${r.id}`, {method:"DELETE"}); showToast("Đã xoá"); showErr(null); load(); }
+          catch(e){ showErr(e.message); }
+        }}, "Xoá"));
+      }
+      return el("tr", {},
+        el("td", {}, el("div", {class:"code"}, r.ma), el("div", {class:"sub"}, r.ten)),
+        el("td", {}, r.soNguoiDung + " người"),
+        el("td", {}, r.ma === "Admin" ? "toàn quyền" : r.quyen.length + " quyền"),
+        el("td", {}, el("div", {class:"actions"}, ...nut)));
+    })));
+  area.appendChild(table);
+}
+
+/// Bảng tick quyền cho một vai trò, nhóm theo module cho dễ nhìn.
+function veBangQuyen(role){
+  const khung = document.getElementById("role-sua");
+  khung.innerHTML = "";
+  if (!role) return;
+
+  const dangCo = new Set(role.quyen || []);
+  const theoModule = {};
+  for (const q of dsQuyen) (theoModule[q.module] ||= []).push(q);
+
+  const hang = Object.entries(theoModule).map(([mod, ds]) =>
+    el("div", {style:"margin:6px 0"},
+      el("span", {class:"code", style:"display:inline-block;width:90px"}, mod),
+      ...ds.map(q => {
+        const box = el("input", {type:"checkbox", id:"q-" + q.ma});
+        box.checked = dangCo.has(q.ma);
+        return el("label", {class:"meta", style:"margin-right:12px"}, box, " " + q.action);
+      })));
+
+  khung.appendChild(el("div", {class:"addbench show", style:"flex-direction:column;align-items:flex-start"},
+    el("div", {class:"meta"}, `Quyền của vai trò ${role.ma} — ${role.ten}`),
+    ...hang,
+    el("div", {class:"actions", style:"margin-top:8px"},
+      el("button", {onclick: async () => {
+        const chon = dsQuyen.filter(q => document.getElementById("q-" + q.ma)?.checked).map(q => q.ma);
+        try {
+          await api(`/api/roles/${role.id}/permissions`, {method:"PUT", body: JSON.stringify({quyen: chon})});
+          showToast(`Đã lưu ${chon.length} quyền cho ${role.ma}`);
+          showErr(null); vaiTroDangSua = null; khung.innerHTML = ""; load();
+        } catch(e){ showErr(e.message); }
+      }}, "Lưu"),
+      el("button", {class:"ghost", onclick: () => { vaiTroDangSua = null; khung.innerHTML = ""; }}, "Đóng"))));
 }
 
 function renderBaoCao(rows){
@@ -710,9 +892,47 @@ function apDungQuyen(){
     if (e) e.style.display = co ? "" : "none";
   };
   an("toggle-add", coQuyen("BENCH.CREATE"));
+  an("sec-user", coQuyen("USER.VIEW"));
+  an("sec-role", coQuyen("ROLE.VIEW"));
+  an("toggle-user", coQuyen("USER.CREATE"));
   an("toggle-goi", coQuyen("TESTCASE.UPLOAD") || coQuyen("CONFIG.UPLOAD"));
   an("kho-form", coQuyen("KHO.UPLOAD"));
 }
+
+const userForm = document.getElementById("user-form");
+document.getElementById("toggle-user").addEventListener("click", () => {
+  userForm.classList.toggle("show");
+  // Dựng ô tick vai trò mỗi lần mở, vì danh sách vai trò có thể vừa đổi.
+  const o = document.getElementById("u-vaitro");
+  o.innerHTML = "";
+  for (const r of dsVaiTro){
+    const box = el("input", {type:"checkbox", id:"u-vt-" + r.ma});
+    if (r.ma === "Viewer") box.checked = true;
+    o.appendChild(el("label", {style:"margin-right:10px"}, box, " " + r.ma));
+  }
+});
+document.getElementById("u-huy").addEventListener("click", () => {
+  userForm.classList.remove("show");
+  userForm.reset();
+});
+
+userForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const body = {
+    email: document.getElementById("u-email").value.trim(),
+    hoTen: document.getElementById("u-hoten").value.trim(),
+    matKhau: document.getElementById("u-mk").value,
+    vaiTro: dsVaiTro.filter(r => document.getElementById("u-vt-" + r.ma)?.checked).map(r => r.ma),
+  };
+  try {
+    const u = await api("/api/users", {method:"POST", body: JSON.stringify(body)});
+    showToast(`Đã tạo ${u.email}`);
+    showErr(null);
+    userForm.reset();
+    userForm.classList.remove("show");
+    load();
+  } catch(e){ showErr(e.message); }
+});
 
 document.getElementById("dn-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
