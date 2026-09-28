@@ -52,13 +52,20 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // EnsureCreated đủ cho giai đoạn thử nghiệm: nó tạo bảng theo đúng model
-    // hiện tại. Nhược điểm là KHÔNG nâng cấp được schema — sửa entity rồi chạy
-    // lại sẽ không đổi bảng cũ. Khi schema ổn định thì chuyển sang migration:
-    //     dotnet ef migrations add Init
-    //     dotnet ef database update
-    // rồi thay dòng dưới bằng db.Database.Migrate().
-    await db.Database.EnsureCreatedAsync();
+    // Migrate() thay cho EnsureCreated() từ 28/09. Lý do đổi: EnsureCreated chỉ
+    // tạo database khi nó CHƯA tồn tại, và không bao giờ nâng cấp schema. Ba lần
+    // liên tiếp phải gõ SQL tay trên máy A (bảng GoiTestCases, bảng BaoCaoChays,
+    // rồi thêm cột Loai + đổi index) — lần thứ tư là phần user/role/permission
+    // với 5 bảng và 2 khoá phức hợp, gõ tay là chuốc lỗi.
+    //
+    // Thêm bảng mới về sau:
+    //     dotnet ef migrations add <TenMoTa> --project BenchConsole.Api
+    // rồi chạy lại backend, nó tự áp.
+    //
+    // CẢNH BÁO cho database đã có sẵn: Migrate() sẽ cố CREATE TABLE trên những
+    // bảng đang tồn tại và chết ngay lúc khởi động. Phải GẮN MỐC một lần —
+    // xem mục "Chuyển sang EF migration" trong CLAUDE.md.
+    await db.Database.MigrateAsync();
 
     if (app.Environment.IsDevelopment())
         await DevSeed.RunAsync(db);

@@ -835,6 +835,57 @@ Ba lần liên tiếp làm tay, lần này còn phải đổi cả index. **Chuy
 migration trước khi thêm bảng thứ tư** — chi phí đang dồn lại, và một câu SQL
 gõ sai trên máy A thì không có gì bắt được.
 
+## Chuyển sang EF migration — làm 28/09
+
+`EnsureCreated()` đã bỏ. `Program.cs` nay gọi `db.Database.MigrateAsync()`.
+
+Lý do đổi: ba lần liên tiếp phải gõ SQL tay trên máy A — tạo `GoiTestCases`,
+tạo `BaoCaoChays`, rồi thêm cột `Loai` và đổi index. Việc sắp tới là
+user/role/permission với **5 bảng và 2 khoá phức hợp**; gõ tay là chuốc lỗi mà
+không có gì bắt được.
+
+Migration đầu: `20260928031851_Init`, gồm **8 bảng, 9 index**, sinh từ model
+hiện tại nên khớp đúng những gì máy A đang có.
+
+### Máy A phải GẮN MỐC một lần, nếu không backend chết lúc khởi động
+
+Database máy A **đã có sẵn cả 8 bảng**. `Migrate()` không biết điều đó, nó sẽ
+cố `CREATE TABLE` trên bảng đang tồn tại rồi ném lỗi ngay lúc khởi động.
+
+Cách xử lý là báo cho EF biết migration `Init` **coi như đã áp rồi** — tạo bảng
+lịch sử và chèn đúng một dòng:
+
+```sql
+IF OBJECT_ID(N'__EFMigrationsHistory') IS NULL
+CREATE TABLE __EFMigrationsHistory (
+    MigrationId    nvarchar(150) NOT NULL PRIMARY KEY,
+    ProductVersion nvarchar(32)  NOT NULL
+);
+INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion)
+SELECT '20260928031851_Init', '8.0.10'
+WHERE NOT EXISTS (SELECT 1 FROM __EFMigrationsHistory
+                  WHERE MigrationId = '20260928031851_Init');
+```
+
+Chạy đúng một lần trên máy A, **trước khi** khởi động bản mới. Câu lệnh viết
+để chạy lại nhiều lần cũng không sao.
+
+**Máy mới, database trống thì không phải làm gì** — `Migrate()` tự dựng đủ.
+
+Gắn mốc giả định schema đang có **khớp với model**. Nó khớp vì mấy bảng đó do
+chính `EnsureCreated()` và mấy câu SQL trong tài liệu này tạo ra. Nếu có ai sửa
+tay thêm ngoài luồng thì phải soi lại trước khi gắn mốc.
+
+### Từ nay thêm bảng thế nào
+
+```bash
+dotnet ef migrations add <TenMoTa> --project BenchConsole.Api
+```
+
+Rồi chạy lại backend — nó tự áp. **Không gõ `CREATE TABLE` bằng tay nữa.**
+
+Công cụ cài một lần: `dotnet tool install --global dotnet-ef --version 8.*`
+
 ## Model và mã bench — chốt 24/09
 
 **Bench chạy theo chiếc xe đang nằm trong nó.** Tên model là biến thể theo thị
