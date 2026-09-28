@@ -1,4 +1,5 @@
 using BenchConsole.Core.Contracts;
+using BenchConsole.Core.Auth;
 using BenchConsole.Core.Messaging;
 using BenchConsole.Core.Models;
 
@@ -360,6 +361,96 @@ var goiCfg = new GoiTestCase
 var dtoCfg = GoiTestCaseDto.From(goiCfg);
 Check(dtoCfg.Loai == LoaiGoi.Config && dtoCfg.SoTestCase == 0,
       "gói config có 0 bài test là bình thường, DTO phải mang đúng loại");
+
+Console.WriteLine();
+Console.WriteLine("── Phân quyền: cho phép hay từ chối");
+
+string[] quyenKySu = [MaQuyen.BenchView, MaQuyen.BenchRun, MaQuyen.TestCaseUpload];
+string[] khongVaiTro = [];
+
+Check(QuyenTruyCap.ChoPhep(quyenKySu, khongVaiTro, MaQuyen.BenchRun),
+      "có đúng quyền thì được làm");
+Check(!QuyenTruyCap.ChoPhep(quyenKySu, khongVaiTro, MaQuyen.BenchDelete),
+      "không có quyền thì bị từ chối");
+
+// Đây là phép kiểm quan trọng nhất của cả mục này. Gắn [HasPermission("")] do
+// sơ suất mà lại thành mở toang endpoint là kiểu hỏng tệ nhất — nhìn vào code
+// thấy có thuộc tính bảo vệ, tưởng đã an toàn.
+Check(!QuyenTruyCap.ChoPhep(quyenKySu, khongVaiTro, null),
+      "yêu cầu quyền rỗng phải TỪ CHỐI, tuyệt đối không mặc định cho qua");
+Check(!QuyenTruyCap.ChoPhep(quyenKySu, khongVaiTro, "   "),
+      "yêu cầu toàn khoảng trắng cũng phải từ chối");
+
+Check(!QuyenTruyCap.ChoPhep(null, null, MaQuyen.BenchView),
+      "chưa đăng nhập, không claim nào, thì từ chối chứ không ném exception");
+Check(!QuyenTruyCap.ChoPhep([], [], MaQuyen.BenchView),
+      "danh sách rỗng thì từ chối");
+
+// Lệch hoa thường giữa lúc seed và lúc khai báo sẽ từ chối im lặng, mà triệu
+// chứng "tôi có quyền mà vẫn bị chặn" rất khó lần ra.
+Check(QuyenTruyCap.ChoPhep(["bench.run"], khongVaiTro, "BENCH.RUN"),
+      "so sánh mã quyền không được phân biệt hoa thường");
+Check(QuyenTruyCap.ChoPhep([" BENCH.RUN "], khongVaiTro, MaQuyen.BenchRun),
+      "khoảng trắng thừa hai đầu không được làm hỏng phép so");
+
+Console.WriteLine();
+Console.WriteLine("── Admin bỏ qua mọi kiểm tra quyền");
+
+Check(QuyenTruyCap.ChoPhep([], ["Admin"], MaQuyen.UserDelete),
+      "Admin làm được mọi thứ dù không có quyền nào trong danh sách");
+Check(QuyenTruyCap.LaAdmin(["Viewer", "admin"]),
+      "vai trò Admin nhận ra không phân biệt hoa thường");
+Check(!QuyenTruyCap.LaAdmin(["Engineer", "Viewer"]),
+      "không có vai trò Admin thì không phải admin");
+Check(!QuyenTruyCap.LaAdmin(null) && !QuyenTruyCap.LaAdmin([]),
+      "null và rỗng đều không phải admin");
+Check(!QuyenTruyCap.LaAdmin(["Administrator"]),
+      "tên vai trò gần giống KHÔNG được tính là Admin");
+
+// Admin bypass, nhưng yêu cầu rỗng vẫn là sai ở phía người lập trình.
+Check(!QuyenTruyCap.ChoPhep([], ["Admin"], ""),
+      "kể cả Admin, yêu cầu quyền rỗng vẫn phải từ chối — đó là lỗi khai báo");
+
+Console.WriteLine();
+Console.WriteLine("── Kho theo user: quyền sở hữu, thứ RBAC thuần không nói được");
+
+string[] chiKhoView = [MaQuyen.KhoView];
+string[] coViewAll = [MaQuyen.KhoView, MaQuyen.KhoViewAll];
+
+Check(QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, "long.pt", "long.pt"),
+      "kho của chính mình thì chỉ cần KHO.VIEW");
+Check(!QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, "long.pt", "nguoi.khac"),
+      "KHO.VIEW KHÔNG cho xem kho người khác");
+Check(QuyenTruyCap.XemDuocKho(coViewAll, khongVaiTro, "long.pt", "nguoi.khac"),
+      "có KHO.VIEW_ALL mới xem được kho người khác");
+Check(QuyenTruyCap.XemDuocKho([], ["Admin"], "admin", "nguoi.khac"),
+      "Admin xem được mọi kho");
+Check(QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, "Long.PT", "long.pt"),
+      "tên người dùng so không phân biệt hoa thường");
+Check(!QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, null, "long.pt"),
+      "chưa đăng nhập thì không xem được kho nào");
+Check(!QuyenTruyCap.XemDuocKho(coViewAll, khongVaiTro, "long.pt", null),
+      "không nêu chủ kho thì từ chối");
+
+Console.WriteLine();
+Console.WriteLine("── Danh mục quyền");
+
+Check(MaQuyen.TatCa.Count >= 24, $"danh mục phải đủ quyền, đang có {MaQuyen.TatCa.Count}");
+Check(MaQuyen.TatCa.Select(q => q.Ma).Distinct().Count() == MaQuyen.TatCa.Count,
+      "mã quyền không được trùng nhau — trùng là seed vào database sẽ vỡ unique index");
+Check(MaQuyen.TatCa.All(q => q.Ma == $"{q.Module}.{q.Action}"),
+      "mã quyền phải đúng dạng MODULE.ACTION, khớp với Module và Action đã khai");
+Check(MaQuyen.TatCa.All(q => q.Ma == q.Ma.ToUpperInvariant()),
+      "mã quyền phải viết hoa hết");
+Check(MaQuyen.TatCa.All(q => !string.IsNullOrWhiteSpace(q.Ten)),
+      "quyền nào cũng phải có tên tiếng Việt để hiện trên màn quản trị");
+// Nộp báo cáo là việc của Qauto, mà Qauto cố ý KHÔNG xác thực.
+Check(MaQuyen.TatCa.All(q => q.Ma != "REPORT.UPLOAD"),
+      "không được có REPORT.UPLOAD — endpoint đó để mở cho Qauto");
+
+Check(AuthConstants.PermissionClaimType == "permission"
+      && AuthConstants.TokenUseAccess == "access",
+      "tên claim phải đúng như đã thống nhất, lệch là đăng nhập được mà không có quyền nào");
 
 // ---------------------------------------------------------------- kết quả
 Console.WriteLine($"\n{'='}{new string('=', 50)}");
