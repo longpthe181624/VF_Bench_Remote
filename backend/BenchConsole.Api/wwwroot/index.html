@@ -158,6 +158,29 @@
 
   <section>
     <div class="sec-head">
+      <h2>Kho theo user</h2>
+      <span class="count" id="kho-count"></span>
+    </div>
+
+    <form class="addbench show" id="kho-form" enctype="multipart/form-data">
+      <input id="kho-user" placeholder="tên user" style="width:140px"
+             value="phamlong" required>
+      <input id="kho-file" type="file" multiple required>
+      <input id="kho-mota" placeholder="ghi chú (không bắt buộc)" style="width:200px">
+      <button type="submit">Tải lên</button>
+      <button type="button" id="kho-xem">Xem kho</button>
+      <div class="meta" style="flex-basis:100%">
+        Nhận <b>file bất kỳ</b>, chưa chốt sẽ chứa gì.
+        <b>Tên user chưa phải ranh giới bảo mật</b> — backend chưa có đăng nhập,
+        ai cũng xem và xoá được kho của người khác.
+      </div>
+    </form>
+
+    <div id="kho-area"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
       <h2>Báo cáo nhận về</h2>
       <span class="count" id="bc-count"></span>
     </div>
@@ -302,11 +325,16 @@ async function load(){
   if (state) params.set("state", state);
 
   try {
-    const [benches, alerts, goi, baoCao] = await Promise.all([
+    const [benches, alerts, goi, baoCao, kho] = await Promise.all([
       api("/api/benches" + (params.toString() ? "?" + params.toString() : "")),
       api("/api/alerts"),
       api("/api/test-cases"),
       api("/api/runs/bao-cao/gan-day?limit=20"),
+      // Kho đi theo user nên phải biết xem kho của ai. Ô trống thì bỏ qua chứ
+      // đừng gọi API với tên rỗng — server trả 400 và màn hình đầy chữ đỏ.
+      (document.getElementById("kho-user").value.trim()
+        ? api(`/api/kho/${encodeURIComponent(document.getElementById("kho-user").value.trim())}`)
+        : Promise.resolve([])),
     ]);
     showErr(null);
     benchesHienTai = benches;
@@ -314,6 +342,7 @@ async function load(){
     renderAlerts(alerts);
     renderGoi(goi);
     renderBaoCao(baoCao);
+    renderKho(kho);
   } catch(e){
     showErr("Không tải được dữ liệu: " + e.message);
   }
@@ -419,6 +448,37 @@ function renderGoi(rows){
       el("th", {}, "Dung lượng"),
       el("th", {}, "sha256"), el("th", {}, "Tải lên"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...rows.map(goiRow)));
+  area.appendChild(table);
+}
+
+function renderKho(rows){
+  // Đang gõ dở trong form thì bỏ qua lượt vẽ lại này, nếu không mỗi 5 giây
+  // người dùng lại mất chữ đang gõ.
+  if (document.activeElement?.closest?.("#kho-form")) return;
+
+  const area = document.getElementById("kho-area");
+  document.getElementById("kho-count").textContent = rows.length + " file";
+  area.innerHTML = "";
+  if (!rows.length){
+    area.appendChild(el("div", {class:"empty"}, "Kho của user này chưa có file nào."));
+    return;
+  }
+  const table = el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "File"), el("th", {}, "Cỡ"), el("th", {}, "Ghi chú"),
+      el("th", {}, "Tải lên lúc"), el("th", {}, ""))),
+    el("tbody", {}, ...rows.map(t => el("tr", {},
+      el("td", {}, el("span", {class:"code"}, t.tenFile)),
+      el("td", {}, kbGon(t.kichThuoc)),
+      el("td", {}, t.moTa || "—"),
+      el("td", {}, new Date(t.taiLenLuc).toLocaleString("vi-VN")),
+      el("td", {}, el("div", {class:"actions"},
+        el("a", {href: API + `/api/kho/tep/${t.id}/tai`}, "Tải về"),
+        el("button", {class:"ghost", onclick: async () => {
+          if (!confirm(`Xoá ${t.tenFile}?`)) return;
+          try { await api(`/api/kho/tep/${t.id}`, {method:"DELETE"}); showToast(`Đã xoá ${t.tenFile}`); load(); }
+          catch(e){ showErr(e.message); }
+        }}, "Xoá")))))));
   area.appendChild(table);
 }
 
@@ -534,6 +594,39 @@ goiForm.addEventListener("submit", async (ev) => {
     showErr(null);
     goiForm.reset();
     goiForm.classList.remove("show");
+    load();
+  } catch(e){ showErr(e.message); }
+});
+
+const khoForm = document.getElementById("kho-form");
+document.getElementById("kho-xem").addEventListener("click", () => load());
+
+khoForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const user = document.getElementById("kho-user").value.trim();
+  const files = document.getElementById("kho-file").files;
+  if (!user){ showErr("Nhập tên user trước."); return; }
+  if (!files.length){ showErr("Chưa chọn file."); return; }
+
+  // Không dùng api() vì nó đặt sẵn Content-Type application/json, mà multipart
+  // cần trình duyệt tự đặt kèm boundary.
+  const fd = new FormData();
+  for (const f of files) fd.append("file", f);
+  const mota = document.getElementById("kho-mota").value.trim();
+  if (mota) fd.append("moTa", mota);
+
+  try {
+    const res = await fetch(API + `/api/kho/${encodeURIComponent(user)}`, {method:"POST", body: fd});
+    if (!res.ok){
+      let msg = res.status + " " + res.statusText;
+      try { const b = await res.json(); if (b?.error) msg = b.error; } catch {}
+      throw new Error(msg);
+    }
+    const ds = await res.json();
+    showToast(`Đã nhận ${ds.length} file vào kho của ${user}`);
+    showErr(null);
+    document.getElementById("kho-file").value = "";
+    document.getElementById("kho-mota").value = "";
     load();
   } catch(e){ showErr(e.message); }
 });
