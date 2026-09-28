@@ -166,6 +166,8 @@ public record DangNhapRequest(string Email, string MatKhau);
 
 public record LamMoiRequest(string RefreshToken);
 
+public record DoiMatKhauRequest(string MatKhauCu, string MatKhauMoi);
+
 /// <summary>
 /// Người đang đăng nhập. Giao diện dựa vào <c>Quyen</c> để ẩn/hiện chức năng.
 ///

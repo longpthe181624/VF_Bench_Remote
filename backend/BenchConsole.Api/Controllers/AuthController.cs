@@ -51,6 +51,31 @@ public class AuthController(AuthService auth) : ControllerBase
     }
 
     /// <summary>
+    /// Tự đổi mật khẩu. Không cần quyền gì — ai cũng đổi được mật khẩu của
+    /// chính mình, và phải biết mật khẩu cũ.
+    /// </summary>
+    [Authorize]
+    [HttpPost("doi-mat-khau")]
+    public async Task<ActionResult<DangNhapResponse>> DoiMatKhau(
+        DoiMatKhauRequest req, CancellationToken ct)
+    {
+        var ma = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(ma, out var id))
+            return Unauthorized(new { error = "Token không mang mã người dùng." });
+
+        try
+        {
+            return await auth.DoiMatKhauAsync(id, req.MatKhauCu, req.MatKhauMoi, ct);
+        }
+        catch (DangNhapThatBai ex)
+        {
+            // 400 chứ không 401: người này ĐÃ đăng nhập hợp lệ, chỉ là nhập
+            // sai mật khẩu cũ hoặc mật khẩu mới không đạt yêu cầu.
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Thông tin người đang đăng nhập, kèm danh sách quyền.
     ///
     /// Giao diện gọi cái này để ẩn/hiện chức năng. Nhắc lại cho rõ: ẩn nút là

@@ -98,6 +98,39 @@ public class AuthService(
         return await CapTokenAsync(user, ct);
     }
 
+    /// <summary>
+    /// Người dùng tự đổi mật khẩu của mình. Phải nhập đúng mật khẩu cũ.
+    ///
+    /// Trả về CẶP TOKEN MỚI chứ không chỉ báo thành công. Lý do: đổi mật khẩu
+    /// làm refresh token cũ mất hiệu lực, nên thiết bị khác bị đăng xuất —
+    /// đúng ý muốn. Nhưng chính người vừa đổi thì không nên bị đá ra, họ vừa
+    /// chứng minh biết mật khẩu cũ rồi.
+    /// </summary>
+    public async Task<DangNhapResponse> DoiMatKhauAsync(
+        int userId, string? cu, string? moi, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(cu) || string.IsNullOrWhiteSpace(moi))
+            throw new DangNhapThatBai("Thiếu mật khẩu cũ hoặc mật khẩu mới.");
+        if (moi.Length < 8)
+            throw new DangNhapThatBai("Mật khẩu mới phải từ 8 ký tự.");
+        if (cu == moi)
+            throw new DangNhapThatBai("Mật khẩu mới trùng mật khẩu cũ.");
+
+        var user = await repo.TheoIdAsync(userId, ct)
+                   ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
+
+        if (!BCrypt.Net.BCrypt.Verify(cu, user.MatKhauHash))
+            throw new DangNhapThatBai("Mật khẩu cũ không đúng.");
+
+        user.MatKhauHash = BCrypt.Net.BCrypt.HashPassword(moi);
+        user.SuaLuc = DateTimeOffset.UtcNow;
+
+        log.LogInformation("{Email} tự đổi mật khẩu", user.Email);
+
+        // CapTokenAsync ghi đè RefreshToken, nên mọi phiên khác chết theo.
+        return await CapTokenAsync(user, ct);
+    }
+
     /// <summary>Thông tin người đang đăng nhập, kèm quyền để giao diện ẩn/hiện.</summary>
     public async Task<NguoiDungDto?> HoSoAsync(int userId, CancellationToken ct)
     {

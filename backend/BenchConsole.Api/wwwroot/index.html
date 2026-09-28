@@ -90,6 +90,7 @@
     <span class="badge">giao diện tạm</span>
     <span class="grow"></span>
     <span class="meta" id="ai-day"></span>
+    <button id="doi-mk" class="ghost" style="display:none">Đổi mật khẩu</button>
     <button id="dang-xuat" class="ghost" style="display:none">Đăng xuất</button>
     <span class="meta" id="clock"></span>
   </header>
@@ -104,6 +105,14 @@
   </section>
 
   <div id="man-chinh">
+
+    <form class="addbench" id="mk-form">
+      <input id="mk-cu" type="password" placeholder="mật khẩu hiện tại" style="width:180px" required>
+      <input id="mk-moi" type="password" placeholder="mật khẩu mới (từ 8 ký tự)" style="width:200px" required>
+      <button type="submit">Đổi mật khẩu</button>
+      <button type="button" id="mk-huy">Huỷ</button>
+    </form>
+
   <div class="meta">Trang tạm gọi thẳng REST API — dùng thay Swagger cho các thao tác thường ngày. Tự làm mới mỗi 5 giây.</div>
 
   <div class="err" id="err"></div>
@@ -268,6 +277,33 @@ function coQuyen(ma){
   return (phien.nguoiDung.quyen || []).includes(ma);
 }
 
+// Một lần làm mới dùng chung cho mọi lời gọi đang chờ. Trang tự làm mới mỗi
+// 5 giây và bắn nhiều request song song — token hết hạn là cả nhóm cùng nhận
+// 401, mỗi cái gọi refresh một lần thì cái sau tiêu mất token cái trước vừa
+// cấp (refresh token xoay vòng), và tất cả cùng hỏng.
+let dangLamMoi = null;
+
+async function thuLamMoiToken(){
+  if (!phien?.refreshToken) return false;
+
+  dangLamMoi ||= (async () => {
+    try {
+      const res = await fetch(API + "/api/auth/refresh", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({refreshToken: phien.refreshToken}),
+      });
+      if (!res.ok) return false;
+      luuPhien(await res.json());
+      return true;
+    } catch { return false; }
+  })();
+
+  const ok = await dangLamMoi;
+  dangLamMoi = null;
+  return ok;
+}
+
 function headerAuth(){
   return phien?.accessToken ? {"Authorization": "Bearer " + phien.accessToken} : {};
 }
@@ -316,14 +352,20 @@ function showErr(msg){
   e.classList.add("show");
 }
 
-async function api(path, opts){
+async function api(path, opts, daThuLamMoi){
   const res = await fetch(API + path, {
     ...opts,
     headers: {"Content-Type": "application/json", ...headerAuth(), ...(opts?.headers || {})},
   });
-  // Token hết hạn hoặc bị thu hồi: đá về màn đăng nhập thay vì để người dùng
-  // nhìn một trang đầy lỗi đỏ mà không hiểu vì sao.
-  if (res.status === 401){ luuPhien(null); veManDangNhap(); throw new Error("Phiên hết hạn, đăng nhập lại."); }
+
+  if (res.status === 401){
+    // Access token sống 30 phút còn refresh token sống 7 ngày. Không thử làm
+    // mới ở đây thì cứ nửa tiếng là người dùng bị đá ra đăng nhập lại, dù vẫn
+    // còn quyền.
+    if (!daThuLamMoi && await thuLamMoiToken()) return api(path, opts, true);
+    luuPhien(null); veManDangNhap();
+    throw new Error("Phiên hết hạn, đăng nhập lại.");
+  }
   if (res.status === 403) throw new Error("Bạn không có quyền làm việc này.");
   if (!res.ok){
     let msg = res.status + " " + res.statusText;
@@ -870,6 +912,8 @@ function veManDangNhap(){
   document.getElementById("man-dang-nhap").style.display = "";
   document.getElementById("man-chinh").style.display = "none";
   document.getElementById("dang-xuat").style.display = "none";
+  document.getElementById("doi-mk").style.display = "none";
+  document.getElementById("mk-form").classList.remove("show");
   document.getElementById("ai-day").textContent = "";
 }
 
@@ -877,6 +921,7 @@ function veManChinh(){
   document.getElementById("man-dang-nhap").style.display = "none";
   document.getElementById("man-chinh").style.display = "";
   document.getElementById("dang-xuat").style.display = "";
+  document.getElementById("doi-mk").style.display = "";
   const nd = phien?.nguoiDung;
   document.getElementById("ai-day").textContent =
     nd ? `${nd.hoTen} · ${(nd.vaiTro || []).join(", ") || "không vai trò"}` : "";
@@ -953,6 +998,35 @@ document.getElementById("dn-form").addEventListener("submit", async (ev) => {
     veManChinh();
     showToast(`Xin chào ${body.nguoiDung.hoTen}`);
     load();
+  } catch(e){ showErr(e.message); }
+});
+
+const mkForm = document.getElementById("mk-form");
+document.getElementById("doi-mk").addEventListener("click", () => {
+  mkForm.classList.toggle("show");
+});
+document.getElementById("mk-huy").addEventListener("click", () => {
+  mkForm.classList.remove("show");
+  mkForm.reset();
+});
+
+mkForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  try {
+    // Trả về cặp token mới: đổi mật khẩu làm refresh token cũ mất hiệu lực,
+    // nên không lưu lại cái mới là chính mình bị đá ra sau 30 phút.
+    const moi = await api("/api/auth/doi-mat-khau", {
+      method: "POST",
+      body: JSON.stringify({
+        matKhauCu: document.getElementById("mk-cu").value,
+        matKhauMoi: document.getElementById("mk-moi").value,
+      }),
+    });
+    luuPhien(moi);
+    mkForm.reset();
+    mkForm.classList.remove("show");
+    showErr(null);
+    showToast("Đã đổi mật khẩu. Thiết bị khác đã bị đăng xuất.");
   } catch(e){ showErr(e.message); }
 });
 
