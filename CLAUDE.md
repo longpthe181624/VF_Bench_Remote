@@ -79,7 +79,7 @@ Windows 11 + Docker Desktop + PowerShell, và Git Bash cho tool Bash.
 - `docker exec` với đường dẫn `/opt/...` trong Git Bash bị đổi thành đường dẫn
   Windows. Phải thêm `MSYS_NO_PATHCONV=1` ở đầu lệnh.
 - Vào SQL trong container:
-  `MSYS_NO_PATHCONV=1 docker exec bench-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Bench!Console1' -C -d BenchConsole -Q "..."`
+  `MSYS_NO_PATHCONV=1 docker exec bench-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SQL_SA_PASSWORD" -C -d BenchConsole -Q "..."`
 - `mosquitto_sub` không có trên host, gọi qua `docker exec -it bench-mqtt mosquitto_sub`.
 - In tiếng Việt từ Python phải đặt `PYTHONIOENCODING=utf-8`, không thì lỗi cp1252.
 - **Không có** LibreOffice và pandoc, nên không render được `.docx` ra ảnh để

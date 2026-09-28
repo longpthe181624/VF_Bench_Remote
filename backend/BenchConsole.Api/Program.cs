@@ -19,7 +19,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseSqlServer(builder.Configuration.GetConnectionString("Default")
         ?? throw new InvalidOperationException(
-            "Thiếu ConnectionStrings:Default trong appsettings.json")));
+            "Thiếu chuỗi kết nối. Nó CỐ Ý không nằm trong appsettings.json "
+            + "vì có mật khẩu, mà file đó nằm trong git.\n\n"
+            + "Chạy bằng Docker: đặt SQL_SA_PASSWORD trong .env.\n\n"
+            + "Chạy bằng dotnet: đặt biến môi trường ConnectionStrings__Default "
+            + "trước khi chạy — .NET KHÔNG tự đọc file .env, chỉ docker compose đọc.\n\n"
+            + "Xem docs/cai-dat.md.")));
 
 // ---------------------------------------------------------------- MQTT
 builder.Services.Configure<MqttOptions>(builder.Configuration.GetSection("Mqtt"));

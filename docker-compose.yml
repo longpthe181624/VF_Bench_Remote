@@ -17,7 +17,8 @@ services:
       ACCEPT_EULA: "Y"
       # Phai trung voi ConnectionStrings:Default trong appsettings.json.
       # SQL Server tu choi mat khau yeu va container se chet ngay khi khoi dong.
-      MSSQL_SA_PASSWORD: "Bench!Console1"
+      # Mật khẩu lấy từ .env, KHÔNG để trong file này vì file này nằm trong git.
+      MSSQL_SA_PASSWORD: "${SQL_SA_PASSWORD:?thiếu SQL_SA_PASSWORD trong .env}"
       MSSQL_PID: Developer
     ports:
       - "127.0.0.1:14330:1433"
@@ -54,7 +55,7 @@ services:
       # Không phải 127.0.0.1,14330 — 14330 là cổng publish ra host, container
       # này không dùng tới. Quy tắc "luôn dùng 127.0.0.1" trong CLAUDE.md chỉ
       # đúng cho chiều host gọi vào container.
-      ConnectionStrings__Default: "Server=sql,1433;Database=BenchConsole;User Id=sa;Password=Bench!Console1;TrustServerCertificate=True;Encrypt=True"
+      ConnectionStrings__Default: "Server=sql,1433;Database=BenchConsole;User Id=sa;Password=${SQL_SA_PASSWORD:?thiếu SQL_SA_PASSWORD trong .env};TrustServerCertificate=True;Encrypt=True"
       Mqtt__Host: mqtt
       Mqtt__Port: "1883"
       # Địa chỉ máy bench dùng để tải gói test case về. Khai ở đây thay vì chỉ
@@ -62,6 +63,16 @@ services:
       # mang ảnh sang máy khác là agent tải sai chỗ. Dùng tên MagicDNS chứ
       # không phải IP thô, để đổi IP Tailscale không phải sửa lại.
       GoiTestCase__BaseUrlChoAgent: "${BENCH_BASE_URL:-http://vinfast.tail1cbef5.ts.net:5000}"
+
+      # Khoá ký JWT. Không đặt thì backend tự sinh ngẫu nhiên mỗi lần khởi
+      # động, tức là mọi người đang đăng nhập đều bị đăng xuất sau mỗi lần
+      # dựng lại container.
+      Jwt__Key: "${JWT_KEY:-}"
+
+      # Tài khoản quản trị đầu tiên. Chỉ dùng khi database chưa có người dùng
+      # nào; không đặt thì backend sinh mật khẩu ngẫu nhiên và in log MỘT LẦN.
+      Auth__AdminEmail: "${ADMIN_EMAIL:-}"
+      Auth__AdminPassword: "${ADMIN_PASSWORD:-}"
     ports:
       # Địa chỉ trói cổng 5000, đặt qua biến API_BIND trong file .env.
       # Mặc định `127.0.0.1` = chỉ chính máy A gọi được.
