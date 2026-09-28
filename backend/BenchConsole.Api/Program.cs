@@ -1,7 +1,16 @@
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Hubs;
 using BenchConsole.Api.Mqtt;
+using System.Security.Cryptography;
+using System.Text;
+using BenchConsole.Api.Auth;
+using BenchConsole.Api.Repository;
 using BenchConsole.Api.Services;
+using BenchConsole.Core.Auth;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,11 +38,91 @@ builder.Services.AddSingleton<KhoGoiTestCase>();
 builder.Services.AddSingleton<KhoBaoCao>();
 builder.Services.AddSingleton<KhoNguoiDung>();
 
+// ------------------------------------------------- xác thực và phân quyền
+//
+// PHẠM VI: xác thực này là của WEB CONSOLE. Qauto KHÔNG xác thực — hai endpoint
+// nó gọi được đánh [AllowAnonymous] tại chỗ. Quyền bên trong Qauto do chính
+// Qauto lo, Console không đảm nhận.
+var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
+
+if (string.IsNullOrWhiteSpace(jwt.Key))
+{
+    // KHÔNG có khoá mặc định trong mã nguồn: ai đọc được repo là tự ký được
+    // token làm admin. Chưa cấu hình thì sinh ngẫu nhiên — hệ thống vẫn chạy,
+    // đổi lại token mất hiệu lực sau mỗi lần khởi động lại.
+    jwt.Key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
+    Console.WriteLine(
+        "[CẢNH BÁO] Chưa đặt Jwt:Key nên khoá ký được sinh ngẫu nhiên. "
+        + "Mọi người đang đăng nhập sẽ bị đăng xuất sau mỗi lần khởi động lại. "
+        + "Đặt Jwt__Key trong .env để giữ phiên.");
+}
+
+builder.Services.AddSingleton(jwt);
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<AuthService>();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(o =>
+    {
+        o.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwt.Issuer,
+            ValidAudience = jwt.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key!)),
+            // Mặc định .NET cho lệch 5 phút. Token đã hết hạn mà vẫn dùng được
+            // thêm 5 phút là quá rộng khi quyền gác việc chạy test trên bench thật.
+            ClockSkew = TimeSpan.FromSeconds(30),
+        };
+    });
+
+builder.Services.AddAuthorization(o =>
+{
+    // Mặc định: phải đăng nhập VÀ token phải là loại `access`. Chặn ngay việc
+    // dùng loại token khác (2FA, đổi mật khẩu...) làm bearer token khi sau này
+    // có thêm chúng.
+    o.DefaultPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .RequireClaim(AuthConstants.TokenUseClaimType, AuthConstants.TokenUseAccess)
+        .Build();
+});
+
+// Dựng policy theo yêu cầu thay vì khai sẵn 24 cái trong file này.
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionHandler>();
+
 // ---------------------------------------------------------------- web
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(o =>
+{
+    // Không có phần này thì nút "Try it out" trên Swagger gọi mọi endpoint mà
+    // không kèm token, và endpoint nào có [Authorize] cũng trả 401 — người thử
+    // sẽ tưởng API hỏng. Mà mình đã bảo đội Qauto và bên tích hợp dùng Swagger.
+    o.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Dán access token lấy từ POST /api/auth/login. Không cần gõ chữ 'Bearer'.",
+    });
+    o.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecurityScheme
+        {
+            Reference = new OpenApiReference
+            {
+                Type = ReferenceType.SecurityScheme, Id = "Bearer",
+            },
+        }] = Array.Empty<string>(),
+    });
+});
 
 const string CorsPolicy = "frontend";
 builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, p => p
@@ -89,6 +178,11 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.UseCors(CorsPolicy);
+
+// Thứ tự BẮT BUỘC: xác thực trước, phân quyền sau. Đảo lại thì lúc kiểm quyền
+// chưa có danh tính, và mọi endpoint có [HasPermission] đều từ chối tất cả.
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 app.MapHub<BenchHub>("/hub/benches");
 

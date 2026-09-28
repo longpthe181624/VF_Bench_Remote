@@ -159,3 +159,29 @@ public record TepNguoiDungDto(
     public static TepNguoiDungDto From(TepNguoiDung t) => new(
         t.Id, t.NguoiDung, t.TenFile, t.KichThuoc, t.MoTa, t.TaiLenLuc);
 }
+
+// --------------------------------------------------------------- xác thực
+
+public record DangNhapRequest(string Email, string MatKhau);
+
+public record LamMoiRequest(string RefreshToken);
+
+/// <summary>
+/// Người đang đăng nhập. Giao diện dựa vào <c>Quyen</c> để ẩn/hiện chức năng.
+///
+/// Ẩn nút là CHUYỆN GIAO DIỆN, không phải bảo vệ — mở DevTools là gọi thẳng
+/// API được. Chỗ chặn thật là <c>[HasPermission]</c> ở phía server. Phải có
+/// cả hai lớp.
+/// </summary>
+public record NguoiDungDto(
+    int Id,
+    string Email,
+    string HoTen,
+    List<string> VaiTro,
+    List<string> Quyen);
+
+public record DangNhapResponse(
+    string AccessToken,
+    string RefreshToken,
+    DateTimeOffset HetHanLuc,
+    NguoiDungDto NguoiDung);
