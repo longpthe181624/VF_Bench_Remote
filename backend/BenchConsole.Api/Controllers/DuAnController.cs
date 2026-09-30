@@ -19,7 +19,7 @@ namespace BenchConsole.Api.Controllers;
 /// không hiểu vì sao.
 /// </summary>
 [ApiController]
-[Route("api/du-an")]
+[Route("api/projects")]
 [Authorize]
 public class DuAnController(AppDbContext db) : ControllerBase
 {

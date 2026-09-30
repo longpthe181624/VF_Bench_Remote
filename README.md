@@ -89,7 +89,7 @@ Máy bench phải được đăng ký trước trên Console, nếu không backe
 liệu:
 
 ```bash
-curl -X POST http://<IP máy A>:5000/api/benches   -H "Content-Type: application/json"   -d '{"code":"QAUTO-01","model":"vf6"}'
+curl -X POST http://<IP máy A>:5000/api/devices   -H "Content-Type: application/json"   -d '{"code":"QAUTO-01","model":"vf6"}'
 ```
 
 ## Tuỳ chọn của giả lập

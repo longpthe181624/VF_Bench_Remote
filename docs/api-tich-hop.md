@@ -3,11 +3,34 @@
 Tài liệu cho người **gọi Bench Console từ code của mình**. Chỉ mô tả hợp đồng,
 không mô tả cách cài đặt bên trong.
 
-Cập nhật 24/09/2026.
+Cập nhật 30/09/2026.
 
 ## 0. Ba điều phải đọc trước khi viết dòng code đầu tiên
 
-**API ĐÃ CÓ xác thực từ 28/09.** Đây là thay đổi GÃY với bản trước.
+**ĐỔI ĐƯỜNG DẪN từ 30/09. Thay đổi GÃY, đường dẫn cũ trả 404.**
+
+Không giữ song song — web chưa chạy thật nên cắt hẳn cho sạch, đổi sau mới là
+thứ phải nhớ dọn.
+
+| Cũ | Mới |
+| --- | --- |
+| `/api/benches` | `/api/devices` |
+| `/api/benches/{code}/trien-khai` | `/api/devices/{code}/deploy` |
+| `/api/kho` | `/api/storage` |
+| `/api/kho/tep/{id}` | `/api/storage/files/{id}` |
+| `/api/test-cases/{id}/tai` | `/api/test-cases/{id}/download` |
+| `/api/runs/report/{id}/tai` | `/api/runs/reports/{id}/download` |
+| `/api/runs/bao-cao/gan-day` | `/api/runs/reports/recent` |
+| `/api/auth/doi-mat-khau` | `/api/auth/change-password` |
+
+Lý do: `/api/benches` nay trả về **cả ECU và xe**, không chỉ bench — tên cũ nói
+sai nội dung. Nhân tiện gom đường dẫn về một thứ tiếng.
+
+**Chỉ ĐƯỜNG DẪN đổi. Tên trường trong JSON và tham số query giữ nguyên tiếng
+Việt** (`loai`, `thuocVe`, `hoTroRemote`, `tenMay`, `duAn`…). Thân request và
+response không đổi một chữ nào, nên chỉ phải sửa chuỗi URL.
+
+**API ĐÃ CÓ xác thực từ 28/09.** Đây cũng là thay đổi GÃY với bản trước.
 
 Lấy token rồi gắn vào mọi request:
 
@@ -28,7 +51,7 @@ lực ngay, nên phải lưu lại cái mới mỗi lần.
 đăng nhập:
 
 ```
-GET  /api/test-cases/{id}/tai       tải gói test case về
+GET  /api/test-cases/{id}/download       tải gói test case về
 POST /api/runs/{cmdId}/report       nộp file kết quả
 ```
 
@@ -70,7 +93,7 @@ hỏi người vận hành máy A, đừng kết luận là API hỏng — các 
 ## 2. Mô hình: lệnh đi một đường, kết quả về đường khác
 
 ```
-     POST /api/benches/{code}/trien-khai
+     POST /api/devices/{code}/deploy
 bạn ──────────────────────────────────> Console ──MQTT──> máy bench
     <────── 202 { cmdId: "a1b2..." } ──┘
                                         máy bench làm việc (vài giây → vài phút)
@@ -80,7 +103,7 @@ bạn ────────────────────────�
 
 `cmdId` là **chìa khoá ghép** mọi thứ về đúng lệnh vừa gửi. Giữ nó lại.
 
-Không dùng được SignalR thì hỏi vòng `GET /api/benches/{code}/runs`, nhưng
+Không dùng được SignalR thì hỏi vòng `GET /api/devices/{code}/runs`, nhưng
 cách đó trễ hơn và tốn hơn.
 
 ## 3. Trạng thái và giá trị hợp lệ
@@ -112,13 +135,13 @@ chưa từng gặp nên Console không dám đoán. Code bên gọi phải xử 
 
 | Endpoint | Method | Việc |
 | --- | --- | --- |
-| `/api/benches` | GET | Danh sách. Lọc: `q`, `state` |
-| `/api/benches/{code}` | GET | Một bench |
-| `/api/benches` | POST | Đăng ký bench mới |
-| `/api/benches/{code}` | PATCH | Sửa. `model` đổi được, `code` thì không |
-| `/api/benches/{code}` | DELETE | Xoá |
-| `/api/benches/{code}/runs` | GET | Lịch sử chạy |
-| `/api/benches/{code}/telemetry` | GET | Số liệu đo |
+| `/api/devices` | GET | Danh sách. Lọc: `q`, `state` |
+| `/api/devices/{code}` | GET | Một bench |
+| `/api/devices` | POST | Đăng ký bench mới |
+| `/api/devices/{code}` | PATCH | Sửa. `model` đổi được, `code` thì không |
+| `/api/devices/{code}` | DELETE | Xoá |
+| `/api/devices/{code}/runs` | GET | Lịch sử chạy |
+| `/api/devices/{code}/telemetry` | GET | Số liệu đo |
 
 `BenchDto`:
 
@@ -143,7 +166,7 @@ nối lần nào** — khác hẳn `0`, vốn nghĩa là vừa nói chuyện xon
 | `/api/test-cases` | POST | Tải gói ZIP lên |
 | `/api/test-cases` | GET | Danh sách gói |
 | `/api/test-cases/{id}` | GET | Một gói |
-| `/api/test-cases/{id}/tai` | GET | Tải file gói về |
+| `/api/test-cases/{id}/download` | GET | Tải file gói về |
 | `/api/test-cases/{id}` | DELETE | Xoá gói |
 
 Tải lên dùng `multipart/form-data`:
@@ -184,10 +207,10 @@ Ràng buộc, nên kiểm sẵn ở phía gọi để người dùng đỡ tải
 
 | Endpoint | Method | Body |
 | --- | --- | --- |
-| `/api/benches/{code}/trien-khai` | POST | `{ "goiId": 1, "issuedBy": "long.pt" }` |
-| `/api/benches/{code}/start` | POST | `{ "testCase": "...", "plan": null, "issuedBy": "..." }` |
-| `/api/benches/{code}/stop` | POST | `?by=long.pt` |
-| `/api/benches/{code}/reset` | POST | `?by=long.pt` |
+| `/api/devices/{code}/deploy` | POST | `{ "goiId": 1, "issuedBy": "long.pt" }` |
+| `/api/devices/{code}/start` | POST | `{ "testCase": "...", "plan": null, "issuedBy": "..." }` |
+| `/api/devices/{code}/stop` | POST | `?by=long.pt` |
+| `/api/devices/{code}/reset` | POST | `?by=long.pt` |
 
 Cả bốn trả `202`:
 
@@ -199,7 +222,7 @@ Tình trạng thật của từng lệnh:
 
 | Lệnh | Tình trạng |
 | --- | --- |
-| `trien-khai` | Đã có, máy bench làm được |
+| `deploy` | Đã có, máy bench làm được |
 | `start`, `stop`, `reset` | Gửi được, nhưng máy bench **đang từ chối** kèm lý do |
 
 Lý do: phần mềm chạy test trên bench chưa có đường nhận lệnh tự động, đang chờ
@@ -254,9 +277,9 @@ Thân lỗi luôn có dạng `{ "error": "câu tiếng Việt giải thích" }`.
 ## 7. Luồng mẫu đầy đủ
 
 ```
-1. GET  /api/benches                     → chọn bench, kiểm state là idle
+1. GET  /api/devices                     → chọn bench, kiểm state là idle
 2. POST /api/test-cases    (multipart)   → nhận goiId
-3. POST /api/benches/QAUTO-01/trien-khai → nhận cmdId, HTTP 202
+3. POST /api/devices/QAUTO-01/deploy → nhận cmdId, HTTP 202
 4. nghe SignalR commandUpdated cmdId     → accepted hay rejected
 5. nghe SignalR runFinished              → verdict pass / fail / unknown
 ```

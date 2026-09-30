@@ -25,7 +25,7 @@ namespace BenchConsole.Api.Controllers;
 /// thân hàm chứ không gắn [HasPermission] ở đầu.
 /// </summary>
 [ApiController]
-[Route("api/kho")]
+[Route("api/storage")]
 [Authorize]
 public class KhoController(
     AppDbContext db,
@@ -136,7 +136,7 @@ public class KhoController(
         return rows.Select(TepNguoiDungDto.From).ToList();
     }
 
-    [HttpGet("tep/{id:int}/tai")]
+    [HttpGet("files/{id:int}/download")]
     public async Task<IActionResult> Tai(int id, CancellationToken ct)
     {
         var tep = await db.TepNguoiDungs.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
@@ -155,7 +155,7 @@ public class KhoController(
         return PhysicalFile(duongDan, "application/octet-stream", tep.TenFile);
     }
 
-    [HttpDelete("tep/{id:int}")]
+    [HttpDelete("files/{id:int}")]
     public async Task<IActionResult> Xoa(int id, CancellationToken ct)
     {
         var tep = await db.TepNguoiDungs.FirstOrDefaultAsync(t => t.Id == id, ct);

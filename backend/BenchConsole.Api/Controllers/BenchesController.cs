@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BenchConsole.Api.Controllers;
 
 [ApiController]
-[Route("api/benches")]
+[Route("api/devices")]
 [Authorize]
 public class BenchesController(
     AppDbContext db,
@@ -351,7 +351,7 @@ public class BenchesController(
     /// agent hiện nhận, vì nó chỉ động tới file — không cần điều khiển Qauto,
     /// nên không vướng câu hỏi còn treo về chạy test từ xa.
     /// </summary>
-    [HttpPost("{code}/trien-khai")]
+    [HttpPost("{code}/deploy")]
     public async Task<ActionResult<CommandAcceptedDto>> TrienKhai(
         string code, TrienKhaiGoiRequest req, CancellationToken ct)
     {
@@ -380,7 +380,7 @@ public class BenchesController(
                 ["id"] = goi.Id,
                 ["loai"] = goi.Loai,
                 ["ten"] = goi.Ten,
-                ["url"] = $"{goc}/api/test-cases/{goi.Id}/tai",
+                ["url"] = $"{goc}/api/test-cases/{goi.Id}/download",
                 ["sha256"] = goi.Sha256,
                 ["kich_thuoc"] = goi.KichThuoc,
                 ["so_test_case"] = goi.SoTestCase,

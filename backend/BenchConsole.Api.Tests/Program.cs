@@ -108,24 +108,24 @@ Check(thanSai.GetProperty("error").GetString() == thanLa.GetProperty("error").Ge
 // ---------------------------------------------------------------- chặn
 Nhom("Endpoint có khoá thì phải chặn");
 
-foreach (var duong in new[] { "/api/benches", "/api/test-cases", "/api/users", "/api/roles" })
+foreach (var duong in new[] { "/api/devices", "/api/test-cases", "/api/users", "/api/roles" })
 {
     var (ma, _) = await Goi(HttpMethod.Get, duong);
     Check(ma == HttpStatusCode.Unauthorized, $"{duong} không token phải trả 401, nhận {ma}");
 }
 
-var (maBia, _) = await Goi(HttpMethod.Get, "/api/benches", token: "khong-phai-token");
+var (maBia, _) = await Goi(HttpMethod.Get, "/api/devices", token: "khong-phai-token");
 Check(maBia == HttpStatusCode.Unauthorized, "token bịa phải trả 401");
 
-var (maCoToken, _) = await Goi(HttpMethod.Get, "/api/benches", token: tokenAdmin);
-Check(maCoToken == HttpStatusCode.OK, $"admin gọi /api/benches phải được, nhận {maCoToken}");
+var (maCoToken, _) = await Goi(HttpMethod.Get, "/api/devices", token: tokenAdmin);
+Check(maCoToken == HttpStatusCode.OK, $"admin gọi /api/devices phải được, nhận {maCoToken}");
 
 // ---------------------------------------------------------------- để mở
 Nhom("Hai endpoint của Qauto phải ĐỂ MỞ");
 
 // Đây là phép kiểm canh chuyện siết bảo mật làm gãy luồng kết quả: hai đường
 // này Qauto gọi, mà Qauto cố ý không xác thực.
-var (maTai, _) = await Goi(HttpMethod.Get, "/api/test-cases/999999/tai");
+var (maTai, _) = await Goi(HttpMethod.Get, "/api/test-cases/999999/download");
 Check(maTai == HttpStatusCode.NotFound,
       $"tải gói không token phải tới được controller (404 vì không có gói), nhận {maTai}");
 
@@ -151,14 +151,14 @@ Check(maTaoUser == HttpStatusCode.OK, $"admin tạo user phải được, nhận
 
 var tokenViewer = await DangNhap("viewer@thu.local", "Viewer@12345");
 
-var (maXem, _) = await Goi(HttpMethod.Get, "/api/benches", token: tokenViewer);
+var (maXem, _) = await Goi(HttpMethod.Get, "/api/devices", token: tokenViewer);
 Check(maXem == HttpStatusCode.OK, "Viewer phải xem được danh sách bench");
 
 var (maViewerUser, _) = await Goi(HttpMethod.Get, "/api/users", token: tokenViewer);
 Check(maViewerUser == HttpStatusCode.Forbidden,
       $"Viewer KHÔNG được xem danh sách người dùng, nhận {maViewerUser}");
 
-var (maViewerTao, _) = await Goi(HttpMethod.Post, "/api/benches", new
+var (maViewerTao, _) = await Goi(HttpMethod.Post, "/api/devices", new
 {
     code = "THU-01", model = "vf6",
 }, tokenViewer);
@@ -166,14 +166,14 @@ Check(maViewerTao == HttpStatusCode.Forbidden,
       $"Viewer KHÔNG được tạo bench, nhận {maViewerTao}");
 
 // Admin tạo được — chứng minh 403 ở trên là do quyền chứ không phải endpoint hỏng.
-var (maAdminTao, _) = await Goi(HttpMethod.Post, "/api/benches", new
+var (maAdminTao, _) = await Goi(HttpMethod.Post, "/api/devices", new
 {
     code = "THU-01", model = "vf6",
 }, tokenAdmin);
 Check(maAdminTao is HttpStatusCode.Created or HttpStatusCode.OK,
       $"admin tạo bench phải được, nhận {maAdminTao}");
 
-var (maViewerChay, _) = await Goi(HttpMethod.Post, "/api/benches/THU-01/start", new
+var (maViewerChay, _) = await Goi(HttpMethod.Post, "/api/devices/THU-01/start", new
 {
     testCase = "bai-nao-do",
 }, tokenViewer);
@@ -200,18 +200,18 @@ var mpKho = new MultipartFormDataContent
 {
     { new ByteArrayContent("cua ky su"u8.ToArray()), "file", "rieng.txt" },
 };
-var reqKho = new HttpRequestMessage(HttpMethod.Post, "/api/kho") { Content = mpKho };
+var reqKho = new HttpRequestMessage(HttpMethod.Post, "/api/storage") { Content = mpKho };
 reqKho.Headers.Add("Authorization", "Bearer " + tokenKySu);
 var resKho = await http.SendAsync(reqKho);
 Check(resKho.StatusCode == HttpStatusCode.OK,
       $"kỹ sư tải file vào kho của mình phải được, nhận {resKho.StatusCode}");
 
-var (maKhoToi, thanKhoToi) = await Goi(HttpMethod.Get, "/api/kho", token: tokenKySu);
+var (maKhoToi, thanKhoToi) = await Goi(HttpMethod.Get, "/api/storage", token: tokenKySu);
 Check(maKhoToi == HttpStatusCode.OK && thanKhoToi.GetArrayLength() == 1,
       "kỹ sư phải thấy đúng file của mình");
 
 // Chỗ quan trọng nhất của mục này.
-var (maTrom, _) = await Goi(HttpMethod.Get, "/api/kho/admin@benchconsole.local",
+var (maTrom, _) = await Goi(HttpMethod.Get, "/api/storage/admin@benchconsole.local",
     token: tokenKySu);
 Check(maTrom == HttpStatusCode.Forbidden,
       $"kỹ sư KHÔNG được xem kho người khác, nhận {maTrom}");
@@ -221,13 +221,13 @@ var mpChiXem = new MultipartFormDataContent
 {
     { new ByteArrayContent("khong duoc"u8.ToArray()), "file", "thu.txt" },
 };
-var reqChiXem = new HttpRequestMessage(HttpMethod.Post, "/api/kho") { Content = mpChiXem };
+var reqChiXem = new HttpRequestMessage(HttpMethod.Post, "/api/storage") { Content = mpChiXem };
 reqChiXem.Headers.Add("Authorization", "Bearer " + tokenViewer);
 var resChiXem = await http.SendAsync(reqChiXem);
 Check(resChiXem.StatusCode == HttpStatusCode.Forbidden,
       $"Viewer KHÔNG được tải file lên, nhận {resChiXem.StatusCode}");
 
-var (maAdminXem, _) = await Goi(HttpMethod.Get, "/api/kho/kysu@thu.local",
+var (maAdminXem, _) = await Goi(HttpMethod.Get, "/api/storage/kysu@thu.local",
     token: tokenAdmin);
 Check(maAdminXem == HttpStatusCode.OK, "Admin xem được kho người khác");
 
@@ -254,18 +254,18 @@ Check(maTuGo == HttpStatusCode.BadRequest,
 Nhom("Thiết bị chung: loại, dự án, quan hệ chứa nhau");
 
 // ---- dự án phải có trước khi gán thiết bị vào
-var (maTaoDuAn, thanDuAn) = await Goi(HttpMethod.Post, "/api/du-an",
+var (maTaoDuAn, thanDuAn) = await Goi(HttpMethod.Post, "/api/projects",
     new { ma = "vf8-vn", ten = "VF8 thị trường Việt Nam" }, tokenAdmin);
 Check(maTaoDuAn == HttpStatusCode.Created, $"tạo dự án, nhận {maTaoDuAn}");
 Check(thanDuAn.GetProperty("ma").GetString() == "VF8-VN",
       "mã dự án phải chuẩn hoá thành chữ in, để vf8 và VF8 không thành hai dự án");
 
-var (maTrungDuAn, _) = await Goi(HttpMethod.Post, "/api/du-an",
+var (maTrungDuAn, _) = await Goi(HttpMethod.Post, "/api/projects",
     new { ma = "VF8-VN", ten = "trùng" }, tokenAdmin);
 Check(maTrungDuAn == HttpStatusCode.Conflict, $"dự án trùng mã phải bị chặn, nhận {maTrungDuAn}");
 
 // ---- gán thiết bị vào dự án chưa tồn tại phải bị từ chối, KHÔNG tự tạo
-var (maDuAnLa, thanDuAnLa) = await Goi(HttpMethod.Post, "/api/benches",
+var (maDuAnLa, thanDuAnLa) = await Goi(HttpMethod.Post, "/api/devices",
     new { code = "BENCH-DA", model = "VF8", duAns = new[] { "KHONG-CO" } }, tokenAdmin);
 Check(maDuAnLa == HttpStatusCode.BadRequest,
       $"dự án lạ phải bị từ chối chứ không tự tạo, nhận {maDuAnLa}");
@@ -273,7 +273,7 @@ Check(thanDuAnLa.GetProperty("error").GetString()!.Contains("KHONG-CO"),
       "thông báo lỗi phải nêu đúng mã dự án nào thiếu");
 
 // ---- tạo bench với đầy đủ trường mới
-var (maTaoBench, thanBench) = await Goi(HttpMethod.Post, "/api/benches",
+var (maTaoBench, thanBench) = await Goi(HttpMethod.Post, "/api/devices",
     new
     {
         code = "bench-tb1", model = "VF8New ME", tang = "T2",
@@ -288,7 +288,7 @@ Check(thanBench.GetProperty("duAns").EnumerateArray().Any(x => x.GetString() == 
       "bench vừa tạo phải mang dự án đã gán");
 
 // ---- ECU nằm trong bench, không có agent
-var (maTaoEcu, thanEcu) = await Goi(HttpMethod.Post, "/api/benches",
+var (maTaoEcu, thanEcu) = await Goi(HttpMethod.Post, "/api/devices",
     new
     {
         code = "mhu-tb1", model = "VF8New ME", loai = "mhu",
@@ -299,18 +299,18 @@ Check(thanEcu.GetProperty("loai").GetString() == "ecu", "mhu phải lưu thành 
 Check(thanEcu.GetProperty("thuocVeId").GetInt32() > 0, "ECU phải trỏ vào bench đang chứa nó");
 Check(!thanEcu.GetProperty("hoTroRemote").GetBoolean(), "ECU này khai là không có agent");
 
-var (maChaLa, _) = await Goi(HttpMethod.Post, "/api/benches",
+var (maChaLa, _) = await Goi(HttpMethod.Post, "/api/devices",
     new { code = "ECU-MOCOI", model = "VF8", loai = "ecu", thuocVe = "KHONG-TON-TAI" }, tokenAdmin);
 Check(maChaLa == HttpStatusCode.BadRequest, $"gán vào thiết bị không tồn tại phải 400, nhận {maChaLa}");
 
-var (maLoaiLa, _) = await Goi(HttpMethod.Post, "/api/benches",
+var (maLoaiLa, _) = await Goi(HttpMethod.Post, "/api/devices",
     new { code = "LOAI-LA", model = "VF8", loai = "robot" }, tokenAdmin);
 Check(maLoaiLa == HttpStatusCode.BadRequest, $"loại lạ phải 400, nhận {maLoaiLa}");
 
 // ---- đây là cái chốt quan trọng nhất của đợt này: thiết bị không có agent thì
 // lệnh chạy phải bị chặn NGAY, chứ không gửi vào một topic không ai nghe rồi
 // báo "bench không phản hồi" — sai nguyên nhân hoàn toàn.
-var (maChayEcu, thanChayEcu) = await Goi(HttpMethod.Post, "/api/benches/MHU-TB1/start",
+var (maChayEcu, thanChayEcu) = await Goi(HttpMethod.Post, "/api/devices/MHU-TB1/start",
     new { testCase = "Disable_VF6_7_v2", issuedBy = "thu" }, tokenAdmin);
 Check(maChayEcu == HttpStatusCode.Conflict,
       $"thiết bị không hỗ trợ remote thì lệnh chạy phải trả 409, nhận {maChayEcu}");
@@ -318,42 +318,42 @@ Check(thanChayEcu.GetProperty("error").GetString()!.Contains("MHU-TB1"),
       "thông báo phải nêu mã thiết bị để người dùng biết chặn ở đâu");
 
 // ---- xem chi tiết phải kèm mã thiết bị cha
-var (maXemEcu, thanXemEcu) = await Goi(HttpMethod.Get, "/api/benches/MHU-TB1", token: tokenAdmin);
+var (maXemEcu, thanXemEcu) = await Goi(HttpMethod.Get, "/api/devices/MHU-TB1", token: tokenAdmin);
 Check(maXemEcu == HttpStatusCode.OK && thanXemEcu.GetProperty("thuocVeCode").GetString() == "BENCH-TB1",
       "xem chi tiết phải nêu mã thiết bị đang chứa nó");
 
 // ---- lọc theo loại và theo dự án
-var (_, thanLocEcu) = await Goi(HttpMethod.Get, "/api/benches?loai=ecu", token: tokenAdmin);
+var (_, thanLocEcu) = await Goi(HttpMethod.Get, "/api/devices?loai=ecu", token: tokenAdmin);
 Check(thanLocEcu.EnumerateArray().All(x => x.GetProperty("loai").GetString() == "ecu")
       && thanLocEcu.EnumerateArray().Any(x => x.GetProperty("code").GetString() == "MHU-TB1"),
       "lọc loai=ecu chỉ trả ECU và phải có MHU-TB1");
 
-var (maLocLa, _) = await Goi(HttpMethod.Get, "/api/benches?loai=robot", token: tokenAdmin);
+var (maLocLa, _) = await Goi(HttpMethod.Get, "/api/devices?loai=robot", token: tokenAdmin);
 Check(maLocLa == HttpStatusCode.BadRequest, $"lọc theo loại lạ phải 400, nhận {maLocLa}");
 
-var (_, thanLocDuAn) = await Goi(HttpMethod.Get, "/api/benches?duAn=VF8-VN", token: tokenAdmin);
+var (_, thanLocDuAn) = await Goi(HttpMethod.Get, "/api/devices?duAn=VF8-VN", token: tokenAdmin);
 Check(thanLocDuAn.EnumerateArray().Any(x => x.GetProperty("code").GetString() == "BENCH-TB1")
       && thanLocDuAn.EnumerateArray().All(x => x.GetProperty("code").GetString() != "MHU-TB1"),
       "lọc theo dự án chỉ trả thiết bị thuộc dự án đó");
 
 // ---- chặn vòng: BENCH-TB1 đang chứa MHU-TB1, giờ bảo nó nằm trong MHU-TB1
-var (maVong, _) = await Goi(HttpMethod.Patch, "/api/benches/BENCH-TB1",
+var (maVong, _) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-TB1",
     new { thuocVe = "MHU-TB1" }, tokenAdmin);
 Check(maVong == HttpStatusCode.BadRequest,
       $"hai thiết bị nằm trong nhau phải bị chặn, nhận {maVong}");
 
-var (maTuChua, _) = await Goi(HttpMethod.Patch, "/api/benches/BENCH-TB1",
+var (maTuChua, _) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-TB1",
     new { thuocVe = "BENCH-TB1" }, tokenAdmin);
 Check(maTuChua == HttpStatusCode.BadRequest,
       $"thiết bị nằm trong chính nó phải bị chặn, nhận {maTuChua}");
 
 // ---- chuỗi rỗng = tháo ra, khác null = không đổi
-var (_, thanThao) = await Goi(HttpMethod.Patch, "/api/benches/MHU-TB1",
+var (_, thanThao) = await Goi(HttpMethod.Patch, "/api/devices/MHU-TB1",
     new { thuocVe = "" }, tokenAdmin);
 Check(thanThao.GetProperty("thuocVeId").ValueKind == JsonValueKind.Null,
       "gửi chuỗi rỗng phải tháo thiết bị ra khỏi thiết bị chứa");
 
-var (_, thanGiuNguyen) = await Goi(HttpMethod.Patch, "/api/benches/MHU-TB1",
+var (_, thanGiuNguyen) = await Goi(HttpMethod.Patch, "/api/devices/MHU-TB1",
     new { tang = "T3" }, tokenAdmin);
 Check(thanGiuNguyen.GetProperty("tang").GetString() == "T3",
       "sửa được tầng");
@@ -361,25 +361,25 @@ Check(!thanGiuNguyen.GetProperty("hoTroRemote").GetBoolean(),
       "không gửi hoTroRemote thì giữ nguyên giá trị cũ");
 
 // ---- PATCH danh sách dự án là THAY CẢ TẬP, bỏ tích phải có tác dụng
-var (_, thanBoDuAn) = await Goi(HttpMethod.Patch, "/api/benches/BENCH-TB1",
+var (_, thanBoDuAn) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-TB1",
     new { duAns = Array.Empty<string>() }, tokenAdmin);
 Check(thanBoDuAn.GetProperty("duAns").GetArrayLength() == 0,
       "gửi danh sách rỗng phải gỡ hết dự án, không phải bỏ qua");
 
 // ---- xoá dự án còn thiết bị thì chặn
-await Goi(HttpMethod.Patch, "/api/benches/BENCH-TB1", new { duAns = new[] { "VF8-VN" } }, tokenAdmin);
-var (maXoaDuAnBan, _) = await Goi(HttpMethod.Delete, "/api/du-an/VF8-VN", token: tokenAdmin);
+await Goi(HttpMethod.Patch, "/api/devices/BENCH-TB1", new { duAns = new[] { "VF8-VN" } }, tokenAdmin);
+var (maXoaDuAnBan, _) = await Goi(HttpMethod.Delete, "/api/projects/VF8-VN", token: tokenAdmin);
 Check(maXoaDuAnBan == HttpStatusCode.Conflict,
       $"dự án còn thiết bị thì không cho xoá, nhận {maXoaDuAnBan}");
 
-var (_, thanDsDuAn) = await Goi(HttpMethod.Get, "/api/du-an", token: tokenAdmin);
+var (_, thanDsDuAn) = await Goi(HttpMethod.Get, "/api/projects", token: tokenAdmin);
 Check(thanDsDuAn.EnumerateArray()
         .First(x => x.GetProperty("ma").GetString() == "VF8-VN")
         .GetProperty("soThietBi").GetInt32() == 1,
       "danh sách dự án phải đếm đúng số thiết bị");
 
 // ---- Viewer không được tạo dự án
-var (maViewerTaoDuAn, _) = await Goi(HttpMethod.Post, "/api/du-an",
+var (maViewerTaoDuAn, _) = await Goi(HttpMethod.Post, "/api/projects",
     new { ma = "LAU", ten = "lậu" }, tokenViewer);
 Check(maViewerTaoDuAn == HttpStatusCode.Forbidden,
       $"Viewer không được tạo dự án, nhận {maViewerTaoDuAn}");
@@ -391,6 +391,19 @@ using (var scope = may.Services.CreateScope())
     var khongAgent = db.Benches.First(b => b.Code == "MHU-TB1");
     Check(!khongAgent.HoTroRemote,
           "thiết bị không agent phải giữ cờ hoTroRemote = false trong database");
+}
+
+// ---------------------------------------------------------------- đường dẫn cũ
+Nhom("Đường dẫn cũ phải chết hẳn");
+
+// Đổi tên trong code lẫn trong phép kiểm thì phép kiểm vẫn xanh dù đường cũ
+// còn sống. Gọi thẳng đường cũ mới chứng minh được là đã cắt thật.
+foreach (var cu in new[]{
+    "/api/benches", "/api/du-an", "/api/kho",
+    "/api/test-cases/1/tai", "/api/runs/bao-cao/gan-day" })
+{
+    var (ma, _) = await Goi(HttpMethod.Get, cu, token: tokenAdmin);
+    Check(ma == HttpStatusCode.NotFound, $"{cu} phải trả 404, nhận {ma}");
 }
 
 // ---------------------------------------------------------------- /health

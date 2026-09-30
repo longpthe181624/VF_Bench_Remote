@@ -16,7 +16,7 @@ Chạy:
 Máy bench phải được đăng ký trước trên Console, nếu không backend cố ý bỏ dữ
 liệu (xem quy ước trong CLAUDE.md). Đăng ký bằng:
 
-    curl -X POST http://<máy A>:5000/api/benches -H "Content-Type: application/json" \
+    curl -X POST http://<máy A>:5000/api/devices -H "Content-Type: application/json" \
       -d '{"code":"QAUTO-01","model":"vf6","workshop":"...","primaryChannel":null}'
 
 In tiếng Việt trên Windows cần PYTHONIOENCODING=utf-8, không thì lỗi cp1252.

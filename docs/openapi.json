@@ -112,7 +112,7 @@
         }
       }
     },
-    "/api/benches": {
+    "/api/devices": {
       "get": {
         "tags": [
           "Benches"
@@ -219,7 +219,7 @@
         }
       }
     },
-    "/api/benches/{code}": {
+    "/api/devices/{code}": {
       "get": {
         "tags": [
           "Benches"
@@ -334,7 +334,7 @@
         }
       }
     },
-    "/api/benches/{code}/start": {
+    "/api/devices/{code}/start": {
       "post": {
         "tags": [
           "Benches"
@@ -392,7 +392,7 @@
         }
       }
     },
-    "/api/benches/{code}/stop": {
+    "/api/devices/{code}/stop": {
       "post": {
         "tags": [
           "Benches"
@@ -438,7 +438,7 @@
         }
       }
     },
-    "/api/benches/{code}/reset": {
+    "/api/devices/{code}/reset": {
       "post": {
         "tags": [
           "Benches"
@@ -484,7 +484,7 @@
         }
       }
     },
-    "/api/benches/{code}/trien-khai": {
+    "/api/devices/{code}/deploy": {
       "post": {
         "tags": [
           "Benches"
@@ -542,7 +542,7 @@
         }
       }
     },
-    "/api/benches/{code}/telemetry": {
+    "/api/devices/{code}/telemetry": {
       "get": {
         "tags": [
           "Benches"
@@ -606,7 +606,7 @@
         }
       }
     },
-    "/api/benches/{code}/runs": {
+    "/api/devices/{code}/runs": {
       "get": {
         "tags": [
           "Benches"
@@ -913,7 +913,7 @@
         }
       }
     },
-    "/api/test-cases/{id}/tai": {
+    "/api/test-cases/{id}/download": {
       "get": {
         "tags": [
           "TestCases"

@@ -32,20 +32,32 @@ Ba cột trạng thái:
 
 ## 2. Thiết bị và danh mục
 
-Thay cho `/api/benches` hiện tại. Một bảng chung cho cả ba loại thiết bị, phân
-biệt bằng `kind` = `ecu` | `bench` | `vehicle`.
+Một bảng chung cho cả ba loại thiết bị, phân biệt bằng `loai` =
+`bench` | `ecu` | `vehicle`. Làm 30/09.
+
+**Định danh là `{code}` — mã thiết bị, không phải `{id}` số.** Bản kế hoạch
+22/09 ghi `{id}`; thực tế dùng mã vì mã là danh tính thiết bị, thay MHU thì mã
+giữ nguyên nên lịch sử chạy không mồ côi.
+
+**Tên trường trong JSON và tham số query giữ tiếng Việt**, chỉ đường dẫn là
+tiếng Anh. Trộn nửa vời còn khó nhớ hơn, mà đổi tên trường là thay đổi gãy với
+mọi client đang có.
 
 | Endpoint | Method | Mô tả | Trạng thái |
 |---|---|---|---|
-| `/api/devices` | GET | Danh sách. Lọc: `kind`, `project`, `remote`, `robot`, `room`, `floor`, `state`, `q` | Cần sửa |
-| `/api/devices/{id}` | GET | Chi tiết một thiết bị | Cần sửa |
-| `/api/devices` | POST | Đăng ký thiết bị mới | Cần sửa |
-| `/api/devices/{id}` | PATCH | Sửa thông tin | Cần sửa |
-| `/api/devices/{id}` | DELETE | Xoá khỏi danh mục | Cần sửa |
-| `/api/devices/{id}/config` | GET | Agent lấy cấu hình: kênh CAN cần đọc, đường dẫn DBC, chu kỳ lấy mẫu | Chưa có |
-| `/api/devices/{id}/telemetry` | GET | Chuỗi số đo. Tham số `channel`, `minutes` | Cần sửa |
-| `/api/devices/{id}/runs` | GET | Lịch sử chạy của thiết bị. Tham số `take` | Cần sửa |
-| `/api/projects` | GET, POST | Danh mục dự án để gán cho thiết bị | Chưa có |
+| `/api/devices` | GET | Danh sách. Lọc: `loai`, `duAn`, `state`, `model`, `q` | Đã có |
+| `/api/devices/{code}` | GET | Chi tiết một thiết bị | Đã có |
+| `/api/devices` | POST | Đăng ký thiết bị mới | Đã có |
+| `/api/devices/{code}` | PATCH | Sửa thông tin | Đã có |
+| `/api/devices/{code}` | DELETE | Xoá khỏi danh mục | Đã có |
+| `/api/devices/{code}/telemetry` | GET | Chuỗi số đo. Tham số `channel`, `minutes` | Đã có |
+| `/api/devices/{code}/runs` | GET | Lịch sử chạy của thiết bị. Tham số `take` | Đã có |
+| `/api/devices/{code}/config` | GET | Agent lấy cấu hình: kênh CAN cần đọc, đường dẫn DBC, chu kỳ lấy mẫu | Chưa có |
+| `/api/projects` | GET, POST | Danh mục dự án | Đã có |
+| `/api/projects/{ma}` | PATCH, DELETE | Sửa, xoá dự án | Đã có |
+
+Lọc theo `remote`, `robot`, `room`, `floor` **chưa có** — cột dữ liệu đã có
+(`HoTroRemote`, `HoTroRobot`, `Workshop`, `Tang`) nhưng chưa nối ra query.
 
 Trường khi đăng ký, giống nhau cho cả ba loại:
 
@@ -82,9 +94,9 @@ Endpoint `start` hiện nhận **tên** test case dạng chuỗi. Cần đổi s
 | `/api/test-cases` | POST | Upload gói ZIP, multipart: `file`, `ten`, `nguoiTaiLen` | Đã có |
 | `/api/test-cases` | GET | Danh sách gói đã tải lên | Đã có |
 | `/api/test-cases/{id}` | GET | Metadata một gói | Đã có |
-| `/api/test-cases/{id}/tai` | GET | **Agent tải file về** để bung vào `AutoTests/` | Đã có |
+| `/api/test-cases/{id}/download` | GET | **Agent tải file về** để bung vào `AutoTests/` | Đã có |
 | `/api/test-cases/{id}` | DELETE | Xoá gói | Đã có |
-| `/api/benches/{code}/trien-khai` | POST | Đẩy gói xuống một bench. Trả 202 + cmdId | Đã có |
+| `/api/devices/{code}/deploy` | POST | Đẩy gói xuống một bench. Trả 202 + cmdId | Đã có |
 
 Lọc theo `type`, `project`, `q` thì **chưa có** — chưa có bảng dự án.
 

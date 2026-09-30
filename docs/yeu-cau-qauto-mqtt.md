@@ -31,7 +31,7 @@ Quyền bên trong Qauto do chính Qauto lo, Console không đảm nhận.
 Hai endpoint trong tài liệu này **cố ý để mở, không cần token**:
 
 ```
-GET  /api/test-cases/{id}/tai       tải gói test case về
+GET  /api/test-cases/{id}/download       tải gói test case về
 POST /api/runs/{cmd_id}/report      nộp file kết quả
 ```
 
@@ -164,7 +164,7 @@ nghe, và Console sẽ báo nhầm thành "bench không phản hồi".
     "id": 12,
     "ten": "Warning VF8 — bộ đầy đủ",
     "goi": {
-      "url": "http://vinfast.tail1cbef5.ts.net:5000/api/test-cases/1/tai",
+      "url": "http://vinfast.tail1cbef5.ts.net:5000/api/test-cases/1/download",
       "sha256": "cb53ab8f8316384e6ac3cddb0707485e08a54ae6a4b9dabef06e274410b00308",
       "ten_thu_muc": "Warning_VF8"
     },

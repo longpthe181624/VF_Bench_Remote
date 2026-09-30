@@ -458,7 +458,7 @@ function benchRow(b){
   const startBtn = el("button", {onclick: async () => {
     if (!testCaseInput.value.trim()){ showErr("Nhập tên test case trước khi bấm Chạy."); return; }
     try {
-      await api(`/api/benches/${b.code}/start`, {method:"POST", body: JSON.stringify({
+      await api(`/api/devices/${b.code}/start`, {method:"POST", body: JSON.stringify({
         testCase: testCaseInput.value.trim(), plan: null, issuedBy: "console-tam"
       })});
       delete pendingTestCase[b.code];
@@ -469,18 +469,18 @@ function benchRow(b){
   }}, "Chạy");
 
   const stopBtn = el("button", {class:"danger", onclick: async () => {
-    try { await api(`/api/benches/${b.code}/stop?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh dừng tới ${b.code}`); showErr(null); load(); }
+    try { await api(`/api/devices/${b.code}/stop?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh dừng tới ${b.code}`); showErr(null); load(); }
     catch(e){ showErr(e.message); }
   }}, "Dừng");
 
   const resetBtn = el("button", {onclick: async () => {
-    try { await api(`/api/benches/${b.code}/reset?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh reset tới ${b.code}`); showErr(null); load(); }
+    try { await api(`/api/devices/${b.code}/reset?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh reset tới ${b.code}`); showErr(null); load(); }
     catch(e){ showErr(e.message); }
   }}, "Reset");
 
   const delBtn = !coQuyen("BENCH.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
     if (!confirm(`Xoá bench ${b.code}?`)) return;
-    try { await api(`/api/benches/${b.code}`, {method:"DELETE"}); showToast(`Đã xoá ${b.code}`); load(); }
+    try { await api(`/api/devices/${b.code}`, {method:"DELETE"}); showToast(`Đã xoá ${b.code}`); load(); }
     catch(e){ showErr(e.message); }
   }}, "Xoá");
 
@@ -525,22 +525,22 @@ async function load(){
 
   try {
     const [benches, alerts, goi, baoCao, kho, users, roles, quyenDanhMuc, duAns] = await Promise.all([
-      api("/api/benches" + (params.toString() ? "?" + params.toString() : "")),
+      api("/api/devices" + (params.toString() ? "?" + params.toString() : "")),
       api("/api/alerts"),
       api("/api/test-cases"),
-      api("/api/runs/bao-cao/gan-day?limit=20"),
+      api("/api/runs/reports/recent?limit=20"),
       // Kho đi theo user nên phải biết xem kho của ai. Ô trống thì bỏ qua chứ
       // đừng gọi API với tên rỗng — server trả 400 và màn hình đầy chữ đỏ.
       // Không chọn ai thì xem kho của chính mình — không phải ghép email vào
       // URL, ghép tay là sớm muộn có chỗ nhầm mà nhầm ở đây là xem kho người khác.
       (coQuyen("KHO.VIEW")
-        ? (khoDangXem ? api(`/api/kho/${encodeURIComponent(khoDangXem)}`) : api("/api/kho"))
+        ? (khoDangXem ? api(`/api/storage/${encodeURIComponent(khoDangXem)}`) : api("/api/storage"))
         : Promise.resolve([])),
       // Chỉ hỏi khi có quyền — không thì mỗi lần làm mới lại ăn một cặp 403.
       coQuyen("USER.VIEW") ? api("/api/users") : Promise.resolve([]),
       coQuyen("ROLE.VIEW") ? api("/api/roles") : Promise.resolve([]),
       coQuyen("ROLE.VIEW") ? api("/api/permissions") : Promise.resolve([]),
-      api("/api/du-an"),
+      api("/api/projects"),
     ]);
     showErr(null);
     benchesHienTai = benches;
@@ -641,7 +641,7 @@ function renderDuAn(rows){
   const dong = (d) => {
     const xoa = !coQuyen("BENCH.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
       if (!confirm(`Xoá dự án ${d.ma}?`)) return;
-      try { await api(`/api/du-an/${encodeURIComponent(d.ma)}`, {method:"DELETE"}); showToast(`Đã xoá dự án ${d.ma}`); load(); }
+      try { await api(`/api/projects/${encodeURIComponent(d.ma)}`, {method:"DELETE"}); showToast(`Đã xoá dự án ${d.ma}`); load(); }
       catch(e){ showErr(e.message); }
     }}, "Xoá");
     return el("tr", {},
@@ -678,7 +678,7 @@ function goiRow(g){
   const dayBtn = !coQuyen(quyenDay) ? null : el("button", {onclick: async () => {
     if (!chon.value){ showErr("Chưa chọn bench để đẩy gói."); return; }
     try {
-      const r = await api(`/api/benches/${chon.value}/trien-khai`, {
+      const r = await api(`/api/devices/${chon.value}/deploy`, {
         method:"POST",
         body: JSON.stringify({goiId: g.id, issuedBy: "console-tam"}),
       });
@@ -696,7 +696,7 @@ function goiRow(g){
   const chayBtn = (g.loai === "config" || !coQuyen("BENCH.RUN")) ? null : el("button", {onclick: async () => {
     if (!chon.value){ showErr("Chưa chọn bench để chạy."); return; }
     try {
-      const r = await api(`/api/benches/${chon.value}/start`, {
+      const r = await api(`/api/devices/${chon.value}/start`, {
         method:"POST",
         body: JSON.stringify({testCase: g.ten, plan: null, issuedBy: "console-tam"}),
       });
@@ -765,10 +765,10 @@ function renderKho(rows){
       el("td", {}, t.moTa || "—"),
       el("td", {}, new Date(t.taiLenLuc).toLocaleString("vi-VN")),
       el("td", {}, el("div", {class:"actions"},
-        el("a", {href: API + `/api/kho/tep/${t.id}/tai`}, "Tải về"),
+        el("a", {href: API + `/api/storage/files/${t.id}/download`}, "Tải về"),
         el("button", {class:"ghost", onclick: async () => {
           if (!confirm(`Xoá ${t.tenFile}?`)) return;
-          try { await api(`/api/kho/tep/${t.id}`, {method:"DELETE"}); showToast(`Đã xoá ${t.tenFile}`); load(); }
+          try { await api(`/api/storage/files/${t.id}`, {method:"DELETE"}); showToast(`Đã xoá ${t.tenFile}`); load(); }
           catch(e){ showErr(e.message); }
         }}, "Xoá")))))));
   area.appendChild(table);
@@ -947,7 +947,7 @@ function renderBaoCao(rows){
       el("td", {}, b.tenFile),
       el("td", {}, kbGon(b.kichThuoc)),
       el("td", {}, new Date(b.nhanLuc).toLocaleString("vi-VN")),
-      el("td", {}, el("a", {href: API + `/api/runs/report/${b.id}/tai`}, "Tải về"))))));
+      el("td", {}, el("a", {href: API + `/api/runs/reports/${b.id}/download`}, "Tải về"))))));
   area.appendChild(table);
 }
 
@@ -997,7 +997,7 @@ document.getElementById("add-form").addEventListener("submit", async (ev) => {
   body.duAns = [...document.querySelectorAll("#add-duan .duan-tick:checked")].map(x => x.value);
 
   try {
-    await api("/api/benches", {method:"POST", body: JSON.stringify(body)});
+    await api("/api/devices", {method:"POST", body: JSON.stringify(body)});
     showToast(`Đã tạo bench ${body.code}`);
     ev.target.reset();
     ev.target.classList.remove("show");
@@ -1025,7 +1025,7 @@ duAnForm.addEventListener("submit", async (ev) => {
   const body = Object.fromEntries(new FormData(ev.target).entries());
   for (const k of Object.keys(body)) if (body[k] === "") body[k] = null;
   try {
-    await api("/api/du-an", {method:"POST", body: JSON.stringify(body)});
+    await api("/api/projects", {method:"POST", body: JSON.stringify(body)});
     showToast(`Đã tạo dự án ${body.ma}`);
     ev.target.reset();
     ev.target.classList.remove("show");
@@ -1096,7 +1096,7 @@ khoForm.addEventListener("submit", async (ev) => {
   try {
     // Luôn vào kho của chính mình. Không có đường nào đẩy file vào kho
     // người khác — đó là mạo danh, khác hẳn việc đọc.
-    const res = await fetch(API + "/api/kho", {method:"POST", body: fd, headers: headerAuth()});
+    const res = await fetch(API + "/api/storage", {method:"POST", body: fd, headers: headerAuth()});
     if (!res.ok){
       let msg = res.status + " " + res.statusText;
       try { const b = await res.json(); if (b?.error) msg = b.error; } catch {}
@@ -1220,7 +1220,7 @@ mkForm.addEventListener("submit", async (ev) => {
   try {
     // Trả về cặp token mới: đổi mật khẩu làm refresh token cũ mất hiệu lực,
     // nên không lưu lại cái mới là chính mình bị đá ra sau 30 phút.
-    const moi = await api("/api/auth/doi-mat-khau", {
+    const moi = await api("/api/auth/change-password", {
       method: "POST",
       body: JSON.stringify({
         matKhauCu: document.getElementById("mk-cu").value,

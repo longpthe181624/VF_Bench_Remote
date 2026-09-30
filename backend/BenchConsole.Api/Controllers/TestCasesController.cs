@@ -34,8 +34,8 @@ public sealed class TaiLenGoiForm
 ///
 /// Luồng đầy đủ: người dùng nén thư mục test case thành ZIP rồi tải lên đây;
 /// Console giữ file; sau đó ra lệnh đẩy xuống một bench (xem
-/// <c>POST /api/benches/{code}/trien-khai</c>), agent tải file về qua
-/// <c>GET /api/test-cases/{id}/tai</c> rồi bung vào `AutoTests/`.
+/// <c>POST /api/devices/{code}/deploy</c>), agent tải file về qua
+/// <c>GET /api/test-cases/{id}/download</c> rồi bung vào `AutoTests/`.
 ///
 /// **File đi đường REST, lệnh đi đường MQTT.** Gói vài MB nhét vào payload MQTT
 /// thì broker phải ôm trọn trong bộ nhớ và mọi thuê bao khác cùng chịu trận;
@@ -158,7 +158,7 @@ public class TestCasesController(
     // ĐỂ MỞ CÓ CHỦ Ý. Qauto tải gói test case về từ đây và Qauto KHÔNG
     // xác thực. Gắn [Authorize] vào đây là gãy luồng đẩy gói xuống bench.
     [AllowAnonymous]
-    [HttpGet("{id:int}/tai")]
+    [HttpGet("{id:int}/download")]
     public async Task<IActionResult> Tai(int id, CancellationToken ct)
     {
         var goi = await db.GoiTestCases.AsNoTracking().FirstOrDefaultAsync(g => g.Id == id, ct);

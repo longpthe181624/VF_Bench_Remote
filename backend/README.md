@@ -25,21 +25,21 @@ Rồi bật giả lập ở một terminal khác:
 python bench_simulator.py
 ```
 
-Trong vài giây, `GET /api/benches` sẽ trả về 5 bench với trạng thái thật.
+Trong vài giây, `GET /api/devices` sẽ trả về 5 bench với trạng thái thật.
 
 ## Kiểm tra nhanh
 
 ```bash
-curl http://localhost:5000/api/benches
+curl http://localhost:5000/api/devices
 
-curl -X POST "http://localhost:5000/api/benches/HIL-A02/start" \
+curl -X POST "http://localhost:5000/api/devices/HIL-A02/start" \
   -H "Content-Type: application/json" \
   -d '{"testCase":"warning_brake","plan":"TP-2026-014","issuedBy":"long"}'
 ```
 
 Lệnh start trả về **202 Accepted** kèm `cmdId`, không phải 200. Test có thể chạy
 vài phút; giữ HTTP request mở suốt thời gian đó là sai. Theo tiếp bằng `cmdId`
-qua SignalR, hoặc hỏi lại `GET /api/benches/HIL-A02/runs`.
+qua SignalR, hoặc hỏi lại `GET /api/devices/HIL-A02/runs`.
 
 ## Ba giao thức, mỗi cái một việc
 
@@ -55,7 +55,7 @@ trình duyệt <─SignalR(WS)─── backend <─MQTT─── broker <──
 - **MQTT** — backend nói chuyện với bench. Trình duyệt không bao giờ chạm tới MQTT.
 
 Database là chỗ hai chiều gặp nhau: luồng MQTT ghi vào, REST đọc ra. Nên
-`GET /api/benches` luôn trả nhanh, và trả được cả khi bench đang mất kết nối.
+`GET /api/devices` luôn trả nhanh, và trả được cả khi bench đang mất kết nối.
 
 ## Sự kiện SignalR
 

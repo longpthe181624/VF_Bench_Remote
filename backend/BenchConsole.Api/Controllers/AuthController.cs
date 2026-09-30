@@ -11,7 +11,7 @@ namespace BenchConsole.Api.Controllers;
 ///
 /// PHẠM VI: xác thực này là của **web Console**, không phải của Qauto. Quyền
 /// trong Qauto do chính Qauto lo. Hai endpoint mà Qauto gọi
-/// (<c>/api/test-cases/{id}/tai</c> và <c>/api/runs/{cmdId}/report</c>) cố ý
+/// (<c>/api/test-cases/{id}/download</c> và <c>/api/runs/{cmdId}/report</c>) cố ý
 /// để mở, xem ghi chú tại chỗ đó.
 /// </summary>
 [ApiController]
@@ -55,7 +55,7 @@ public class AuthController(AuthService auth) : ControllerBase
     /// chính mình, và phải biết mật khẩu cũ.
     /// </summary>
     [Authorize]
-    [HttpPost("doi-mat-khau")]
+    [HttpPost("change-password")]
     public async Task<ActionResult<DangNhapResponse>> DoiMatKhau(
         DoiMatKhauRequest req, CancellationToken ct)
     {

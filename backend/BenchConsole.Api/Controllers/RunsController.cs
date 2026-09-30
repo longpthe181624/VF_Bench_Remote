@@ -180,7 +180,7 @@ public class RunsController(
     }
 
     /// <summary>Tải một file bằng chứng về.</summary>
-    [HttpGet("report/{id:int}/tai")]
+    [HttpGet("reports/{id:int}/download")]
     [HasPermission(MaQuyen.ReportView)]
     public async Task<IActionResult> TaiBaoCao(int id, CancellationToken ct)
     {
@@ -196,7 +196,7 @@ public class RunsController(
     }
 
     /// <summary>Báo cáo mới nhận gần đây, cho giao diện hiện lên.</summary>
-    [HttpGet("bao-cao/gan-day")]
+    [HttpGet("reports/recent")]
     [HasPermission(MaQuyen.ReportView)]
     public async Task<ActionResult<List<BaoCaoChayDto>>> GanDay(
         [FromQuery] int limit = 20, CancellationToken ct = default)

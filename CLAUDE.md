@@ -406,6 +406,8 @@ nội bộ, máy bench không có người trực sẽ vướng.
    mất kết nối, không sinh cảnh báo, lệnh chạy trả 409.
 4. **Thêm verdict `Warning`**, vì VDSA trả bốn trạng thái mà backend chỉ có ba.
 5. **Không dùng `python-can`.** Dữ liệu CAN phải lấy qua chính hệ VDSA/Qauto.
+6. **Đường dẫn REST viết tiếng Anh, tên trường JSON viết tiếng Việt** — chốt
+   30/09, xem mục "Đổi đường dẫn REST".
 
 ## Agent trên máy bench — kế hoạch
 
@@ -600,9 +602,9 @@ mở sẵn kết nối ra ngoài.
 
 ```
 người dùng ──(1) POST multipart /api/test-cases──> Console giữ file theo sha256
-người dùng ──(2) POST /api/benches/{mã}/trien-khai──> MQTT cmd deploy_testcase
+người dùng ──(2) POST /api/devices/{mã}/deploy──> MQTT cmd deploy_testcase
                                                        { goi: {url, sha256, ten} }
-agent ──(3) GET /api/test-cases/{id}/tai──> tải về, kiểm sha256
+agent ──(3) GET /api/test-cases/{id}/download──> tải về, kiểm sha256
 agent ──(4) bung vào AutoTests/<tên gói>/ ──> publish result
 ```
 
@@ -797,8 +799,8 @@ config cùng tên là hai thứ khác nhau, bung vào hai chỗ khác nhau.
 
 ### Kho theo user: dựng chỗ chứa trước, nội dung chốt sau
 
-`POST /api/kho/{nguoiDung}` multipart, `GET /api/kho/{nguoiDung}`,
-`GET /api/kho/tep/{id}/tai`, `DELETE /api/kho/tep/{id}`.
+`POST /api/storage/{nguoiDung}` multipart, `GET /api/storage/{nguoiDung}`,
+`GET /api/storage/files/{id}/download`, `DELETE /api/storage/files/{id}`.
 
 **Chưa chốt sẽ chứa gì**, nên cố ý không kiểm định dạng và không có trường nào
 mô tả loại nội dung — thêm bây giờ là đoán, mà đoán sai thì sau phải đổi schema.
@@ -837,6 +839,48 @@ CREATE UNIQUE INDEX IX_TepNguoiDungs_NguoiDung_TenFile_Sha256
 Ba lần liên tiếp làm tay, lần này còn phải đổi cả index. **Chuyển sang EF
 migration trước khi thêm bảng thứ tư** — chi phí đang dồn lại, và một câu SQL
 gõ sai trên máy A thì không có gì bắt được.
+
+## Đổi đường dẫn REST — làm 30/09
+
+**Đường dẫn tiếng Anh, tên trường JSON tiếng Việt.** Ranh giới đặt ở đó vì:
+đường dẫn thì ít, đổi một lần là xong; còn tên trường nằm trong mọi thân
+request và response, đổi là thay đổi gãy với mọi client.
+
+| Cũ | Mới |
+| --- | --- |
+| `/api/benches` | `/api/devices` |
+| `/api/benches/{code}/trien-khai` | `/api/devices/{code}/deploy` |
+| `/api/du-an` | `/api/projects` |
+| `/api/kho` | `/api/storage` |
+| `/api/kho/tep/{id}` | `/api/storage/files/{id}` |
+| `/api/test-cases/{id}/tai` | `/api/test-cases/{id}/download` |
+| `/api/runs/report/{id}/tai` | `/api/runs/reports/{id}/download` |
+| `/api/runs/bao-cao/gan-day` | `/api/runs/reports/recent` |
+| `/api/auth/doi-mat-khau` | `/api/auth/change-password` |
+
+**Cắt hẳn, không giữ song song.** Web chưa chạy thật nên cắt được sạch; giữ hai
+đường là tự hẹn một việc dọn dẹp mà rồi sẽ quên.
+
+Lý do chính không phải thẩm mỹ: **`/api/benches` nay trả về cả ECU và xe**, tên
+cũ nói sai nội dung. Nhân tiện gom một thứ tiếng — trước đó cấp tài nguyên có 8
+tên tiếng Anh (`alerts`, `runs`, `test-cases`, `users`…) và 2 tiếng Việt
+(`du-an`, `kho`) do chính đợt trước làm lệch.
+
+**KHÔNG đụng ba thứ sau, cố ý:**
+
+- **Tên thư mục trên đĩa.** `App_Data/bao-cao` giữ nguyên. Đổi là mồ côi toàn
+  bộ file báo cáo đang nằm trên máy A.
+- **Chỗ giữ chỗ trong route** (`{ma}`, `{nguoiDung}`). Người gọi thay bằng giá
+  trị thật nên chúng không xuất hiện trong URL nào; đổi thì phải đổi cả tên
+  tham số C# — rủi ro thật, lợi ích bằng không.
+- **Tên lớp C#** (`BenchesController`, `KhoController`). Đây là chuyện đặt tên
+  bên trong, không phải hợp đồng.
+
+`docs/api-tich-hop.md` đã có cảnh báo thay đổi gãy ở mục 0 kèm bảng đối chiếu —
+bên ngoài chỉ phải sửa chuỗi URL, thân request không đổi một chữ.
+
+`docs/openapi.json` sửa bằng thay chuỗi, **chưa xuất lại từ Swagger**. Lần chạy
+backend tới trên máy A nên xuất lại cho chắc.
 
 ## Thiết bị chung: bench, ECU, xe — làm 30/09
 
@@ -902,7 +946,7 @@ nguyên nhân hoàn toàn, đúng kiểu bẫy đã dính ở mục "Model và m
 bench dùng cho nhiều dự án, một dự án dùng nhiều bench), khác hẳn quan hệ chứa
 nhau ở trên nên không gộp chung được.
 
-`GET/POST/PATCH/DELETE /api/du-an`. Dùng lại quyền `BENCH.*` chứ **không thêm
+`GET/POST/PATCH/DELETE /api/projects`. Dùng lại quyền `BENCH.*` chứ **không thêm
 `DUAN.*`**: thêm mã quyền mới thì mọi vai trò đang có trên máy A đều thiếu
 quyền đó (`AuthSeed` không sửa vai trò đã tồn tại), người dùng sẽ thấy 403 mà
 không hiểu vì sao.
@@ -916,7 +960,7 @@ Hai chốt chặn:
   nối. Cascade ở đây là âm thầm gỡ liên kết của cả chục con bench trong khi
   người xoá tưởng mình chỉ dọn một cái tên.
 
-`PATCH /api/benches/{ma}` với `duAns` là **thay cả tập**, không phải thêm vào —
+`PATCH /api/devices/{ma}` với `duAns` là **thay cả tập**, không phải thêm vào —
 giao diện gửi lên tập sau khi người dùng tích chọn, nên bỏ tích phải có tác
 dụng. `duAns: null` (không gửi trường) mới là "không đổi".
 
@@ -927,7 +971,7 @@ lúc chạy phép kiểm trên EF InMemory.
 
 ### Lọc
 
-`GET /api/benches?loai=ecu&duAn=VF8-VN`. `loai` nhận cả `mhu` (thành `ecu`) và
+`GET /api/devices?loai=ecu&duAn=VF8-VN`. `loai` nhận cả `mhu` (thành `ecu`) và
 `xe` (thành `vehicle`) vì tester gọi quen như vậy. Loại lạ trả 400 kèm danh
 sách hợp lệ, **không im lặng bỏ qua bộ lọc** — bỏ qua thì người dùng tưởng
 mình đang xem tập đã lọc.
