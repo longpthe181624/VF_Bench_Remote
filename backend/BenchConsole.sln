@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BenchConsole.Api", "BenchCo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BenchConsole.Core.SmokeTest", "BenchConsole.Core.SmokeTest\BenchConsole.Core.SmokeTest.csproj", "{D19EFA2D-4869-43DD-8962-6B8FF153A209}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BenchConsole.Api.Tests", "BenchConsole.Api.Tests\BenchConsole.Api.Tests.csproj", "{8E4183BD-E156-420E-93BC-7D303147C307}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,5 +32,9 @@ Global
 		{D19EFA2D-4869-43DD-8962-6B8FF153A209}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D19EFA2D-4869-43DD-8962-6B8FF153A209}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D19EFA2D-4869-43DD-8962-6B8FF153A209}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8E4183BD-E156-420E-93BC-7D303147C307}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8E4183BD-E156-420E-93BC-7D303147C307}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8E4183BD-E156-420E-93BC-7D303147C307}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8E4183BD-E156-420E-93BC-7D303147C307}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -60,9 +60,18 @@ public static class AuthSeed
                 !m.StartsWith("USER.") && !m.StartsWith("ROLE.")
                 && m != MaQuyen.KhoViewAll), ct);
 
+        // Chỉ xem phần CHUYÊN MÔN, không phải xem mọi thứ.
+        //
+        // Bản trước lọc bằng `EndsWith(".VIEW")` nên quét luôn `USER.VIEW` và
+        // `ROLE.VIEW` — ai mang vai trò này cũng đọc được toàn bộ danh bạ
+        // người dùng và cấu hình phân quyền. Phép kiểm tầng Api bắt được ngay
+        // lần chạy đầu tiên.
         await VaiTroAsync(db, RoleViewer, "Chỉ xem",
-            "Xem mọi thứ, không ra lệnh và không sửa gì.",
-            quyen.Select(p => p.Ma).Where(m => m.EndsWith(".VIEW")), ct);
+            "Xem bench, gói test case và báo cáo. Không ra lệnh, không sửa gì, "
+            + "không thấy danh sách người dùng.",
+            quyen.Select(p => p.Ma).Where(m =>
+                m.EndsWith(".VIEW")
+                && !m.StartsWith("USER.") && !m.StartsWith("ROLE.")), ct);
     }
 
     /// <summary>

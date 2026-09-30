@@ -43,6 +43,10 @@ builder.Services.AddSingleton<KhoGoiTestCase>();
 builder.Services.AddSingleton<KhoBaoCao>();
 builder.Services.AddSingleton<KhoNguoiDung>();
 
+// Dọn báo cáo cũ. Không có nó thì kho phình vô hạn cho tới lúc đầy đĩa, và
+// lúc đó cả SQL Server lẫn backend cùng chết chứ không phải hỏng mỗi báo cáo.
+builder.Services.AddHostedService<DonBaoCaoService>();
+
 // ------------------------------------------------- xác thực và phân quyền
 //
 // PHẠM VI: xác thực này là của WEB CONSOLE. Qauto KHÔNG xác thực — hai endpoint
@@ -159,7 +163,11 @@ using (var scope = app.Services.CreateScope())
     // CẢNH BÁO cho database đã có sẵn: Migrate() sẽ cố CREATE TABLE trên những
     // bảng đang tồn tại và chết ngay lúc khởi động. Phải GẮN MỐC một lần —
     // xem mục "Chuyển sang EF migration" trong CLAUDE.md.
-    await db.Database.MigrateAsync();
+    // Migration sinh ra là SQL Server thuần (IDENTITY, nvarchar...), chạy trên
+    // provider khác sẽ vỡ. Phép kiểm tầng Api dùng SQLite trong bộ nhớ nên ở đó
+    // dựng thẳng schema từ model thay vì chạy migration.
+    if (db.Database.IsSqlServer()) await db.Database.MigrateAsync();
+    else await db.Database.EnsureCreatedAsync();
 
     // Quyền, vai trò và tài khoản quản trị đầu tiên chạy ở MỌI môi trường,
     // khác DevSeed. Không có nó thì máy thật dựng xong là không ai đăng nhập
@@ -193,6 +201,43 @@ app.MapHub<BenchHub>("/hub/benches");
 
 // Để dựng docker-compose healthcheck và để biết backend còn sống mà không cần
 // chạm vào database.
-app.MapGet("/health", () => Results.Ok(new { ok = true, at = DateTimeOffset.UtcNow }));
+// Kiểm THẬT hai phụ thuộc, không chỉ trả ok.
+//
+// Bản trước trả `ok: true` vô điều kiện, nên giám sát sẽ báo "khoẻ" trong khi
+// broker chết và toàn bộ bench mất kết nối — đúng lúc cần biết nhất thì nó im.
+app.MapGet("/health", async (AppDbContext db, MqttIngestService mqtt, CancellationToken ct) =>
+{
+    var sql = false;
+    string? loiSql = null;
+    try { sql = await db.Database.CanConnectAsync(ct); }
+    catch (Exception ex) { loiSql = ex.Message; }
+
+    var mqttOk = mqtt.Client?.IsConnected == true;
+
+    var ok = sql && mqttOk;
+    var than = new
+    {
+        ok,
+        sql,
+        mqtt = mqttOk,
+        loiSql,
+        at = DateTimeOffset.UtcNow,
+    };
+
+    // 503 khi hỏng, để công cụ giám sát và docker healthcheck bắt được. Trả
+    // 200 kèm `ok:false` thì phần lớn công cụ vẫn coi là khoẻ.
+    return ok ? Results.Ok(than) : Results.Json(than, statusCode: 503);
+});
 
 app.Run();
+
+/// <summary>
+/// Lớp đánh dấu để phép kiểm tầng Api dựng được máy chủ thật bằng
+/// `WebApplicationFactory<DiemVaoApi>`.
+///
+/// Dùng lớp riêng chứ KHÔNG mở `Program`: project test cũng viết bằng
+/// top-level statements nên nó sinh ra một lớp `Program` của chính nó, và hai
+/// lớp trùng tên sẽ che nhau — lỗi báo ra là "inconsistent accessibility",
+/// đọc xong không đoán ra nguyên nhân thật.
+/// </summary>
+public sealed class DiemVaoApi { }

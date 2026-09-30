@@ -37,7 +37,9 @@ backend/                     C# .NET 8 + SQL Server (xem backend/README.md)
   BenchConsole.Core/         KHÔNG phụ thuộc gói ngoài nào — entity, parser, DTO
   BenchConsole.Api/          EF Core, MQTTnet, SignalR, REST
     wwwroot/index.html       giao diện tạm, backend tự phục vụ ở /
-  BenchConsole.Core.SmokeTest/ 102 phép kiểm tra, chạy không cần NuGet/DB/broker
+  BenchConsole.Core.SmokeTest/ 130 phép kiểm tra, chạy không cần NuGet/DB/broker
+  BenchConsole.Api.Tests/      34 phép kiểm tra tầng Api — dựng backend thật
+                               trong bộ nhớ, không cần SQL Server hay broker
 bench_simulator.py           5 bench giả lập, mỗi con một kết nối + Last Will riêng
 bench_agent.py               agent thật trên máy bench — đọc log Qauto, dò PCAN, không bịa số
 bench_agent_test.py         121 phép kiểm tra: đọc log, suy trạng thái, bung gói
@@ -92,7 +94,7 @@ Windows 11 + Docker Desktop + PowerShell, và Git Bash cho tool Bash.
 
 - Simulator 5 bench nối từ máy B sang broker máy A qua LAN.
 - `dotnet build` qua với MQTTnet + EF Core thật.
-- SmokeTest 102/102 đạt, dùng payload thật bắt từ simulator.
+- SmokeTest 130/130 đạt, dùng payload thật bắt từ simulator.
 - `bench_agent_test.py` 121/121 đạt, trong đó có phép chạy trên **log thật** của
   Qauto: nhận đúng 4 lượt chạy, 4 verdict, không dính bẫy dòng CRC.
 - `bench_agent.py --once` đọc đúng trạng thái máy bench thật (lúc thử thì

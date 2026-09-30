@@ -61,4 +61,17 @@ public class KhoBaoCao
             if (File.Exists(tam)) File.Delete(tam);
         }
     }
+    /// <summary>
+    /// Xoá file của một báo cáo.
+    ///
+    /// Chỉ gọi khi KHÔNG còn bản ghi nào trỏ vào sha này — tên file là sha256
+    /// của nội dung nên nhiều bản ghi có thể dùng chung một file, xoá sớm là
+    /// làm hỏng báo cáo của lượt chạy khác.
+    /// </summary>
+    public void XoaFile(string sha256)
+    {
+        var d = DuongDan(sha256);
+        if (File.Exists(d)) File.Delete(d);
+    }
+
 }
