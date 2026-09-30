@@ -879,8 +879,16 @@ tên tiếng Anh (`alerts`, `runs`, `test-cases`, `users`…) và 2 tiếng Vi�
 `docs/api-tich-hop.md` đã có cảnh báo thay đổi gãy ở mục 0 kèm bảng đối chiếu —
 bên ngoài chỉ phải sửa chuỗi URL, thân request không đổi một chữ.
 
-`docs/openapi.json` sửa bằng thay chuỗi, **chưa xuất lại từ Swagger**. Lần chạy
-backend tới trên máy A nên xuất lại cho chắc.
+`docs/openapi.json` **đã xuất lại từ backend đang chạy trên máy A** (30/09),
+39 đường dẫn / 30 schema. Bản trước sinh 25/09 chỉ có 16 đường dẫn — thiếu hẳn
+auth, quản lý người dùng, vai trò, kho, dự án và báo cáo. Lấy lại bằng:
+
+```bash
+curl -s http://vinfast.tail1cbef5.ts.net:5000/swagger/v1/swagger.json | python -c "import json,sys;print(json.dumps(json.load(sys.stdin),indent=2,ensure_ascii=False))" > docs/openapi.json
+```
+
+**Sinh tay nên nó sẽ lại cũ.** Thêm endpoint xong nhớ xuất lại, không thì file
+này lặng lẽ lệch với thực tế đúng như lần vừa rồi.
 
 ## Thiết bị chung: bench, ECU, xe — làm 30/09
 
