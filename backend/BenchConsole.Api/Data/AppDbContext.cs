@@ -7,6 +7,8 @@ namespace BenchConsole.Api.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Bench> Benches => Set<Bench>();
+    public DbSet<DuAn> DuAns => Set<DuAn>();
+    public DbSet<ThietBiDuAn> ThietBiDuAns => Set<ThietBiDuAn>();
     public DbSet<BenchCommand> Commands => Set<BenchCommand>();
     public DbSet<Run> Runs => Set<Run>();
     public DbSet<TelemetrySample> TelemetrySamples => Set<TelemetrySample>();
@@ -33,10 +35,41 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Workshop).HasMaxLength(64);
             e.Property(x => x.Rack).HasMaxLength(64);
             e.Property(x => x.Firmware).HasMaxLength(32);
+            e.Property(x => x.Tang).HasMaxLength(32);
+
+            // Lọc theo loại là truy vấn thường xuyên nhất sau khi có ba loại
+            // thiết bị trong cùng một bảng.
+            e.HasIndex(x => x.Loai);
+
+            // Xoá thiết bị chứa thì thiết bị con thành ĐỨNG RIÊNG, không bị
+            // xoá theo: tháo bench đi thì con MHU vẫn còn ngoài đời. Cascade ở
+            // đây là âm thầm xoá mất cả lịch sử chạy của con MHU đó.
+            e.HasOne(x => x.ThuocVe).WithMany(x => x.ChuaNhung)
+                .HasForeignKey(x => x.ThuocVeId)
+                .OnDelete(DeleteBehavior.SetNull);
             e.Property(x => x.TenMay).HasMaxLength(64);
             e.Property(x => x.PrimaryChannel).HasMaxLength(64);
             e.Property(x => x.PrimaryUnit).HasMaxLength(16);
             e.Property(x => x.Note).HasMaxLength(256);
+        });
+
+        b.Entity<DuAn>(e =>
+        {
+            e.HasIndex(x => x.Ma).IsUnique();
+            e.Property(x => x.Ma).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Ten).HasMaxLength(128).IsRequired();
+            e.Property(x => x.MoTa).HasMaxLength(512);
+        });
+
+        b.Entity<ThietBiDuAn>(e =>
+        {
+            e.HasKey(x => new { x.BenchId, x.DuAnId });
+            // Xoá thiết bị hay xoá dự án thì gỡ luôn dòng nối. Để lại là danh
+            // sách dự án của thiết bị hiện ra một cái tên không còn tồn tại.
+            e.HasOne(x => x.Bench).WithMany(x => x.DuAns)
+                .HasForeignKey(x => x.BenchId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.DuAn).WithMany(x => x.ThietBis)
+                .HasForeignKey(x => x.DuAnId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<BenchCommand>(e =>

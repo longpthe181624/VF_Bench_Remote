@@ -25,7 +25,17 @@ public record BenchDto(
     double? PrimaryValue,
     string? PrimaryUnit,
     DateTimeOffset? LastSeenAt,
-    int? StaleSeconds)
+    int? StaleSeconds,
+
+    // Các trường dưới đây thêm sau, nên xếp ở cuối và đều có mặc định: bản
+    // giao diện cũ chưa biết tới chúng vẫn đọc được JSON như trước.
+    string Loai = "bench",
+    int? ThuocVeId = null,
+    string? ThuocVeCode = null,
+    bool HoTroRemote = true,
+    bool HoTroRobot = false,
+    string? Tang = null,
+    List<string>? DuAns = null)
 {
     public static BenchDto From(Bench b)
     {
@@ -40,7 +50,15 @@ public record BenchDto(
             b.State.ToString().ToLowerInvariant(),
             b.Note, b.CurrentTestCase, b.CurrentPlan, b.CurrentStep,
             b.PrimaryChannel, b.PrimaryValue, b.PrimaryUnit,
-            b.LastSeenAt, stale);
+            b.LastSeenAt, stale,
+            MaLoaiThietBi.Ghi(b.Loai), b.ThuocVeId, b.ThuocVe?.Code,
+            b.HoTroRemote, b.HoTroRobot, b.Tang,
+            // Danh sach du an chi co khi ben goi Include; khong Include thi tra
+            // mang rong chu khong null, de giao dien khong phai kiem tra hai lan.
+            b.DuAns.Where(x => x.DuAn != null)
+                   .Select(x => x.DuAn!.Ma)
+                   .OrderBy(x => x)
+                   .ToList());
     }
 }
 
@@ -86,7 +104,18 @@ public record CreateBenchRequest(
     /// <summary>Tên máy tính gán cố định cho bench. Để trống thì không đối chiếu.</summary>
     string? TenMay,
     string? PrimaryChannel,
-    string? PrimaryUnit);
+    string? PrimaryUnit,
+
+    /// <summary>bench / ecu / vehicle. Trong thi mac dinh bench.</summary>
+    string? Loai = null,
+    /// <summary>Ma thiet bi dang chua thiet bi nay, vi du MHU nam trong bench nao.</summary>
+    string? ThuocVe = null,
+    /// <summary>Co agent noi ve Console khong. Mac dinh co.</summary>
+    bool? HoTroRemote = null,
+    bool? HoTroRobot = null,
+    string? Tang = null,
+    /// <summary>Ma cac du an dung thiet bi nay.</summary>
+    List<string>? DuAns = null);
 
 public record UpdateBenchRequest(
     /// <summary>Đổi được: thay MHU trong bench là đổi dòng xe, id giữ nguyên.</summary>
@@ -96,7 +125,33 @@ public record UpdateBenchRequest(
     string? Firmware,
     string? TenMay,
     string? PrimaryChannel,
-    string? PrimaryUnit);
+    string? PrimaryUnit,
+
+    string? Loai = null,
+    /// <summary>Chuoi rong = thao ra khoi thiet bi chua, khac null = chuyen sang thiet bi khac.</summary>
+    string? ThuocVe = null,
+    bool? HoTroRemote = null,
+    bool? HoTroRobot = null,
+    string? Tang = null,
+    /// <summary>Gui len la THAY CA DANH SACH, khong phai them vao. Null = khong doi.</summary>
+    List<string>? DuAns = null);
+
+/// <summary>Du an dung thiet bi.</summary>
+public record DuAnDto(
+    int Id,
+    string Ma,
+    string Ten,
+    string? MoTa,
+    DateTimeOffset TaoLuc,
+    int SoThietBi)
+{
+    public static DuAnDto From(DuAn d, int soThietBi) =>
+        new(d.Id, d.Ma, d.Ten, d.MoTa, d.TaoLuc, soThietBi);
+}
+
+public record TaoDuAnRequest(string Ma, string Ten, string? MoTa);
+
+public record SuaDuAnRequest(string? Ten, string? MoTa);
 
 /// <summary>Yêu cầu chạy test. Action mặc định là start_test.</summary>
 public record StartTestRequest(string TestCase, string? Plan, string? IssuedBy);

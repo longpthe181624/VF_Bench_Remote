@@ -386,7 +386,13 @@ public class MqttIngestService(
                 // Lưới an toàn cho trạng thái mất kết nối — xem StaleAfterSeconds.
                 var silentSince = DateTimeOffset.UtcNow.AddSeconds(-_opt.StaleAfterSeconds);
                 var silent = await db.Benches
-                    .Where(b => b.State != BenchState.Offline
+                    // Thiết bị không hỗ trợ remote thì KHÔNG BAO GIỜ có agent,
+                    // nên im lặng là bình thường chứ không phải mất kết nối.
+                    // Thiếu điều kiện này là mỗi con ECU đơn đẻ một cảnh báo
+                    // mỗi ngày, người ta tắt cảnh báo đi, rồi lúc bench thật
+                    // hỏng thì không ai nhìn nữa.
+                    .Where(b => b.HoTroRemote
+                             && b.State != BenchState.Offline
                              && b.State != BenchState.Unknown
                              && b.State != BenchState.Maintenance
                              && b.LastPacketAt != null && b.LastPacketAt < silentSince)

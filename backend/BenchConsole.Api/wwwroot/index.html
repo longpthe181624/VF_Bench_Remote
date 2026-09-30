@@ -131,22 +131,67 @@
         <option value="offline">Mất kết nối</option>
         <option value="maintenance">Bảo trì</option>
       </select>
+      <select id="filter-loai">
+        <option value="">Mọi loại</option>
+        <option value="bench">Bench</option>
+        <option value="ecu">ECU / MHU</option>
+        <option value="vehicle">Xe</option>
+      </select>
+      <select id="filter-duan">
+        <option value="">Mọi dự án</option>
+      </select>
       <button id="toggle-add">+ Thêm bench</button>
     </div>
 
     <form class="addbench" id="add-form">
       <div class="field"><label>Mã bench *</label><input name="code" required placeholder="HIL-A05"></div>
       <div class="field"><label>Dòng xe *</label><input name="model" required placeholder="vf6"></div>
+      <div class="field"><label>Loại</label>
+        <select name="loai">
+          <option value="bench">Bench</option>
+          <option value="ecu">ECU / MHU</option>
+          <option value="vehicle">Xe</option>
+        </select>
+      </div>
+      <div class="field"><label>Nằm trong</label>
+        <select name="thuocVe" id="add-thuocve"><option value="">— không —</option></select>
+      </div>
       <div class="field"><label>Xưởng</label><input name="workshop" placeholder="Xưởng 2"></div>
+      <div class="field"><label>Tầng</label><input name="tang" placeholder="T2"></div>
       <div class="field"><label>Rack</label><input name="rack" placeholder="B4"></div>
       <div class="field"><label>Firmware</label><input name="firmware" placeholder="2.14.1"></div>
       <div class="field"><label>Kênh chính</label><input name="primaryChannel" placeholder="T_chamber"></div>
       <div class="field"><label>Đơn vị</label><input name="primaryUnit" placeholder="°C"></div>
+      <div class="field"><label>Dự án</label><span id="add-duan" class="meta">chưa có dự án nào</span></div>
+      <div class="field"><label>&nbsp;</label>
+        <label style="font-weight:400">
+          <input type="checkbox" name="hoTroRemote" checked> có agent (chạy được từ xa)
+        </label>
+      </div>
       <button type="submit" class="primary">Tạo</button>
       <button type="button" id="cancel-add">Huỷ</button>
     </form>
 
     <div id="bench-area"></div>
+  </section>
+
+  <section id="sec-duan">
+    <div class="sec-head">
+      <h2>Dự án</h2>
+      <span class="count" id="duan-count"></span>
+      <span class="grow"></span>
+      <button id="toggle-duan">+ Thêm dự án</button>
+    </div>
+
+    <form class="addbench" id="duan-form">
+      <div class="field"><label>Mã *</label><input name="ma" required placeholder="VF8-VN"></div>
+      <div class="field"><label>Tên *</label><input name="ten" required placeholder="VF8 thị trường Việt Nam" style="width:220px"></div>
+      <div class="field"><label>Mô tả</label><input name="moTa" style="width:220px"></div>
+      <button type="submit" class="primary">Tạo</button>
+      <button type="button" id="duan-huy">Huỷ</button>
+    </form>
+
+    <div id="duan-area"></div>
   </section>
 
   <section>
@@ -389,10 +434,18 @@ function fmtAgo(seconds){
   return Math.floor(seconds/86400) + " ngày trước";
 }
 
+const NHAN_LOAI = {bench:"Bench", ecu:"ECU", vehicle:"Xe"};
+let dsDuAn = [];
+
 function benchRow(b){
   const stateClass = "st-" + (b.state || "unknown");
   const stateLabel = STATE_LABEL[b.state] || b.state;
-  const sub = [b.workshop, b.rack, b.firmware ? "FW " + b.firmware : null].filter(Boolean).join(" · ");
+  const sub = [
+    b.thuocVeCode ? "trong " + b.thuocVeCode : null,
+    b.workshop, b.tang, b.rack,
+    b.firmware ? "FW " + b.firmware : null,
+    (b.duAns && b.duAns.length) ? b.duAns.join(", ") : null,
+  ].filter(Boolean).join(" · ");
 
   const tc = el("div", {class:"testcase"},
     b.testCase ? el("span", {}, b.testCase + (b.plan ? " (" + b.plan + ")" : "")) : el("span", {class:"none"}, "—"));
@@ -432,11 +485,21 @@ function benchRow(b){
   }}, "Xoá");
 
   // Không có quyền chạy thì giấu luôn cả ô nhập, để khỏi gõ xong mới biết.
-  const dieuKhien = coQuyen("BENCH.RUN") ? [testCaseInput, startBtn, stopBtn, resetBtn] : [];
+  //
+  // Thiết bị không có agent cũng vậy, và còn nói rõ vì sao: server trả 409 nên
+  // bấm cũng không chạy, nhưng người dùng cần biết đó là do cấu hình thiết bị
+  // chứ không phải bench đang hỏng.
+  let dieuKhien = [];
+  if (b.hoTroRemote === false){
+    dieuKhien = [el("span", {class:"meta"}, "không có agent")];
+  } else if (coQuyen("BENCH.RUN")){
+    dieuKhien = [testCaseInput, startBtn, stopBtn, resetBtn];
+  }
   const actions = el("div", {class:"actions"}, ...dieuKhien, delBtn);
 
   return el("tr", {},
     el("td", {}, el("div", {class:"code"}, b.code), el("div", {class:"sub"}, sub || "—")),
+    el("td", {}, NHAN_LOAI[b.loai] || b.loai || "—"),
     el("td", {}, b.model),
     el("td", {}, el("span", {class:"state " + stateClass}, el("i"), stateLabel)),
     el("td", {}, tc),
@@ -452,12 +515,16 @@ async function load(){
 
   const q = document.getElementById("q").value.trim();
   const state = document.getElementById("filter-state").value;
+  const loai = document.getElementById("filter-loai").value;
+  const duAnLoc = document.getElementById("filter-duan").value;
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (state) params.set("state", state);
+  if (loai) params.set("loai", loai);
+  if (duAnLoc) params.set("duAn", duAnLoc);
 
   try {
-    const [benches, alerts, goi, baoCao, kho, users, roles, quyenDanhMuc] = await Promise.all([
+    const [benches, alerts, goi, baoCao, kho, users, roles, quyenDanhMuc, duAns] = await Promise.all([
       api("/api/benches" + (params.toString() ? "?" + params.toString() : "")),
       api("/api/alerts"),
       api("/api/test-cases"),
@@ -473,9 +540,16 @@ async function load(){
       coQuyen("USER.VIEW") ? api("/api/users") : Promise.resolve([]),
       coQuyen("ROLE.VIEW") ? api("/api/roles") : Promise.resolve([]),
       coQuyen("ROLE.VIEW") ? api("/api/permissions") : Promise.resolve([]),
+      api("/api/du-an"),
     ]);
     showErr(null);
     benchesHienTai = benches;
+    dsDuAn = duAns;
+    // Dựng ô chọn TRƯỚC khi vẽ bảng: ô lọc dự án và ô chọn thiết bị cha đều
+    // lấy dữ liệu từ hai danh sách này.
+    dungOChonDuAn();
+    dungOChonThuocVe(benches);
+    renderDuAn(duAns);
     renderBenches(benches);
     renderAlerts(alerts);
     renderGoi(goi);
@@ -506,10 +580,82 @@ function renderBenches(rows){
   }
   const table = el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", {}, "Bench"), el("th", {}, "Dòng xe"), el("th", {}, "Trạng thái"),
+      el("th", {}, "Bench"), el("th", {}, "Loại"), el("th", {}, "Dòng xe"), el("th", {}, "Trạng thái"),
       el("th", {}, "Test case"), el("th", {}, "Cập nhật"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...rows.map(benchRow)));
   area.appendChild(table);
+}
+
+/// Ô lọc dự án. Giữ lại lựa chọn đang có, nếu không thì mỗi lần làm mới 5 giây
+/// là bộ lọc tự nhảy về "Mọi dự án" ngay dưới tay người dùng.
+function dungOChonDuAn(){
+  const o = document.getElementById("filter-duan");
+  const dangChon = o.value;
+  o.innerHTML = "";
+  o.appendChild(el("option", {value:""}, "Mọi dự án"));
+  for (const d of dsDuAn) o.appendChild(el("option", {value:d.ma}, d.ma));
+  o.value = dsDuAn.some(d => d.ma === dangChon) ? dangChon : "";
+
+  // Ô tick dự án trong form thêm bench.
+  const khung = document.getElementById("add-duan");
+  const daTick = new Set([...khung.querySelectorAll("input:checked")].map(x => x.value));
+  khung.innerHTML = "";
+  if (!dsDuAn.length){
+    khung.appendChild(el("span", {class:"meta"}, "chưa có dự án nào"));
+    return;
+  }
+  khung.className = "";
+  for (const d of dsDuAn){
+    const box = el("input", {type:"checkbox", value:d.ma, class:"duan-tick"});
+    if (daTick.has(d.ma)) box.checked = true;
+    khung.appendChild(el("label", {style:"margin-right:10px; font-weight:400"}, box, " " + d.ma));
+  }
+}
+
+/// Ô chọn thiết bị cha. Chỉ liệt kê thiết bị loại bench và xe: cắm MHU vào một
+/// con MHU khác là vô nghĩa, mà bày ra thì người ta chọn.
+function dungOChonThuocVe(rows){
+  const o = document.getElementById("add-thuocve");
+  if (!o) return;
+  const dangChon = o.value;
+  o.innerHTML = "";
+  o.appendChild(el("option", {value:""}, "— không —"));
+  for (const b of rows){
+    if (b.loai === "ecu") continue;
+    o.appendChild(el("option", {value:b.code}, b.code));
+  }
+  o.value = rows.some(b => b.code === dangChon) ? dangChon : "";
+}
+
+function renderDuAn(rows){
+  if (document.activeElement?.closest?.("#duan-form")) return;
+
+  const area = document.getElementById("duan-area");
+  document.getElementById("duan-count").textContent = rows.length + " dự án";
+  area.innerHTML = "";
+  if (!rows.length){
+    area.appendChild(el("div", {class:"empty"}, "Chưa có dự án nào."));
+    return;
+  }
+
+  const dong = (d) => {
+    const xoa = !coQuyen("BENCH.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
+      if (!confirm(`Xoá dự án ${d.ma}?`)) return;
+      try { await api(`/api/du-an/${encodeURIComponent(d.ma)}`, {method:"DELETE"}); showToast(`Đã xoá dự án ${d.ma}`); load(); }
+      catch(e){ showErr(e.message); }
+    }}, "Xoá");
+    return el("tr", {},
+      el("td", {}, el("div", {class:"code"}, d.ma), el("div", {class:"sub"}, d.moTa || "—")),
+      el("td", {}, d.ten),
+      el("td", {}, d.soThietBi + " thiết bị"),
+      el("td", {}, el("div", {class:"actions"}, xoa)),
+    );
+  };
+
+  area.appendChild(el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Mã"), el("th", {}, "Tên"), el("th", {}, "Thiết bị"), el("th", {}, ""))),
+    el("tbody", {}, ...rows.map(dong))));
 }
 
 function kbGon(byte){
@@ -843,6 +989,13 @@ document.getElementById("add-form").addEventListener("submit", async (ev) => {
   const fd = new FormData(ev.target);
   const body = Object.fromEntries(fd.entries());
   for (const k of Object.keys(body)) if (body[k] === "") body[k] = null;
+
+  // Checkbox không có trong FormData khi bỏ tick, nên phải đọc thẳng từ DOM —
+  // để nguyên thì bỏ tick thành "không gửi trường", mà server hiểu đó là
+  // "mặc định có agent". Đúng ngược ý người dùng.
+  body.hoTroRemote = ev.target.hoTroRemote.checked;
+  body.duAns = [...document.querySelectorAll("#add-duan .duan-tick:checked")].map(x => x.value);
+
   try {
     await api("/api/benches", {method:"POST", body: JSON.stringify(body)});
     showToast(`Đã tạo bench ${body.code}`);
@@ -856,6 +1009,30 @@ document.getElementById("add-form").addEventListener("submit", async (ev) => {
 let debounceT;
 document.getElementById("q").addEventListener("input", () => { clearTimeout(debounceT); debounceT = setTimeout(load, 300); });
 document.getElementById("filter-state").addEventListener("change", load);
+document.getElementById("filter-loai").addEventListener("change", load);
+document.getElementById("filter-duan").addEventListener("change", load);
+
+const duAnForm = document.getElementById("duan-form");
+document.getElementById("toggle-duan").addEventListener("click", () => {
+  duAnForm.classList.toggle("show");
+});
+document.getElementById("duan-huy").addEventListener("click", () => {
+  duAnForm.classList.remove("show");
+  duAnForm.reset();
+});
+duAnForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const body = Object.fromEntries(new FormData(ev.target).entries());
+  for (const k of Object.keys(body)) if (body[k] === "") body[k] = null;
+  try {
+    await api("/api/du-an", {method:"POST", body: JSON.stringify(body)});
+    showToast(`Đã tạo dự án ${body.ma}`);
+    ev.target.reset();
+    ev.target.classList.remove("show");
+    showErr(null);
+    load();
+  } catch(e){ showErr(e.message); }
+});
 
 const goiForm = document.getElementById("goi-form");
 document.getElementById("toggle-goi").addEventListener("click", () => {
@@ -963,6 +1140,7 @@ function apDungQuyen(){
     if (e) e.style.display = co ? "" : "none";
   };
   an("toggle-add", coQuyen("BENCH.CREATE"));
+  an("toggle-duan", coQuyen("BENCH.CREATE"));
   an("sec-user", coQuyen("USER.VIEW"));
   an("kho-chon-boc", coQuyen("KHO.VIEW_ALL"));
   an("sec-role", coQuyen("ROLE.VIEW"));

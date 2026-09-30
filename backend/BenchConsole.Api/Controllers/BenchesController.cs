@@ -30,9 +30,32 @@ public class BenchesController(
         [FromQuery] string? state,
         [FromQuery] string? model,
         [FromQuery] string? q,
+        [FromQuery] string? loai,
+        [FromQuery] string? duAn,
         CancellationToken ct)
     {
-        var query = db.Benches.AsNoTracking();
+        // Include hai nhanh: thiet bi cha (de hien "nam trong BENCH-01") va danh
+        // sach du an. Khong Include thi BenchDto tra ve null/rong, giao dien mat
+        // cot ma khong bao loi gi — kieu hong im lang.
+        // Kieu khai tuong minh: `var` se suy ra IIncludableQueryable, ma kieu
+        // do khong nhan lai ket qua cua .Where() ben duoi.
+        IQueryable<Bench> query = db.Benches.AsNoTracking()
+            .Include(b => b.ThuocVe)
+            .Include(b => b.DuAns).ThenInclude(x => x.DuAn);
+
+        if (!string.IsNullOrWhiteSpace(loai))
+        {
+            var loaiCan = MaLoaiThietBi.Doc(loai);
+            if (loaiCan is null)
+                return BadRequest(new { error = $"Loai thiet bi khong hop le: {loai}. Chi co {MaLoaiThietBi.DanhSachHopLe}." });
+            query = query.Where(b => b.Loai == loaiCan.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(duAn))
+        {
+            var maDuAn = duAn.Trim().ToUpperInvariant();
+            query = query.Where(b => b.DuAns.Any(x => x.DuAn != null && x.DuAn.Ma == maDuAn));
+        }
 
         if (!string.IsNullOrWhiteSpace(state))
         {
@@ -70,6 +93,8 @@ public class BenchesController(
     public async Task<ActionResult<BenchDto>> Get(string code, CancellationToken ct)
     {
         var bench = await db.Benches.AsNoTracking()
+            .Include(b => b.ThuocVe)
+            .Include(b => b.DuAns).ThenInclude(x => x.DuAn)
             .FirstOrDefaultAsync(b => b.Code == code, ct);
         return bench is null ? NotFound(new { error = $"Không có bench {code}" }) : BenchDto.From(bench);
     }
@@ -89,8 +114,36 @@ public class BenchesController(
         if (await db.Benches.AnyAsync(b => b.Code == code, ct))
             return Conflict(new { error = $"Bench {code} đã tồn tại" });
 
+        LoaiThietBi loai = LoaiThietBi.Bench;
+        if (!string.IsNullOrWhiteSpace(req.Loai))
+        {
+            var doc = MaLoaiThietBi.Doc(req.Loai);
+            if (doc is null)
+                return BadRequest(new { error = $"Loai thiet bi khong hop le: {req.Loai}. Chi co {MaLoaiThietBi.DanhSachHopLe}." });
+            loai = doc.Value;
+        }
+
+        int? thuocVeId = null;
+        if (!string.IsNullOrWhiteSpace(req.ThuocVe))
+        {
+            var cha = await db.Benches.FirstOrDefaultAsync(b => b.Code == req.ThuocVe.Trim().ToUpperInvariant(), ct);
+            if (cha is null)
+                return BadRequest(new { error = $"Khong co thiet bi {req.ThuocVe} de gan vao" });
+            thuocVeId = cha.Id;
+        }
+
+        var (duAns, thieu) = await TimDuAnAsync(req.DuAns, ct);
+        if (thieu is not null) return BadRequest(new { error = thieu });
+
         var bench = new Bench
         {
+            Loai = loai,
+            ThuocVeId = thuocVeId,
+            Tang = req.Tang,
+            // Mac dinh CO agent: da dang ky bench thi gan nhu luon la de chay
+            // tu xa. Thiet bi don khong agent la ngoai le, phai khai ro.
+            HoTroRemote = req.HoTroRemote ?? true,
+            HoTroRobot = req.HoTroRobot ?? false,
             Code = code,
             Model = model,
             Workshop = req.Workshop,
@@ -106,6 +159,7 @@ public class BenchesController(
         };
 
         db.Benches.Add(bench);
+        foreach (var d in duAns) bench.DuAns.Add(new ThietBiDuAn { Bench = bench, DuAnId = d.Id });
         await db.SaveChangesAsync(ct);
 
         // Chưa có LastSeenAt: thẻ sẽ hiện "Chưa từng kết nối" cho tới khi agent
@@ -117,7 +171,10 @@ public class BenchesController(
     [HasPermission(MaQuyen.BenchUpdate)]
     public async Task<ActionResult<BenchDto>> Update(string code, UpdateBenchRequest req, CancellationToken ct)
     {
-        var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
+        var bench = await db.Benches
+            .Include(b => b.ThuocVe)
+            .Include(b => b.DuAns).ThenInclude(x => x.DuAn)
+            .FirstOrDefaultAsync(b => b.Code == code, ct);
         if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
 
         // Code thì KHÔNG cho đổi — nó là danh tính bench, đổi là mồ côi toàn bộ
@@ -137,8 +194,58 @@ public class BenchesController(
         if (req.TenMay is not null) bench.TenMay = req.TenMay;
         if (req.PrimaryChannel is not null) bench.PrimaryChannel = req.PrimaryChannel;
         if (req.PrimaryUnit is not null) bench.PrimaryUnit = req.PrimaryUnit;
+        if (req.Tang is not null) bench.Tang = req.Tang;
+        if (req.HoTroRemote is not null) bench.HoTroRemote = req.HoTroRemote.Value;
+        if (req.HoTroRobot is not null) bench.HoTroRobot = req.HoTroRobot.Value;
+
+        if (req.Loai is not null)
+        {
+            var doc = MaLoaiThietBi.Doc(req.Loai);
+            if (doc is null)
+                return BadRequest(new { error = $"Loai thiet bi khong hop le: {req.Loai}. Chi co {MaLoaiThietBi.DanhSachHopLe}." });
+            bench.Loai = doc.Value;
+        }
+
+        if (req.ThuocVe is not null)
+        {
+            // Chuoi rong = thao thiet bi ra, khong con nam trong gi ca. Phai
+            // phan biet voi null (khong gui truong nay = khong doi), nen dung
+            // `is not null` chu khong dung IsNullOrWhiteSpace o vong ngoai.
+            if (req.ThuocVe.Trim().Length == 0)
+            {
+                bench.ThuocVeId = null;
+            }
+            else
+            {
+                var maCha = req.ThuocVe.Trim().ToUpperInvariant();
+                var cha = await db.Benches.FirstOrDefaultAsync(b => b.Code == maCha, ct);
+                if (cha is null)
+                    return BadRequest(new { error = $"Khong co thiet bi {req.ThuocVe} de gan vao" });
+
+                var vong = await CoVongChuaAsync(bench.Id, cha.Id, ct);
+                if (vong is not null) return BadRequest(new { error = vong });
+
+                bench.ThuocVeId = cha.Id;
+            }
+        }
+
+        if (req.DuAns is not null)
+        {
+            var (duAns, thieu) = await TimDuAnAsync(req.DuAns, ct);
+            if (thieu is not null) return BadRequest(new { error = thieu });
+
+            // Thay ca danh sach chu khong them vao: giao dien gui len tap du an
+            // sau khi nguoi dung tich chon, nen bo tich phai co tac dung.
+            bench.DuAns.Clear();
+            foreach (var d in duAns) bench.DuAns.Add(new ThietBiDuAn { BenchId = bench.Id, DuAnId = d.Id });
+        }
 
         await db.SaveChangesAsync(ct);
+
+        // Doc lai de BenchDto co ThuocVe va ten du an vua gan. Khong doc lai thi
+        // phan hoi thieu dung nhung truong nguoi dung vua sua.
+        await db.Entry(bench).Reference(b => b.ThuocVe).LoadAsync(ct);
+        foreach (var x in bench.DuAns) await db.Entry(x).Reference(y => y.DuAn).LoadAsync(ct);
         return BenchDto.From(bench);
     }
 
@@ -155,6 +262,57 @@ public class BenchesController(
         db.Benches.Remove(bench);
         await db.SaveChangesAsync(ct);
         return NoContent();
+    }
+
+    // ------------------------------------------------------------ dung chung
+
+    /// <summary>
+    /// Doi ma du an ra ban ghi. KHONG tu tao du an moi: go sai mot ky tu la
+    /// sinh du an rac, giong dung ly do agent khong duoc tu tao bench.
+    /// </summary>
+    private async Task<(List<DuAn> DuAns, string? Loi)> TimDuAnAsync(
+        List<string>? ma, CancellationToken ct)
+    {
+        if (ma is null || ma.Count == 0) return (new List<DuAn>(), null);
+
+        // Chuan hoa chu in y nhu luc tao du an. Khong chuan hoa thi phai trong
+        // vao collation cua database de so khong phan biet hoa thuong — dung
+        // duoc tren SQL Server nhung hong ngay tren provider khac.
+        var can = ma.Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim().ToUpperInvariant())
+                    .Distinct()
+                    .ToList();
+        if (can.Count == 0) return (new List<DuAn>(), null);
+
+        var co = await db.DuAns.Where(d => can.Contains(d.Ma)).ToListAsync(ct);
+        var thieu = can.Where(x => !co.Any(d => d.Ma == x)).ToList();
+        if (thieu.Count > 0)
+            return (co, $"Khong co du an: {string.Join(", ", thieu)}. Tao du an truoc khi gan thiet bi vao.");
+
+        return (co, null);
+    }
+
+    /// <summary>
+    /// Kiem tra gan <paramref name="chaId"/> lam cha cua <paramref name="conId"/>
+    /// co tao thanh vong khong.
+    ///
+    /// Khong co chot nay thi A nam trong B, B nam trong A la truy van de quy
+    /// chay mai khong dung — treo request chu khong bao loi.
+    /// </summary>
+    private async Task<string?> CoVongChuaAsync(int conId, int chaId, CancellationToken ct)
+    {
+        if (conId == chaId) return "Thiet bi khong the nam trong chinh no";
+
+        // Chan them theo so buoc: du lieu hong san tu truoc (vong da ton tai
+        // trong DB) thi vong lap nay cung phai thoat duoc.
+        var hienTai = (int?)chaId;
+        for (var buoc = 0; buoc < 64 && hienTai is not null; buoc++)
+        {
+            var id = hienTai.Value;
+            if (id == conId) return "Gan nhu vay tao thanh vong: hai thiet bi nam trong nhau";
+            hienTai = await db.Benches.Where(b => b.Id == id).Select(b => b.ThuocVeId).FirstOrDefaultAsync(ct);
+        }
+        return null;
     }
 
     // ------------------------------------------------------------ ra lệnh
@@ -241,6 +399,16 @@ public class BenchesController(
     {
         var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
         if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+
+        // Chặn TRƯỚC mọi kiểm tra khác: thiết bị không có agent thì lệnh gửi đi
+        // sẽ rơi vào một topic không ai nghe, và Console báo "bench không phản
+        // hồi" sau khi hết hạn chờ ack — sai nguyên nhân hoàn toàn.
+        if (!bench.HoTroRemote)
+            return Conflict(new
+            {
+                error = $"{code} không hỗ trợ chạy từ xa, không có agent nào nhận lệnh. "
+                        + "Bật 'hỗ trợ remote' trong hồ sơ thiết bị nếu đã cài agent.",
+            });
 
         if (action == "start_test")
         {

@@ -157,7 +157,7 @@ Windows 11 + Docker Desktop + PowerShell, và Git Bash cho tool Bash.
 
 ### Chưa làm
 
-Đăng ký ECU/vehicle, dự án, request test, hẹn giờ, flash, AI sinh test case,
+Request test, hẹn giờ, flash, AI sinh test case,
 xác thực người dùng (hiện `issuedBy` là tham số tự khai), chuyển
 `EnsureCreated()` sang EF migration, giao diện web thật. Chi tiết từng endpoint
 xem `docs/api.md`.
@@ -399,7 +399,8 @@ nội bộ, máy bench không có người trực sẽ vướng.
    bench".
 2. **Kết quả đi hai đường**: MQTT mang tóm tắt như hiện tại, REST mang report
    chi tiết và phục vụ client không có MQTT. Phải chống trùng theo `cmdId`.
-3. **Một bảng thiết bị chung** cho ECU, bench và vehicle, phân biệt bằng `kind`,
+3. **Một bảng thiết bị chung** cho ECU, bench và vehicle — **ĐÃ LÀM 30/09**,
+   xem mục "Thiết bị chung". Phân biệt bằng `Loai` (không phải `kind`),
    kèm danh sách dự án, cờ `supportsRemote`, cờ `supportsRobot`, phòng và tầng.
    Thiết bị `supportsRemote = false` không bao giờ có agent, nên không đánh dấu
    mất kết nối, không sinh cảnh báo, lệnh chạy trả 409.
@@ -836,6 +837,121 @@ CREATE UNIQUE INDEX IX_TepNguoiDungs_NguoiDung_TenFile_Sha256
 Ba lần liên tiếp làm tay, lần này còn phải đổi cả index. **Chuyển sang EF
 migration trước khi thêm bảng thứ tư** — chi phí đang dồn lại, và một câu SQL
 gõ sai trên máy A thì không có gì bắt được.
+
+## Thiết bị chung: bench, ECU, xe — làm 30/09
+
+Bench, ECU và xe nằm **chung một bảng `Benches`**, phân biệt bằng cột `Loai`
+(`LoaiThietBi`: Bench / Ecu / Vehicle). Không tách ba bảng.
+
+**Vì sao không tách.** Bốn bảng `Runs`, `Commands`, `Alerts`, `BaoCaoChays`
+đều trỏ vào thiết bị. Tách ba bảng thì chúng phải hoặc mang ba cột nullable
+(mỗi hàng đúng một cột có giá trị — không gì ngăn được hàng rỗng cả ba), hoặc
+mang cặp loại+id và **mất hẳn khoá ngoại**: xoá thiết bị là bỏ lại lịch sử trỏ
+vào hư không. Trùng cột chỉ phiền; mất toàn vẹn tham chiếu mới là hỏng.
+
+Không đổi tên bảng. Migration `20260930050005_ThietBiChung` thêm cột và hai
+bảng dự án, `Migrate()` tự áp lúc khởi động — không gõ SQL tay nữa.
+
+**Bẫy đã dính, suýt lọt lên máy A:** EF sinh `defaultValue` theo giá trị mặc
+định của **kiểu** (`bool` → `false`), **không** theo `= true` khai trong entity.
+Để nguyên thì mọi bench đang chạy trên máy A bỗng thành "không có agent" — lệnh
+chạy trả 409, vòng quét bỏ qua, mà thẻ bench vẫn xanh. Hỏng im lặng đúng kiểu
+dự án này đã dính nhiều lần. Migration nay có thêm một dòng
+`UPDATE Benches SET HoTroRemote = 1` để bật lại cho bench cũ.
+
+**Bài học chung: mỗi lần thêm cột `NOT NULL` có mặc định khác `false`/`0`, phải
+mở file migration ra đọc**, đừng tin nó suy đúng ý từ entity.
+
+### Cột mới
+
+| Cột | Việc |
+| --- | --- |
+| `Loai` | bench / ecu / vehicle |
+| `ThuocVeId` | thiết bị này nằm trong thiết bị nào — MHU trỏ vào bench đang cắm |
+| `HoTroRemote` | có agent nối về Console không |
+| `HoTroRobot` | để dành, chưa dùng |
+| `Tang` | tầng, đi cùng `Workshop` đã có |
+
+**Quan hệ chứa nhau tự trỏ về chính bảng**, không qua bảng nối: một ECU tại
+một thời điểm chỉ cắm vào một chỗ. Rút sang bench khác thì chỉ đổi một cột, mã
+bench giữ nguyên nên lịch sử chạy không mồ côi.
+
+Xoá thiết bị chứa thì thiết bị con **thành đứng riêng** (`SetNull`), không xoá
+theo — tháo bench đi thì con MHU vẫn còn ngoài đời.
+
+`PATCH` có chốt chặn vòng: A nằm trong B mà B nằm trong A thì truy vấn đệ quy
+chạy mãi không dừng, treo request chứ không báo lỗi. Chốt chặn thêm theo số
+bước (64) để dữ liệu đã hỏng sẵn cũng thoát được.
+
+### `HoTroRemote = false` — chỗ dễ quên nhất
+
+Thiết bị không có agent thì **không bao giờ gửi gì về**, nên:
+
+- `HousekeepingLoopAsync` **bỏ qua nó**, không đánh dấu "Mất kết nối".
+- Mọi lệnh gửi xuống trả **409 ngay từ đầu**, trước mọi kiểm tra khác.
+- Giao diện giấu ô nhập test case, hiện chữ "không có agent".
+
+Thiếu chỗ đầu là mỗi con ECU đơn đẻ một cảnh báo mỗi ngày, người ta tắt cảnh
+báo đi, rồi lúc bench thật hỏng thì không ai nhìn nữa. Thiếu chỗ thứ hai là
+lệnh rơi vào topic không ai nghe và Console báo "bench không phản hồi" — sai
+nguyên nhân hoàn toàn, đúng kiểu bẫy đã dính ở mục "Model và mã bench".
+
+### Dự án
+
+`DuAns` + bảng nối `ThietBiDuAns`. Đây là quan hệ **nhiều-nhiều thật** (một
+bench dùng cho nhiều dự án, một dự án dùng nhiều bench), khác hẳn quan hệ chứa
+nhau ở trên nên không gộp chung được.
+
+`GET/POST/PATCH/DELETE /api/du-an`. Dùng lại quyền `BENCH.*` chứ **không thêm
+`DUAN.*`**: thêm mã quyền mới thì mọi vai trò đang có trên máy A đều thiếu
+quyền đó (`AuthSeed` không sửa vai trò đã tồn tại), người dùng sẽ thấy 403 mà
+không hiểu vì sao.
+
+Hai chốt chặn:
+
+- **Không tự tạo dự án** khi gán thiết bị vào mã lạ — trả 400 kèm đúng mã nào
+  thiếu. Cùng lý do agent không được tự tạo bench: gõ sai một ký tự là sinh
+  dự án rác.
+- **Xoá dự án còn thiết bị thì chặn**, dù khoá ngoại Cascade tự dọn được bảng
+  nối. Cascade ở đây là âm thầm gỡ liên kết của cả chục con bench trong khi
+  người xoá tưởng mình chỉ dọn một cái tên.
+
+`PATCH /api/benches/{ma}` với `duAns` là **thay cả tập**, không phải thêm vào —
+giao diện gửi lên tập sau khi người dùng tích chọn, nên bỏ tích phải có tác
+dụng. `duAns: null` (không gửi trường) mới là "không đổi".
+
+Mã dự án **chuẩn hoá thành chữ in** ở mọi lối vào. Không chuẩn hoá thì phải
+trông vào collation của SQL Server để so không phân biệt hoa thường — chạy
+được trên SQL Server nhưng hỏng ngay trên provider khác. Đã dính đúng lỗi này
+lúc chạy phép kiểm trên EF InMemory.
+
+### Lọc
+
+`GET /api/benches?loai=ecu&duAn=VF8-VN`. `loai` nhận cả `mhu` (thành `ecu`) và
+`xe` (thành `vehicle`) vì tester gọi quen như vậy. Loại lạ trả 400 kèm danh
+sách hợp lệ, **không im lặng bỏ qua bộ lọc** — bỏ qua thì người dùng tưởng
+mình đang xem tập đã lọc.
+
+### Đã kiểm chứng
+
+- `dotnet build` sạch; SmokeTest **145/145**, `BenchConsole.Api.Tests` **65/65**
+  (tăng từ 130 và 34), `bench_agent_test.py` 121/121.
+- Phép kiểm tầng Api chạy qua **HTTP thật** trên backend dựng trong bộ nhớ, phủ:
+  tạo dự án, chặn trùng mã, từ chối dự án lạ, ECU nằm trong bench, **409 khi ra
+  lệnh cho thiết bị không có agent**, lọc theo loại và theo dự án, chặn vòng,
+  chuỗi rỗng để tháo thiết bị ra, thay cả tập dự án, chặn xoá dự án còn thiết bị.
+- Giao diện: dựng bảng bằng **JSON thật lấy từ backend**, kiểm trong trình
+  duyệt — đủ 7 cột, ECU hiện "trong BENCH-TB1" và "không có agent", bench
+  thường vẫn đủ nút Chạy/Dừng/Reset. Bản ghi kiểu cũ (thiếu hẳn `loai` và
+  `hoTroRemote`) vẫn vẽ đúng và vẫn chạy được.
+
+### Chưa kiểm chứng
+
+- **Chưa chạy trên SQL Server thật.** Máy B không có Docker, dịch vụ
+  `MSSQL$SQLEXPRESS` cài sẵn nhưng cần quyền quản trị mới bật được. Migration
+  mới phải áp trên máy A — `Migrate()` tự áp lúc khởi động, không phải gõ SQL
+  tay nữa.
+- Chưa ai nhìn màn hình thật sau khi áp code mới lên máy A.
 
 ## Chuyển sang EF migration — làm 28/09
 

@@ -452,6 +452,67 @@ Check(AuthConstants.PermissionClaimType == "permission"
       && AuthConstants.TokenUseAccess == "access",
       "tên claim phải đúng như đã thống nhất, lệch là đăng nhập được mà không có quyền nào");
 
+Console.WriteLine();
+Console.WriteLine("── Loại thiết bị");
+
+Check(MaLoaiThietBi.Doc("bench") == LoaiThietBi.Bench
+      && MaLoaiThietBi.Doc("ecu") == LoaiThietBi.Ecu
+      && MaLoaiThietBi.Doc("vehicle") == LoaiThietBi.Vehicle,
+      "ba loại chuẩn phải đọc được");
+Check(MaLoaiThietBi.Doc("  ECU  ") == LoaiThietBi.Ecu,
+      "đọc loại không phân biệt hoa thường và bỏ khoảng trắng hai đầu");
+// MHU là một ECU, tester gọi quen như vậy nên nhận luôn.
+Check(MaLoaiThietBi.Doc("mhu") == LoaiThietBi.Ecu, "mhu phải hiểu thành ecu");
+Check(MaLoaiThietBi.Doc("xe") == LoaiThietBi.Vehicle, "xe phải hiểu thành vehicle");
+
+// Trả null chứ không ném, và cũng không im lặng đổi thành Bench: bên gọi cần
+// phân biệt "gõ sai" với "không gửi trường này".
+Check(MaLoaiThietBi.Doc("bênh") is null, "chuỗi lạ phải trả null chứ không ném");
+Check(MaLoaiThietBi.Doc(null) is null && MaLoaiThietBi.Doc("") is null
+      && MaLoaiThietBi.Doc("   ") is null,
+      "null và chuỗi trống nghĩa là không đổi, không phải mặc định thành bench");
+
+Check(MaLoaiThietBi.Ghi(LoaiThietBi.Bench) == "bench"
+      && MaLoaiThietBi.Ghi(LoaiThietBi.Ecu) == "ecu"
+      && MaLoaiThietBi.Ghi(LoaiThietBi.Vehicle) == "vehicle",
+      "ghi ra JSON phải là chữ thường");
+// Đọc lại thứ vừa ghi phải ra đúng cái cũ, nếu không thì PATCH lại hồ sơ
+// thiết bị bằng chính JSON vừa nhận sẽ đổi mất loại.
+Check(Enum.GetValues<LoaiThietBi>().All(l => MaLoaiThietBi.Doc(MaLoaiThietBi.Ghi(l)) == l),
+      "ghi rồi đọc lại phải ra đúng loại ban đầu");
+
+Console.WriteLine();
+Console.WriteLine("── BenchDto cho thiết bị chung");
+
+var thietBiTron = new Bench { Id = 7, Code = "ECU-01", Model = "VF8", Loai = LoaiThietBi.Ecu };
+var dtoTron = BenchDto.From(thietBiTron);
+Check(dtoTron.Loai == "ecu", "BenchDto phải mang loại thiết bị");
+// Không Include thì navigation rỗng — DTO phải trả mảng rỗng chứ không null,
+// để giao diện không phải kiểm tra hai lần.
+Check(dtoTron.DuAns is not null && dtoTron.DuAns.Count == 0,
+      "không nạp dự án thì trả mảng rỗng, không trả null");
+Check(dtoTron.ThuocVeCode is null, "chưa gắn vào thiết bị nào thì ThuocVeCode null");
+// Mặc định phải là CÓ agent: bench đã đăng ký thì gần như luôn chạy từ xa.
+Check(dtoTron.HoTroRemote, "mặc định phải là hỗ trợ remote");
+
+var cha = new Bench { Id = 1, Code = "BENCH-01", Model = "VF8" };
+var con = new Bench
+{
+    Id = 2, Code = "MHU-01", Model = "VF8", Loai = LoaiThietBi.Ecu,
+    ThuocVeId = 1, ThuocVe = cha, HoTroRemote = false, Tang = "T2",
+    DuAns =
+    [
+        new ThietBiDuAn { DuAnId = 10, DuAn = new DuAn { Id = 10, Ma = "VF8-VN" } },
+        new ThietBiDuAn { DuAnId = 20, DuAn = new DuAn { Id = 20, Ma = "VF8-ME" } },
+    ],
+};
+var dtoCon = BenchDto.From(con);
+Check(dtoCon.ThuocVeCode == "BENCH-01" && dtoCon.ThuocVeId == 1,
+      "thiết bị con phải nêu mã thiết bị đang chứa nó");
+Check(!dtoCon.HoTroRemote && dtoCon.Tang == "T2", "cờ remote và tầng phải đi ra DTO");
+Check(dtoCon.DuAns is not null && dtoCon.DuAns.SequenceEqual(new[] { "VF8-ME", "VF8-VN" }),
+      "danh sách dự án phải xếp theo mã để giao diện không nhảy thứ tự mỗi lần tải");
+
 // ---------------------------------------------------------------- kết quả
 Console.WriteLine($"\n{'='}{new string('=', 50)}");
 if (failures.Count == 0)

@@ -10,6 +10,29 @@ public enum BenchState
     Maintenance = 5, // Bảo trì
 }
 
+/// <summary>
+/// Loại thiết bị. Ba loại nằm CHUNG một bảng, không tách ba bảng.
+///
+/// Lý do không tách: bốn bảng `Runs`, `Commands`, `Alerts`, `BaoCaoChays` đều
+/// trỏ vào thiết bị. Tách ba bảng thì chúng phải hoặc mang ba cột nullable
+/// (mỗi hàng đúng một cột có giá trị, không gì ngăn được hàng rỗng cả ba),
+/// hoặc mang cặp loại+id và MẤT HẲN KHOÁ NGOẠI — xoá thiết bị là bỏ lại lịch
+/// sử trỏ vào hư không.
+///
+/// Trùng cột chỉ phiền. Mất toàn vẹn tham chiếu mới là hỏng.
+/// </summary>
+public enum LoaiThietBi
+{
+    /// <summary>Giá test, thường chứa MHU và vài ECU khác. Mặc định.</summary>
+    Bench = 0,
+
+    /// <summary>ECU hoặc thiết bị đơn. MHU cũng là một ECU.</summary>
+    Ecu = 1,
+
+    /// <summary>Nguyên chiếc xe.</summary>
+    Vehicle = 2,
+}
+
 public enum Verdict
 {
     Unknown = 0,
@@ -32,8 +55,41 @@ public class Bench
     public int Id { get; set; }
     /// <summary>Mã bench, ví dụ HIL-A02. Phải trùng bench.id trong config của agent.</summary>
     public string Code { get; set; } = "";
+    /// <summary>
+    /// Loại thiết bị. Mặc định <see cref="LoaiThietBi.Bench"/> nên mọi hàng đã
+    /// có từ trước giữ nguyên ý nghĩa, không phải chuyển dữ liệu.
+    /// </summary>
+    public LoaiThietBi Loai { get; set; } = LoaiThietBi.Bench;
+
+    /// <summary>
+    /// Thiết bị này đang nằm trong thiết bị nào — MHU trỏ vào bench đang cắm.
+    ///
+    /// Tự trỏ về chính bảng thay vì bảng nối, vì **một ECU tại một thời điểm
+    /// chỉ cắm vào một chỗ**. Rút sang bench khác thì chỉ đổi cột này, và mã
+    /// bench giữ nguyên nên lịch sử chạy không bị mồ côi.
+    /// </summary>
+    public int? ThuocVeId { get; set; }
+    public Bench? ThuocVe { get; set; }
+
+    /// <summary>Thiết bị nằm bên trong thiết bị này.</summary>
+    public List<Bench> ChuaNhung { get; set; } = new();
+
+    /// <summary>
+    /// Có agent nối về Console không.
+    ///
+    /// `false` thì thiết bị KHÔNG BAO GIỜ gửi gì về, nên không được đánh dấu
+    /// mất kết nối và không được sinh cảnh báo. Thiếu chỗ này là mỗi con ECU
+    /// đơn đẻ một cảnh báo mỗi ngày, người ta tắt cảnh báo đi, rồi lúc bench
+    /// thật hỏng thì không ai nhìn nữa.
+    /// </summary>
+    public bool HoTroRemote { get; set; } = true;
+
+    /// <summary>Robot di chuyển tới kiểm thử được không. Để dành cho sau này.</summary>
+    public bool HoTroRobot { get; set; }
+
     public string Model { get; set; } = "";          // vf6 / vf9
-    public string? Workshop { get; set; }            // "Xưởng 2"
+    public string? Workshop { get; set; }            // phòng, ví dụ "Xưởng 2"
+    public string? Tang { get; set; }                // tầng
     public string? Rack { get; set; }                // "Rack B1"
     public string? Firmware { get; set; }            // "2.14.1"
     public string TopicPrefix { get; set; } = "";    // bench/vf6/HIL-A02
@@ -64,6 +120,36 @@ public class Bench
 
     public List<Run> Runs { get; set; } = new();
     public List<BenchCommand> Commands { get; set; } = new();
+    public List<ThietBiDuAn> DuAns { get; set; } = new();
+}
+
+/// <summary>
+/// Dự án dùng thiết bị. Quan hệ NHIỀU-NHIỀU thật: một bench dùng cho nhiều dự
+/// án, một dự án dùng nhiều bench — khác hẳn quan hệ chứa nhau ở trên nên
+/// không gộp chung được.
+/// </summary>
+public class DuAn
+{
+    public int Id { get; set; }
+
+    /// <summary>Mã ngắn, duy nhất. Có mã thì không sinh ra `VF8`, `vf8`, `VF-8` cùng tồn tại.</summary>
+    public string Ma { get; set; } = "";
+
+    public string Ten { get; set; } = "";
+    public string? MoTa { get; set; }
+    public DateTimeOffset TaoLuc { get; set; }
+
+    public List<ThietBiDuAn> ThietBis { get; set; } = new();
+}
+
+/// <summary>Bảng nối thiết bị với dự án.</summary>
+public class ThietBiDuAn
+{
+    public int BenchId { get; set; }
+    public Bench? Bench { get; set; }
+
+    public int DuAnId { get; set; }
+    public DuAn? DuAn { get; set; }
 }
 
 /// <summary>Một lệnh gửi xuống bench. Ghi trước khi publish để không mất dấu.</summary>
