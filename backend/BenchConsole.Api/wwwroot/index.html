@@ -426,6 +426,53 @@ async function api(path, opts, daThuLamMoi){
   return text ? JSON.parse(text) : null;
 }
 
+/// Tải file về bằng fetch có gắn token, KHÔNG dùng thẻ `<a href>` trơn.
+///
+/// Trình duyệt điều hướng theo `href` thì **không gửi header Authorization** —
+/// token nằm trong JS chứ không phải cookie — nên mọi endpoint tải file có
+/// [Authorize] đều trả 401. Đây đúng là lỗi hai nút "Tải về" đã hỏng âm thầm
+/// từ lúc thêm xác thực 28/09: thẻ `<a>` viết trước đó, khoá endpoint xong
+/// không ai thử lại.
+///
+/// Riêng `/api/test-cases/{id}/download` vẫn mở cho Qauto nên tải kiểu nào
+/// cũng được; dùng chung một đường ở đây cho khỏi phải nhớ chỗ nào khác chỗ nào.
+async function taiFile(duong, tenFile, daThuLamMoi){
+  const res = await fetch(API + duong, {headers: headerAuth()});
+
+  // Lặp lại cách xử lý 401 của api(): token sống 30 phút, không làm mới thì cứ
+  // nửa tiếng lại đá người dùng ra màn đăng nhập ngay giữa lúc bấm tải.
+  if (res.status === 401){
+    if (!daThuLamMoi && await thuLamMoiToken()) return taiFile(duong, tenFile, true);
+    luuPhien(null); veManDangNhap();
+    throw new Error("Phiên hết hạn, đăng nhập lại.");
+  }
+  if (res.status === 403) throw new Error("Bạn không có quyền tải file này.");
+  if (!res.ok){
+    let msg = res.status + " " + res.statusText;
+    try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
+    throw new Error(msg);
+  }
+
+  const url = URL.createObjectURL(await res.blob());
+  const a = el("a", {href: url, download: tenFile || "tai-ve"});
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  // Thu hồi trễ chứ không ngay sau click: có trình duyệt huỷ luôn lượt tải nếu
+  // blob biến mất cùng nhịp. Giữ mãi cũng không được — file trace CAN vài chục
+  // MB, tải dăm lần là bộ nhớ tab phình lên thấy rõ.
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+/// Nút "Tải về" dùng chung cho kho và báo cáo.
+function nutTai(duong, tenFile){
+  return el("button", {class:"ghost", onclick: async () => {
+    try { await taiFile(duong, tenFile); showErr(null); }
+    catch(e){ showErr(e.message); }
+  }}, "Tải về");
+}
+
 function fmtAgo(seconds){
   if (seconds === null || seconds === undefined) return "chưa từng kết nối";
   if (seconds < 60) return seconds + " giây trước";
@@ -765,8 +812,8 @@ function renderKho(rows){
       el("td", {}, t.moTa || "—"),
       el("td", {}, new Date(t.taiLenLuc).toLocaleString("vi-VN")),
       el("td", {}, el("div", {class:"actions"},
-        el("a", {href: API + `/api/storage/files/${t.id}/download`}, "Tải về"),
-        el("button", {class:"ghost", onclick: async () => {
+        nutTai(`/api/storage/files/${t.id}/download`, t.tenFile),
+        !coQuyen("KHO.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
           if (!confirm(`Xoá ${t.tenFile}?`)) return;
           try { await api(`/api/storage/files/${t.id}`, {method:"DELETE"}); showToast(`Đã xoá ${t.tenFile}`); load(); }
           catch(e){ showErr(e.message); }
@@ -947,7 +994,7 @@ function renderBaoCao(rows){
       el("td", {}, b.tenFile),
       el("td", {}, kbGon(b.kichThuoc)),
       el("td", {}, new Date(b.nhanLuc).toLocaleString("vi-VN")),
-      el("td", {}, el("a", {href: API + `/api/runs/reports/${b.id}/download`}, "Tải về"))))));
+      el("td", {}, nutTai(`/api/runs/reports/${b.id}/download`, b.tenFile))))));
   area.appendChild(table);
 }
 

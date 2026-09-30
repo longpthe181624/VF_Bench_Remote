@@ -890,6 +890,39 @@ curl -s http://vinfast.tail1cbef5.ts.net:5000/swagger/v1/swagger.json | python -
 **Sinh tay nên nó sẽ lại cũ.** Thêm endpoint xong nhớ xuất lại, không thì file
 này lặng lẽ lệch với thực tế đúng như lần vừa rồi.
 
+## Bẫy: thẻ `<a href>` không gửi được token — sửa 30/09
+
+Hai nút "Tải về" trên web (kho người dùng, báo cáo lượt chạy) **hỏng âm thầm từ
+28/09**, đúng hôm thêm xác thực. Hai thẻ đó viết trước khi có auth; khoá
+endpoint xong không ai bấm thử lại, mà đợt đổi đường dẫn 30/09 cũng chỉ thay
+chuỗi nên không lộ ra.
+
+**Trình duyệt điều hướng theo `href` thì không gửi header `Authorization`** —
+token nằm trong JS chứ không phải cookie. Endpoint có `[Authorize]` sẽ trả 401,
+và người dùng chỉ thấy một trang lỗi trắng chứ không thấy thông báo nào của
+Console.
+
+Kiểm nhanh, không cần đăng nhập — đường nào trả 401 mà giao diện lại gọi bằng
+thẻ `<a>` thì đường đó đang hỏng:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}
+" http://vinfast.tail1cbef5.ts.net:5000/api/runs/reports/1/download
+```
+
+Nay dùng `taiFile()` trong `index.html`: fetch có gắn token, nhận blob, tạo thẻ
+`<a>` trỏ vào `blob:` rồi bấm. Blob URL không cần xác thực nên chỗ đó mới được
+phép là thẻ `<a>`.
+
+**Quy ước từ nay: mọi link tải file trong giao diện phải đi qua `taiFile()`.**
+Ngoại lệ duy nhất là `/api/test-cases/{id}/download` — `[AllowAnonymous]` cho
+Qauto — nhưng vẫn gọi chung một đường cho khỏi phải nhớ chỗ nào khác chỗ nào.
+
+Đã kiểm bằng cách chạy thật hàm đó trong trình duyệt với `fetch` bị bắt lại:
+gửi đúng `Authorization: Bearer ...`; 403 báo "không có quyền" chứ không đá ra
+màn đăng nhập; 401 thì làm mới token và thử lại **đúng một lần** (2 lượt gọi);
+làm mới hỏng thì dừng ngay, không lặp vô hạn.
+
 ## Thiết bị chung: bench, ECU, xe — làm 30/09
 
 Bench, ECU và xe nằm **chung một bảng `Benches`**, phân biệt bằng cột `Loai`
