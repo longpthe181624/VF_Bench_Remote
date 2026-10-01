@@ -1,0 +1,157 @@
+/* ============================================================================
+   base.css — reset, base elements, app shell layout (sidebar/header/content),
+   responsive behaviour (sidebar -> drawer trên mobile).
+   ========================================================================== */
+
+* , *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4, p { margin: 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, input, select, textarea { font: inherit; color: inherit; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* Focus visibility rõ ràng cho keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.icon {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -0.15em;
+  stroke-width: 2;
+}
+
+.font-mono { font-family: var(--font-mono); }
+.text-muted { color: var(--muted-foreground); }
+.text-sm { font-size: var(--fs-sm); }
+.text-xs { font-size: var(--fs-xs); }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* ---- Tooltip (CSS thuần, dùng cho icon-only button / sidebar thu gọn) ---- */
+.has-tooltip { position: relative; }
+.has-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.96);
+  background: var(--neutral-900);
+  color: #fff;
+  font-size: var(--fs-xs);
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease;
+  z-index: var(--z-modal);
+}
+.has-tooltip:hover::after,
+.has-tooltip:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+/* ============================== AUTH VIEW =============================== */
+#auth-view {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Nền phẳng --color-page — KHÔNG dùng gradient theo yêu cầu thiết kế mới. */
+  background: var(--bg);
+  padding: var(--space-4);
+}
+
+/* ============================== APP SHELL ================================ */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transition: width .15s ease;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: var(--z-sidebar);
+}
+.sidebar.is-collapsed { width: var(--sidebar-width-collapsed); }
+
+.shell-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  height: var(--header-height);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-5);
+  gap: var(--space-3);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+}
+
+.app-content {
+  flex: 1;
+  padding: var(--space-6);
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: calc(var(--z-sidebar) - 1);
+}
+
+/* ---- Mobile: sidebar trở thành drawer ---- */
+@media (max-width: 880px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    box-shadow: var(--shadow-lg);
+    transition: transform .18s ease;
+  }
+  .sidebar.is-open { transform: translateX(0); width: var(--sidebar-width); }
+  .app-content { padding: var(--space-4); }
+  .header-hamburger { display: inline-flex !important; }
+}
+@media (min-width: 881px) {
+  .sidebar-backdrop { display: none !important; }
+}

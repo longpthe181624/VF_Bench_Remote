@@ -1,0 +1,142 @@
+/* ============================================================================
+   tokens.css — Design tokens (màu, radius, shadow, spacing, typography).
+   Bảng màu mới (bắt buộc, xem yêu cầu Frontend Developer — Dashboard/Devices,
+   2026-09-17): light theme phẳng, không gradient, không neon, shadow rất nhẹ.
+
+   Các biến --color-* là NGUỒN DUY NHẤT khai báo màu — không hardcode màu lặp
+   lại ở component nào khác. Phần "alias tương thích ngược" bên dưới trỏ toàn
+   bộ tên biến CŨ (--bg, --accent, --status-*...) về đúng bảng màu mới, để các
+   trang CHƯA đụng tới trong task này (Login, Test Plans, Executions, Users,
+   Run Test, Testcases) tự động lên đúng theme mới mà không cần sửa code của
+   chúng — chỉ Dashboard/Devices/Register Device dùng thẳng tên biến --color-*.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---- Bảng màu mới (bắt buộc) ---- */
+  --color-page: #f4f6f8;
+  --color-surface: #ffffff;
+  --color-surface-secondary: #f8fafc;
+
+  --color-text-primary: #172033;
+  --color-text-secondary: #657187;
+  --color-border: #dfe5ec;
+
+  --color-primary: #172033;
+  --color-primary-hover: #263249;
+  --color-primary-text: #ffffff;
+
+  --color-blue: #2463d4;
+  --color-blue-light: #eaf1ff;
+
+  --color-green: #16835c;
+  --color-green-light: #e9f8f1;
+
+  --color-orange: #aa5b13;
+  --color-orange-light: #fff5e8;
+
+  --color-red: #bd3344;
+  --color-red-light: #fff0f1;
+
+  --color-disabled: #a8b0bd;
+  --color-disabled-bg: #eef1f4;
+
+  /* ---- Neutral scale — giữ để tương thích ngược cho các trang chưa đụng tới ---- */
+  --neutral-0: #ffffff;
+  --neutral-50: #f8fafc;
+  --neutral-100: #f1f5f9;
+  --neutral-200: #e2e8f0;
+  --neutral-300: #cbd5e1;
+  --neutral-400: #94a3b8;
+  --neutral-500: #64748b;
+  --neutral-600: #475569;
+  --neutral-700: #334155;
+  --neutral-800: #1e293b;
+  --neutral-900: #0f172a;
+
+  /* ---- Alias tương thích ngược (KHÔNG xoá — components.css/pages.css cũ và các
+     trang Login/Test Plans/Executions/Users/Run Test/Testcases đang tham chiếu
+     thẳng các tên này) ---- */
+  --bg: var(--color-page);
+  --surface: var(--color-surface);
+  --surface-hover: var(--color-surface-secondary);
+  --foreground: var(--color-text-primary);
+  --muted-foreground: var(--color-text-secondary);
+  --border: var(--color-border);
+  --border-strong: var(--color-border);
+  --ring: var(--color-blue);
+
+  --primary: var(--color-primary);
+  --primary-foreground: var(--color-primary-text);
+  --primary-hover: var(--color-primary-hover);
+  --accent: var(--color-blue);
+  --accent-foreground: #ffffff;
+  --accent-hover: #1d4ed8;
+  --accent-soft: var(--color-blue-light);
+
+  --status-green-bg: var(--color-green-light);
+  --status-green-fg: var(--color-green);
+  --status-green-border: var(--color-green-light);
+
+  --status-blue-bg: var(--color-blue-light);
+  --status-blue-fg: var(--color-blue);
+  --status-blue-border: var(--color-blue-light);
+
+  --status-amber-bg: var(--color-orange-light);
+  --status-amber-fg: var(--color-orange);
+  --status-amber-border: var(--color-orange-light);
+
+  --status-gray-bg: var(--color-disabled-bg);
+  --status-gray-fg: var(--color-text-secondary);
+  --status-gray-border: var(--color-disabled-bg);
+
+  --status-red-bg: var(--color-red-light);
+  --status-red-fg: var(--color-red);
+  --status-red-border: var(--color-red-light);
+
+  --status-orange-bg: var(--color-orange-light);
+  --status-orange-fg: var(--color-orange);
+  --status-orange-border: var(--color-orange-light);
+
+  --status-purple-bg: #f3e8ff;
+  --status-purple-fg: #7e22ce;
+  --status-purple-border: #e9d5ff;
+
+  /* ---- Radius / shadow — bo tròn 8–12px, shadow rất nhẹ (không đậm) ---- */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(23, 32, 51, 0.05);
+  --shadow-md: 0 3px 10px rgba(23, 32, 51, 0.07);
+  --shadow-lg: 0 10px 26px rgba(23, 32, 51, 0.12);
+
+  /* ---- Spacing scale ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ---- Typography — ưu tiên Inter (nạp qua Google Fonts trong index.html),
+     fallback system-ui theo đúng yêu cầu mới ---- */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --fs-xs: 11.5px;
+  --fs-sm: 12.5px;
+  --fs-base: 13.5px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+
+  /* ---- Layout ---- */
+  --sidebar-width: 248px;
+  --sidebar-width-collapsed: 64px;
+  --header-height: 56px;
+  --z-header: 20;
+  --z-sidebar: 30;
+  --z-modal: 100;
+  --z-toast: 200;
+}

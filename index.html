@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- CHỮ: tiêu đề tab trình duyệt -->
+    <title>Bench Console — Remote Testing Web</title>
+    <!-- CHỮ: font chữ Inter (Google Fonts) — dùng cho --font-sans trong css/tokens.css -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="css/tokens.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/pages.css">
+    <link rel="stylesheet" href="css/demo.css">
+    <!-- Lucide icons — bản UMD thuần, không phụ thuộc React -->
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
+</head>
+<body>
+
+    <!-- Toast host (dùng chung toàn app) -->
+    <div id="toast-host" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Modal/Dialog host (dùng chung toàn app) -->
+    <div id="modal-host"></div>
+
+    <!-- Màn hình đăng nhập thật, được dựng từ js/demo/auth-view.js -->
+    <main id="auth-view"></main>
+
+    <!-- App shell: hiện sau khi đăng nhập -->
+    <div id="shell-view" class="app-shell" hidden>
+        <aside id="sidebar" class="sidebar"></aside>
+        <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+        <div class="shell-main">
+            <header id="header" class="app-header"></header>
+            <div id="app-content" class="app-content"></div>
+        </div>
+    </div>
+
+    <!-- Interactive demo entry point. The original js/app.js (PHP/MySQL mode) is kept in the repo. -->
+    <script type="module" src="js/demo/app.js"></script>
+</body>
+</html>
