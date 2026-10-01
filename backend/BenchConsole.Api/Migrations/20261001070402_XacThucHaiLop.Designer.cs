@@ -699,7 +699,7 @@ namespace BenchConsole.Api.Migrations
                     b.HasOne("BenchConsole.Core.Models.Bench", "ThuocVe")
                         .WithMany("ChuaNhung")
                         .HasForeignKey("ThuocVeId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.ClientSetNull);
 
                     b.Navigation("ThuocVe");
                 });
