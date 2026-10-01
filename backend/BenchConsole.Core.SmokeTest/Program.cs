@@ -617,6 +617,48 @@ Check(!Totp.HopLe(null, maDungBayGio, mocThu, null, out _),
 Check(!Totp.HopLe("khong-phai-base32!!!", maDungBayGio, mocThu, null, out _),
       "bí mật hỏng phải trả false chứ không ném");
 
+Console.WriteLine();
+Console.WriteLine("── Danh mục dữ liệu chung");
+
+Check(LoaiDuLieuChung.TatCa.Length >= 4, "phải có đủ các mục đã khai");
+Check(LoaiDuLieuChung.TatCa.Select(x => x.Ma).Distinct().Count() == LoaiDuLieuChung.TatCa.Length,
+      "mã mục không được trùng nhau");
+Check(LoaiDuLieuChung.TatCa.All(x => x.Ma == x.Ma.ToLowerInvariant() && !x.Ma.Contains(' ')),
+      "mã mục phải chữ thường, không khoảng trắng — nó đi vào URL");
+Check(LoaiDuLieuChung.TatCa.All(x => !string.IsNullOrWhiteSpace(x.Ten)),
+      "mục nào cũng phải có tên tiếng Việt để hiện trên giao diện");
+
+Check(LoaiDuLieuChung.HopLe("dbc") && LoaiDuLieuChung.HopLe("  DBC  "),
+      "đọc mã mục không phân biệt hoa thường và bỏ khoảng trắng");
+Check(!LoaiDuLieuChung.HopLe("khong-co-muc-nay"), "mã lạ phải bị từ chối");
+
+// Để trống thì vào "Khác" chứ KHÔNG từ chối: thiếu mục khác thì người ta nhét
+// bừa vào mục gần đúng nhất, và như vậy còn khó dọn hơn.
+Check(LoaiDuLieuChung.ChuanHoa(null) == LoaiDuLieuChung.Khac
+      && LoaiDuLieuChung.ChuanHoa("") == LoaiDuLieuChung.Khac,
+      "để trống thì vào mục Khác");
+Check(LoaiDuLieuChung.LyDoTuChoi(null) is null && LoaiDuLieuChung.LyDoTuChoi("dbc") is null,
+      "để trống và mã đúng đều hợp lệ");
+Check(LoaiDuLieuChung.LyDoTuChoi("la")?.Contains("dbc") == true,
+      "lý do từ chối phải liệt kê mã hợp lệ cho người dùng biết gõ gì");
+Check(LoaiDuLieuChung.Ten(LoaiDuLieuChung.Dbc) == "File DBC"
+      && LoaiDuLieuChung.Ten("khong-co") == "khong-co",
+      "tên hiển thị tra được, mã lạ thì trả lại chính nó chứ không ném");
+
+Console.WriteLine();
+Console.WriteLine("── Quyền của dữ liệu chung");
+
+// Dữ liệu chung và kho cá nhân là HAI thứ khác nhau: quyền của cái này không
+// được mở cái kia. Gộp nhầm là file riêng tư lọt sang danh sách chung.
+Check(QuyenTruyCap.ChoPhep([MaQuyen.DuLieuView], null, MaQuyen.DuLieuView),
+      "có DULIEU.VIEW thì xem được dữ liệu chung");
+Check(!QuyenTruyCap.ChoPhep([MaQuyen.DuLieuView], null, MaQuyen.KhoView),
+      "DULIEU.VIEW KHÔNG mở được kho cá nhân");
+Check(!QuyenTruyCap.XemDuocKho([MaQuyen.DuLieuView], null, "long.pt", "nguoi.khac"),
+      "DULIEU.VIEW càng không mở được kho của người khác");
+Check(!QuyenTruyCap.ChoPhep([MaQuyen.KhoView], null, MaQuyen.DuLieuView),
+      "KHO.VIEW KHÔNG mở được dữ liệu chung");
+
 // ---------------------------------------------------------------- kết quả
 Console.WriteLine($"\n{'='}{new string('=', 50)}");
 if (failures.Count == 0)

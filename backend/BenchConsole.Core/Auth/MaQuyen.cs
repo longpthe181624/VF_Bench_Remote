@@ -42,6 +42,10 @@ public static class MaQuyen
     /// </summary>
     public const string ReportView = "REPORT.VIEW";
 
+    public const string DuLieuView = "DULIEU.VIEW";
+    public const string DuLieuUpload = "DULIEU.UPLOAD";
+    public const string DuLieuDelete = "DULIEU.DELETE";
+
     public const string KhoView = "KHO.VIEW";
     public const string KhoUpload = "KHO.UPLOAD";
     public const string KhoDelete = "KHO.DELETE";
@@ -80,6 +84,10 @@ public static class MaQuyen
         new(ConfigDeploy, "CONFIG", "DEPLOY", "Đẩy gói cấu hình xuống bench"),
 
         new(ReportView, "REPORT", "VIEW", "Xem và tải báo cáo chạy test"),
+
+        new(DuLieuView,   "DULIEU", "VIEW",   "Xem dữ liệu dùng chung"),
+        new(DuLieuUpload, "DULIEU", "UPLOAD", "Tải dữ liệu dùng chung lên"),
+        new(DuLieuDelete, "DULIEU", "DELETE", "Xoá dữ liệu dùng chung"),
 
         new(KhoView,    "KHO", "VIEW",     "Xem kho file của mình"),
         new(KhoUpload,  "KHO", "UPLOAD",   "Tải file lên kho của mình"),

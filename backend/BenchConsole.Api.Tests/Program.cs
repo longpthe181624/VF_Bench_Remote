@@ -6,6 +6,8 @@ using BenchConsole.Api.Tests;
 using BenchConsole.Core.Auth;
 using BenchConsole.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 // Không dùng framework test nào, giống BenchConsole.Core.SmokeTest — chạy bằng
 // `dotnet run` là xong, không phải cài thêm gì.
@@ -574,6 +576,150 @@ var (_, thanAdminVanOk) = await Goi(HttpMethod.Post, "/api/auth/login",
 Check(thanAdminVanOk.GetProperty("accessToken").GetString()!.Length > 50
       && !thanAdminVanOk.GetProperty("canMaTotp").GetBoolean(),
       "tài khoản chưa bật hai lớp phải đăng nhập y như cũ");
+
+// ---------------------------------------------------------------- dữ liệu chung
+Nhom("Dữ liệu chung chia theo mục");
+
+var (maMuc, thanMuc) = await Goi(HttpMethod.Get, "/api/du-lieu-chung/muc", token: tokenAdmin);
+Check(maMuc == HttpStatusCode.OK, $"lấy danh mục mục, nhận {maMuc}");
+var dsMuc = thanMuc.EnumerateArray().Select(x => x.GetProperty("ma").GetString()!).ToList();
+Check(dsMuc.Contains("dbc") && dsMuc.Contains("khac"),
+      "danh mục phải đủ các mục đã khai trong Core");
+Check(thanMuc.EnumerateArray().All(x => x.GetProperty("soFile").GetInt32() == 0),
+      "chưa tải gì thì mọi mục phải đếm 0");
+
+async Task<(HttpStatusCode, JsonElement)> TaiLenDuLieu(
+    string loai, string? ten, string tenFile, string noiDung, string token)
+{
+    var mp = new MultipartFormDataContent
+    {
+        { new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(noiDung)), "file", tenFile },
+        { new StringContent(loai), "loai" },
+    };
+    if (ten is not null) mp.Add(new StringContent(ten), "ten");
+    var req = new HttpRequestMessage(HttpMethod.Post, "/api/du-lieu-chung") { Content = mp };
+    req.Headers.Add("Authorization", "Bearer " + token);
+    var res = await http.SendAsync(req);
+    var chuoi = await res.Content.ReadAsStringAsync();
+    return (res.StatusCode, string.IsNullOrWhiteSpace(chuoi)
+        ? default : JsonDocument.Parse(chuoi).RootElement.Clone());
+}
+
+var (maTaiDlc, thanTaiDlc) = await TaiLenDuLieu(
+    "dbc", "NP 11.6.4", "14_Info_CAN_Matrix.dbc", "BO_ 123 Test:", tokenAdmin);
+Check(maTaiDlc == HttpStatusCode.OK, $"tải file dữ liệu chung lên, nhận {maTaiDlc}");
+Check(thanTaiDlc.GetProperty("id").GetInt32() > 0,
+      "phải trả id khác 0 — trả 0 là ai dùng nó để tải file sẽ tải hụt");
+Check(thanTaiDlc.GetProperty("tenLoai").GetString() == "File DBC",
+      "phải trả tên mục để giao diện khỏi tự tra");
+// Danh tính lấy từ token, không nhận tham số tự khai.
+Check(thanTaiDlc.GetProperty("nguoiTaiLen").GetString() == "admin@benchconsole.local",
+      "người tải lên phải lấy từ token");
+
+var (maTrungTen, _) = await TaiLenDuLieu(
+    "dbc", "NP 11.6.4", "khac.dbc", "noi dung khac", tokenAdmin);
+Check(maTrungTen == HttpStatusCode.Conflict,
+      $"trùng tên trong cùng một mục phải bị chặn, nhận {maTrungTen}");
+// Khác mục thì trùng tên không sao, chúng là hai thứ khác nhau.
+var (maKhacMuc, _) = await TaiLenDuLieu(
+    "tai-lieu", "NP 11.6.4", "huong-dan.pdf", "tai lieu", tokenAdmin);
+Check(maKhacMuc == HttpStatusCode.OK, $"khác mục thì trùng tên vẫn được, nhận {maKhacMuc}");
+
+var (maLoaiLaDlc, _) = await TaiLenDuLieu(
+    "khong-co-muc", "x", "x.txt", "x", tokenAdmin);
+Check(maLoaiLaDlc == HttpStatusCode.BadRequest, $"mục lạ phải 400, nhận {maLoaiLaDlc}");
+
+// Không khai tên thì lấy tên file, để khỏi gõ hai lần cùng một thứ.
+var (_, thanTuTen) = await TaiLenDuLieu("khac", null, "ghi-chu.txt", "abc", tokenAdmin);
+Check(thanTuTen.GetProperty("ten").GetString() == "ghi-chu",
+      "không khai tên thì lấy tên file bỏ phần đuôi");
+
+var (_, thanLoc) = await Goi(HttpMethod.Get, "/api/du-lieu-chung?loai=dbc", token: tokenAdmin);
+Check(thanLoc.GetArrayLength() == 1
+      && thanLoc[0].GetProperty("ten").GetString() == "NP 11.6.4",
+      "lọc theo mục chỉ trả file của mục đó");
+var (maLocLaDlc, _) = await Goi(HttpMethod.Get, "/api/du-lieu-chung?loai=la", token: tokenAdmin);
+Check(maLocLaDlc == HttpStatusCode.BadRequest,
+      $"lọc theo mục lạ phải 400 chứ không im lặng trả cả kho, nhận {maLocLaDlc}");
+
+var (_, thanMuc2) = await Goi(HttpMethod.Get, "/api/du-lieu-chung/muc", token: tokenAdmin);
+Check(thanMuc2.EnumerateArray().First(x => x.GetProperty("ma").GetString() == "dbc")
+        .GetProperty("soFile").GetInt32() == 1,
+      "danh mục phải đếm đúng số file từng mục");
+
+// Đây là chỗ cốt lõi: dữ liệu CHUNG thì ai có quyền cũng xem được, khác hẳn
+// kho cá nhân vừa chốt là riêng tuyệt đối.
+var (maKySuXem, thanKySuXem) = await Goi(HttpMethod.Get, "/api/du-lieu-chung", token: tokenKySu);
+Check(maKySuXem == HttpStatusCode.OK && thanKySuXem.GetArrayLength() >= 1,
+      $"người khác vẫn xem được dữ liệu chung, nhận {maKySuXem}");
+
+var idDlc = thanTaiDlc.GetProperty("id").GetInt32();
+var reqTaiDlc = new HttpRequestMessage(HttpMethod.Get, $"/api/du-lieu-chung/{idDlc}/download");
+reqTaiDlc.Headers.Add("Authorization", "Bearer " + tokenKySu);
+var resTaiDlc = await http.SendAsync(reqTaiDlc);
+Check(resTaiDlc.StatusCode == HttpStatusCode.OK
+      && await resTaiDlc.Content.ReadAsStringAsync() == "BO_ 123 Test:",
+      "người khác tải được file dùng chung, và ra đúng nội dung");
+
+// Viewer xem được nhưng không tải lên, không xoá.
+var (maViewerTai, _) = await TaiLenDuLieu("khac", "lau", "lau.txt", "x", tokenViewer);
+Check(maViewerTai == HttpStatusCode.Forbidden, $"Viewer không được tải lên, nhận {maViewerTai}");
+var (maViewerXoa, _) = await Goi(HttpMethod.Delete, $"/api/du-lieu-chung/{idDlc}", token: tokenViewer);
+Check(maViewerXoa == HttpStatusCode.Forbidden, $"Viewer không được xoá, nhận {maViewerXoa}");
+var (maViewerXem, _) = await Goi(HttpMethod.Get, "/api/du-lieu-chung", token: tokenViewer);
+Check(maViewerXem == HttpStatusCode.OK, $"Viewer vẫn xem được, nhận {maViewerXem}");
+
+var (maXoaDlc, _) = await Goi(HttpMethod.Delete, $"/api/du-lieu-chung/{idDlc}", token: tokenAdmin);
+Check(maXoaDlc == HttpStatusCode.NoContent, $"xoá được, nhận {maXoaDlc}");
+
+// ---------------------------------------------------------------- seed vai trò
+Nhom("Vai trò dựng sẵn tự đồng bộ lại");
+
+// Đây là cơ chế sẽ ĐỔI DỮ LIỆU trên máy A, nên phải có phép kiểm riêng. Bản
+// trước thấy vai trò đã tồn tại là bỏ qua, nên thêm mã quyền mới thì mọi vai
+// trò trên máy A đều thiếu, còn bộ lọc quyền sửa trong code thì không bao giờ
+// tới nơi.
+using (var scope = may.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var viewer = db.Roles.First(r => r.Ma == "Viewer");
+
+    // Giả cảnh máy A: vai trò bị lệch so với code — thừa một quyền, thiếu một quyền.
+    var userView = db.Permissions.First(p => p.Ma == "USER.VIEW");
+    var duLieuView = db.Permissions.First(p => p.Ma == "DULIEU.VIEW");
+    db.RolePermissions.Add(new RolePermission { RoleId = viewer.Id, PermissionId = userView.Id });
+    db.RolePermissions.RemoveRange(
+        db.RolePermissions.Where(rp => rp.RoleId == viewer.Id && rp.PermissionId == duLieuView.Id));
+    db.SaveChanges();
+
+    var truoc = db.RolePermissions.Where(rp => rp.RoleId == viewer.Id)
+        .Join(db.Permissions, rp => rp.PermissionId, p => p.Id, (rp, p) => p.Ma).ToList();
+    Check(truoc.Contains("USER.VIEW") && !truoc.Contains("DULIEU.VIEW"),
+          "dựng được cảnh vai trò bị lệch");
+
+    AuthSeed.RunAsync(db, scope.ServiceProvider.GetRequiredService<IConfiguration>(),
+        scope.ServiceProvider.GetRequiredService<ILogger<MayChuThu>>()).GetAwaiter().GetResult();
+
+    var sau = db.RolePermissions.Where(rp => rp.RoleId == viewer.Id)
+        .Join(db.Permissions, rp => rp.PermissionId, p => p.Id, (rp, p) => p.Ma).ToList();
+    Check(!sau.Contains("USER.VIEW"),
+          "đồng bộ phải GỠ quyền thừa — Viewer không được xem danh bạ người dùng");
+    Check(sau.Contains("DULIEU.VIEW"),
+          "đồng bộ phải THÊM quyền mới, không thì ai cũng ăn 403 sau khi nâng cấp");
+
+    // Vai trò tự tạo thì không được đụng tới, chỉ ba vai trò dựng sẵn mới đồng bộ.
+    var rieng = new Role { Ma = "ThuNghiem", Ten = "Thử", TaoLuc = DateTimeOffset.UtcNow };
+    db.Roles.Add(rieng);
+    db.SaveChanges();
+    db.RolePermissions.Add(new RolePermission { RoleId = rieng.Id, PermissionId = userView.Id });
+    db.SaveChanges();
+
+    AuthSeed.RunAsync(db, scope.ServiceProvider.GetRequiredService<IConfiguration>(),
+        scope.ServiceProvider.GetRequiredService<ILogger<MayChuThu>>()).GetAwaiter().GetResult();
+
+    Check(db.RolePermissions.Any(rp => rp.RoleId == rieng.Id && rp.PermissionId == userView.Id),
+          "vai trò tự tạo KHÔNG bị đồng bộ ghi đè");
+}
 
 // ---------------------------------------------------------------- /health
 Nhom("/health phải kiểm thật");

@@ -8,6 +8,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<Bench> Benches => Set<Bench>();
     public DbSet<DuAn> DuAns => Set<DuAn>();
+    public DbSet<TepDuLieuChung> TepDuLieuChungs => Set<TepDuLieuChung>();
     public DbSet<ThietBiDuAn> ThietBiDuAns => Set<ThietBiDuAn>();
     public DbSet<BenchCommand> Commands => Set<BenchCommand>();
     public DbSet<Run> Runs => Set<Run>();
@@ -81,6 +82,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // nắm hash trỏ vào tài khoản không còn tồn tại.
             e.HasOne(x => x.User).WithMany(x => x.MaKhoiPhucs)
                 .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<TepDuLieuChung>(e =>
+        {
+            e.Property(x => x.Loai).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Ten).HasMaxLength(200).IsRequired();
+            e.Property(x => x.TenFile).HasMaxLength(260).IsRequired();
+            e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            e.Property(x => x.MoTa).HasMaxLength(512);
+            e.Property(x => x.NguoiTaiLen).HasMaxLength(128);
+
+            // Lọc theo loại là truy vấn duy nhất của màn này.
+            e.HasIndex(x => x.Loai);
+
+            // Trùng tên trong cùng một loại là chặn: hai file "NP_11.6.4" trong
+            // mục DBC thì không ai biết bản nào đang dùng. Khác loại trùng tên
+            // thì không sao, chúng là hai thứ khác nhau.
+            e.HasIndex(x => new { x.Loai, x.Ten }).IsUnique();
         });
 
         b.Entity<BenchCommand>(e =>

@@ -136,6 +136,27 @@ public record UpdateBenchRequest(
     /// <summary>Gui len la THAY CA DANH SACH, khong phai them vao. Null = khong doi.</summary>
     List<string>? DuAns = null);
 
+/// <summary>Một file trong kho dữ liệu dùng chung.</summary>
+public record TepDuLieuChungDto(
+    int Id,
+    string Loai,
+    string TenLoai,
+    string Ten,
+    string TenFile,
+    string Sha256,
+    long KichThuoc,
+    string? MoTa,
+    string? NguoiTaiLen,
+    DateTimeOffset TaiLenLuc)
+{
+    public static TepDuLieuChungDto From(TepDuLieuChung t) => new(
+        t.Id, t.Loai, LoaiDuLieuChung.Ten(t.Loai), t.Ten, t.TenFile,
+        t.Sha256, t.KichThuoc, t.MoTa, t.NguoiTaiLen, t.TaiLenLuc);
+}
+
+/// <summary>Một mục trong danh mục loại dữ liệu chung, kèm số file đang có.</summary>
+public record MucDuLieuChungDto(string Ma, string Ten, int SoFile);
+
 /// <summary>Du an dung thiet bi.</summary>
 public record DuAnDto(
     int Id,

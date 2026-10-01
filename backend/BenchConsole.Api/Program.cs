@@ -42,6 +42,7 @@ builder.Services.AddScoped<BenchCommandPublisher>();
 builder.Services.AddSingleton<KhoGoiTestCase>();
 builder.Services.AddSingleton<KhoBaoCao>();
 builder.Services.AddSingleton<KhoNguoiDung>();
+builder.Services.AddSingleton<KhoDuLieuChung>();
 
 // Dọn báo cáo cũ. Không có nó thì kho phình vô hạn cho tới lúc đầy đĩa, và
 // lúc đó cả SQL Server lẫn backend cùng chết chứ không phải hỏng mỗi báo cáo.

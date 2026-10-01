@@ -93,23 +93,46 @@ public static class AuthSeed
     /// tới: người quản trị có thể đã chỉnh tay, ghi đè mỗi lần khởi động là
     /// âm thầm xoá mất chỉnh sửa của họ.
     /// </summary>
+    /// <summary>
+    /// Dựng hoặc ĐỒNG BỘ LẠI một vai trò dựng sẵn.
+    ///
+    /// Bản trước thấy vai trò đã tồn tại là bỏ qua, và cái giá đã phải trả hai
+    /// lần: thêm mã quyền mới thì mọi vai trò trên máy A đều thiếu, người dùng
+    /// nhận 403 mà không hiểu vì sao; và lần sửa bộ lọc quyền của `Viewer`
+    /// (nó đang thừa `USER.VIEW` với `ROLE.VIEW`) **vẫn chưa tới được máy A**
+    /// vì phải bỏ tick tay mà chưa ai làm.
+    ///
+    /// Nay ba vai trò dựng sẵn coi code là nguồn sự thật, mỗi lần khởi động là
+    /// đồng bộ lại. Đổi lại: **sửa tay quyền của Admin/Engineer/Viewer sẽ bị
+    /// ghi đè.** Muốn một bộ quyền riêng thì tạo vai trò mới — vai trò tự tạo
+    /// không bị đụng tới.
+    /// </summary>
     private static async Task VaiTroAsync(AppDbContext db, string ma, string ten,
                                           string moTa, IEnumerable<string> maQuyen,
                                           CancellationToken ct)
     {
-        if (await db.Roles.AnyAsync(r => r.Ma == ma, ct)) return;
-
-        var role = new Role { Ma = ma, Ten = ten, MoTa = moTa, TaoLuc = DateTimeOffset.UtcNow };
-        db.Roles.Add(role);
-        await db.SaveChangesAsync(ct);
+        var role = await db.Roles.FirstOrDefaultAsync(r => r.Ma == ma, ct);
+        if (role is null)
+        {
+            role = new Role { Ma = ma, Ten = ten, MoTa = moTa, TaoLuc = DateTimeOffset.UtcNow };
+            db.Roles.Add(role);
+            await db.SaveChangesAsync(ct);
+        }
 
         var can = maQuyen.ToHashSet();
-        var ids = await db.Permissions.Where(p => can.Contains(p.Ma))
-                                      .Select(p => p.Id).ToListAsync(ct);
-        db.RolePermissions.AddRange(ids.Select(id => new RolePermission
+        var idCan = await db.Permissions.Where(p => can.Contains(p.Ma))
+                                        .Select(p => p.Id).ToListAsync(ct);
+        var dangCo = await db.RolePermissions.Where(rp => rp.RoleId == role.Id).ToListAsync(ct);
+
+        var them = idCan.Except(dangCo.Select(rp => rp.PermissionId)).ToList();
+        var bot = dangCo.Where(rp => !idCan.Contains(rp.PermissionId)).ToList();
+        if (them.Count == 0 && bot.Count == 0) return;
+
+        db.RolePermissions.AddRange(them.Select(id => new RolePermission
         {
             RoleId = role.Id, PermissionId = id,
         }));
+        db.RolePermissions.RemoveRange(bot);
         await db.SaveChangesAsync(ct);
     }
 

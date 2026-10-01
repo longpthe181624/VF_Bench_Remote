@@ -142,6 +142,33 @@ public class DuAn
     public List<ThietBiDuAn> ThietBis { get; set; } = new();
 }
 
+/// <summary>
+/// Một file trong kho dữ liệu dùng chung.
+///
+/// Khác <see cref="TepNguoiDung"/> ở chỗ ai có quyền cũng xem được — đây là
+/// tài sản chung của cả nhóm, không phải file riêng của ai.
+/// </summary>
+public class TepDuLieuChung
+{
+    public int Id { get; set; }
+
+    /// <summary>Xem <see cref="LoaiDuLieuChung"/>.</summary>
+    public string Loai { get; set; } = LoaiDuLieuChung.Khac;
+
+    /// <summary>Tên người gõ, hiện trên danh sách. Khác tên file gốc.</summary>
+    public string Ten { get; set; } = "";
+
+    public string TenFile { get; set; } = "";
+    public string Sha256 { get; set; } = "";
+    public long KichThuoc { get; set; }
+    public string? MoTa { get; set; }
+
+    /// <summary>Email lấy từ token, không phải tham số tự khai.</summary>
+    public string? NguoiTaiLen { get; set; }
+
+    public DateTimeOffset TaiLenLuc { get; set; }
+}
+
 /// <summary>Bảng nối thiết bị với dự án.</summary>
 public class ThietBiDuAn
 {
