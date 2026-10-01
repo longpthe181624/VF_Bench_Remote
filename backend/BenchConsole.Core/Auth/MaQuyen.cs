@@ -51,7 +51,6 @@ public static class MaQuyen
     /// được "chỉ của tôi" — `KHO.VIEW` chỉ nói được là có xem kho hay không,
     /// không nói được xem kho của ai.
     /// </summary>
-    public const string KhoViewAll = "KHO.VIEW_ALL";
 
     public const string UserView = "USER.VIEW";
     public const string UserCreate = "USER.CREATE";
@@ -84,8 +83,7 @@ public static class MaQuyen
 
         new(KhoView,    "KHO", "VIEW",     "Xem kho file của mình"),
         new(KhoUpload,  "KHO", "UPLOAD",   "Tải file lên kho của mình"),
-        new(KhoDelete,  "KHO", "DELETE",   "Xoá file trong kho"),
-        new(KhoViewAll, "KHO", "VIEW_ALL", "Xem kho của người khác"),
+        new(KhoDelete,  "KHO", "DELETE",   "Xoá file trong kho của mình"),
 
         new(UserView,   "USER", "VIEW",   "Xem danh sách người dùng"),
         new(UserCreate, "USER", "CREATE", "Tạo người dùng"),

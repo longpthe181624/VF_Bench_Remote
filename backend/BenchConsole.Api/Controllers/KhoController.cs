@@ -16,9 +16,13 @@ namespace BenchConsole.Api.Controllers;
 /// **Chưa chốt sẽ chứa gì** — đây là chỗ chứa và đường vận chuyển dựng trước,
 /// nội dung định sau. Nên endpoint nhận file bất kỳ, không kiểm định dạng.
 ///
-/// `nguoiDung` trên đường dẫn ĐÃ CÓ ranh giới thật từ 28/09: chỉ xem và ghi
-/// được kho của chính mình, trừ khi có `KHO.VIEW_ALL` hoặc là Admin. Danh tính
-/// lấy từ token chứ không phải từ đường dẫn.
+/// **Kho là chỗ riêng tuyệt đối: không ai xem được kho người khác, kể cả
+/// Admin.** Chốt 01/10. Vì vậy không có đường dẫn nào mang tên người khác —
+/// danh tính luôn lấy từ token. Còn một đường để trỏ tới kho người khác là sớm
+/// muộn có chỗ quên kiểm.
+///
+/// Admin vẫn xoá được tài khoản kèm toàn bộ file của tài khoản đó. Xoá là việc
+/// quản trị; đọc nội dung thì không.
 ///
 /// RBAC thuần không diễn tả được quyền sở hữu — `KHO.VIEW` chỉ nói được là có
 /// xem kho hay không, không nói được xem kho của AI. Nên phần này kiểm trong
@@ -57,15 +61,7 @@ public class KhoController(
         [FromForm] TaiLenTepForm form, CancellationToken ct)
         => TaiLen(User.Email() ?? "", form, ct);
 
-    [HttpGet("{nguoiDung}")]
-    public async Task<ActionResult<List<TepNguoiDungDto>>> List(
-        string nguoiDung, CancellationToken ct)
-    {
-        if (!QuyenTruyCap.XemDuocKho(User.Quyen(), User.VaiTro(), User.Email(), nguoiDung))
-            return Forbid();
-
-        return await LayKhoAsync(nguoiDung, ct);
-    }
+    /// <summary>Tải file của chính mình về.</summary>
 
     private async Task<ActionResult<List<TepNguoiDungDto>>> LayKhoAsync(
         string nguoiDung, CancellationToken ct)
@@ -78,23 +74,14 @@ public class KhoController(
         return rows.Select(TepNguoiDungDto.From).ToList();
     }
 
-    [HttpPost("{nguoiDung}")]
-    [RequestSizeLimit(KhoNguoiDung.KichThuocToiDa)]
-    public async Task<ActionResult<List<TepNguoiDungDto>>> TaiLen(
-        string nguoiDung, [FromForm] TaiLenTepForm form, CancellationToken ct)
+    private async Task<ActionResult<List<TepNguoiDungDto>>> TaiLen(
+        string nguoiDung, TaiLenTepForm form, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(nguoiDung))
-            return BadRequest(new { error = "Thiếu tên người dùng." });
+            return Unauthorized(new { error = "Token không mang email." });
 
         if (!User.CoQuyen(MaQuyen.KhoUpload)) return Forbid();
 
-        // Chỉ tải được vào kho CỦA MÌNH. Không có quyền nào cho phép ghi vào
-        // kho người khác — `KHO.VIEW_ALL` chỉ mở phần XEM. Đẩy file vào kho
-        // người khác là mạo danh, khác hẳn việc đọc.
-        var laKhoCuaMinh = string.Equals(User.Email(), nguoiDung.Trim(),
-                                         StringComparison.OrdinalIgnoreCase);
-        if (!laKhoCuaMinh && !User.LaAdmin())
-            return Forbid();
         if (form.File is null || form.File.Count == 0)
             return BadRequest(new { error = "Không có file nào." });
 
@@ -163,11 +150,12 @@ public class KhoController(
 
         if (!User.CoQuyen(MaQuyen.KhoDelete)) return Forbid();
 
-        // Xoá thì chặt hơn xem: chỉ file của mình, trừ Admin. `KHO.VIEW_ALL`
-        // không mở quyền xoá.
+        // Chỉ file của mình, không có ngoại lệ cho Admin. Admin đã không xem
+        // được kho người khác thì xoá cũng thành xoá mò theo id đoán được —
+        // vừa vô dụng vừa nguy hiểm.
         var laCuaMinh = string.Equals(User.Email(), tep.NguoiDung,
                                       StringComparison.OrdinalIgnoreCase);
-        if (!laCuaMinh && !User.LaAdmin()) return Forbid();
+        if (!laCuaMinh) return Forbid();
 
         db.TepNguoiDungs.Remove(tep);
         await db.SaveChangesAsync(ct);

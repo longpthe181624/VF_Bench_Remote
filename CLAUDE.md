@@ -799,15 +799,46 @@ config cùng tên là hai thứ khác nhau, bung vào hai chỗ khác nhau.
 
 ### Kho theo user: dựng chỗ chứa trước, nội dung chốt sau
 
-`POST /api/storage/{nguoiDung}` multipart, `GET /api/storage/{nguoiDung}`,
+`GET /api/storage`, `POST /api/storage` multipart,
 `GET /api/storage/files/{id}/download`, `DELETE /api/storage/files/{id}`.
 
 **Chưa chốt sẽ chứa gì**, nên cố ý không kiểm định dạng và không có trường nào
 mô tả loại nội dung — thêm bây giờ là đoán, mà đoán sai thì sau phải đổi schema.
 
-**`nguoiDung` KHÔNG phải ranh giới bảo mật.** Backend chưa có xác thực nên đó
-là chuỗi bên gọi tự khai, chỉ dùng làm nhãn phân loại — ai cũng đọc và ghi được
-kho của người khác. Đừng cất thứ gì riêng tư vào đây cho tới khi có đăng nhập.
+#### Kho là chỗ riêng tuyệt đối — chốt 01/10
+
+**Không ai xem được kho người khác, kể cả Admin.** Không có quyền nào mở được,
+và `KHO.VIEW_ALL` đã bị xoá khỏi danh mục.
+
+**Không còn đường dẫn nào mang tên người khác.** Hai route cũ
+`GET|POST /api/storage/{nguoiDung}` đã gỡ hẳn; danh tính luôn lấy từ token.
+Bịt bằng cách xoá đường chắc hơn bịt bằng một câu lệnh kiểm trong thân hàm —
+còn đường là sớm muộn có chỗ quên kiểm. Gọi tới nay trả **404**, không phải 403.
+
+Áp cho cả bốn thao tác, không chỉ xem:
+
+| Thao tác | Ai làm được |
+| --- | --- |
+| Xem danh sách | chỉ chủ kho |
+| Tải file về | chỉ chủ kho |
+| Tải file lên | chỉ chủ kho |
+| Xoá file | chỉ chủ kho |
+
+Bỏ cả ngoại lệ Admin ở phần **tải lên** (đẩy file vào kho người khác là mạo
+danh) và phần **xoá** (Admin không xem được thì xoá thành xoá mò theo id đoán
+được, vừa vô dụng vừa nguy hiểm).
+
+**Chỗ dễ hở nhất là tải theo id file**, vì `id` là số tuần tự nên đoán được —
+không phải route mang tên người. Đã có phép kiểm riêng cho nó.
+
+Admin **vẫn xoá được tài khoản kèm toàn bộ file** của tài khoản đó. Xoá là việc
+quản trị; đọc nội dung thì không. Hệ quả cần biết: người nghỉ việc thì chỉ có
+đường xoá cả tài khoản, không có đường vào xem lại file họ để lại.
+
+`AuthSeed` nay **gỡ luôn quyền không còn trong danh mục**, nên `KHO.VIEW_ALL`
+tự biến mất trên máy A khi khởi động lại — không phải gõ SQL tay. Để lại thì nó
+vẫn hiện trên màn Vai trò và vẫn tích được, trong khi code không còn kiểm nó
+nữa; người ta tưởng vừa cấp quyền mà thật ra không cấp gì cả.
 
 `KhoNguoiDung` viết riêng dù gần giống `KhoBaoCao`. Lý do không gom lại: kho
 báo cáo **đang chạy thật trên máy A**, mà tầng Api chưa có phép kiểm tự động
@@ -1381,7 +1412,8 @@ trên bench có adapter CAN.
 
   Cụ thể: không viết hoa để nhấn mạnh, không dấu gạch dài trong câu, không hỏi
   lại kiểu thân mật (`rồi chứ?`), không xưng `bạn`, không giải thích cơ chế bên
-  trong, và **không để lộ mã quyền** (`KHO.VIEW_ALL`) ra màn hình người dùng.
+  trong, và **không để lộ mã quyền** (`BENCH.RUN`, `KHO.VIEW`) ra màn hình
+  người dùng.
 
   Áp cho cả **câu lỗi trả về từ API**, vì chúng hiện thẳng lên giao diện. Không
   áp cho log của `ILogger` — người đọc log là người vận hành, viết dài hơn được.

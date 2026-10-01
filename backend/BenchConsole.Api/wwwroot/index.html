@@ -247,10 +247,6 @@
       <input id="kho-file" type="file" multiple required>
       <input id="kho-mota" placeholder="Ghi chú" style="width:200px">
       <button type="submit">Tải lên</button>
-      <span id="kho-chon-boc" style="display:none">
-        <span class="meta">Xem kho của</span>
-        <select id="kho-user"></select>
-      </span>
       <div class="meta">Nhận mọi định dạng file. File tải lên thuộc về tài khoản đang đăng nhập.</div>
     </form>
 
@@ -380,7 +376,6 @@ let dsQuyen = [];
 let vaiTroDangSua = null;
 
 // Email của kho đang xem. Rỗng = kho của chính mình.
-let khoDangXem = "";
 
 function el(tag, attrs, ...children){
   const n = document.createElement(tag);
@@ -606,11 +601,10 @@ async function load(){
       lay("cảnh báo", "BENCH.VIEW", () => api("/api/alerts")),
       lay("gói", "TESTCASE.VIEW", () => api("/api/test-cases")),
       lay("báo cáo", "REPORT.VIEW", () => api("/api/runs/reports/recent?limit=20")),
-      // Kho đi theo user nên phải biết xem kho của ai. Không chọn ai thì xem kho
-      // của chính mình — không ghép email vào URL, ghép tay là sớm muộn có chỗ
-      // nhầm mà nhầm ở đây là xem kho người khác.
+      // Chỉ có một kho để xem: kho của chính mình. Không ghép email vào URL,
+      // và phía server cũng không còn đường dẫn nào mang tên người khác.
       lay("kho", "KHO.VIEW", () =>
-        khoDangXem ? api(`/api/storage/${encodeURIComponent(khoDangXem)}`) : api("/api/storage")),
+        api("/api/storage")),
       lay("người dùng", "USER.VIEW", () => api("/api/users")),
       lay("vai trò", "ROLE.VIEW", () => api("/api/roles")),
       lay("danh mục quyền", "ROLE.VIEW", () => api("/api/permissions")),
@@ -639,7 +633,6 @@ async function load(){
     dsVaiTro = roles;
     dsQuyen = quyenDanhMuc;
     renderUsers(users);
-    dungOChonKho(users);
     renderRoles(roles);
     apDungQuyen();
   } catch(e){
@@ -830,7 +823,7 @@ function renderKho(rows){
 
   const area = document.getElementById("kho-area");
   document.getElementById("kho-count").textContent =
-    rows.length + " file · " + (khoDangXem ? "kho của " + khoDangXem : "kho của tôi");
+    rows.length + " file";
   area.innerHTML = "";
   if (!rows.length){
     area.appendChild(el("div", {class:"empty"}, "Không có dữ liệu."));
@@ -853,21 +846,6 @@ function renderKho(rows){
           catch(e){ showErr(e.message); }
         }}, "Xoá")))))));
   area.appendChild(table);
-}
-
-/// Đổ danh sách người vào ô chọn kho. Chỉ ai có KHO.VIEW_ALL mới thấy ô này.
-function dungOChonKho(users){
-  const o = document.getElementById("kho-user");
-  if (!o || document.activeElement === o) return;
-
-  const dang = o.value;
-  o.innerHTML = "";
-  o.appendChild(el("option", {value:""}, "kho của tôi"));
-  for (const u of users){
-    if (u.email === phien?.nguoiDung?.email) continue;
-    o.appendChild(el("option", {value:u.email}, u.email));
-  }
-  o.value = dang;
 }
 
 function renderUsers(rows){
@@ -1157,11 +1135,6 @@ goiForm.addEventListener("submit", async (ev) => {
 });
 
 const khoForm = document.getElementById("kho-form");
-document.getElementById("kho-user").addEventListener("change", (ev) => {
-  khoDangXem = ev.target.value;
-  load();
-});
-
 khoForm.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const files = document.getElementById("kho-file").files;
@@ -1224,7 +1197,6 @@ function apDungQuyen(){
   an("toggle-add", coQuyen("BENCH.CREATE"));
   an("toggle-duan", coQuyen("BENCH.CREATE"));
   an("sec-user", coQuyen("USER.VIEW"));
-  an("kho-chon-boc", coQuyen("KHO.VIEW_ALL"));
   an("sec-role", coQuyen("ROLE.VIEW"));
   an("toggle-user", coQuyen("USER.CREATE"));
   an("toggle-goi", coQuyen("TESTCASE.UPLOAD") || coQuyen("CONFIG.UPLOAD"));

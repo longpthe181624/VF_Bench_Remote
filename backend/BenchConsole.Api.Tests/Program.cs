@@ -196,7 +196,7 @@ Nhom("Kho riêng của từng người");
 // Dùng Engineer chứ không dùng Viewer: Viewer cố ý KHÔNG có KHO.UPLOAD, nên
 // nó không dựng được tình huống "có kho của mình mà không xem được kho người
 // khác" — mà đó mới là thứ cần kiểm. Engineer có KHO.UPLOAD nhưng không có
-// KHO.VIEW_ALL, đúng hình dạng cần.
+// kho người khác, đúng hình dạng cần.
 var (maTaoKs, _) = await Goi(HttpMethod.Post, "/api/users", new
 {
     email = "kysu@thu.local", hoTen = "Kỹ sư test",
@@ -220,11 +220,13 @@ var (maKhoToi, thanKhoToi) = await Goi(HttpMethod.Get, "/api/storage", token: to
 Check(maKhoToi == HttpStatusCode.OK && thanKhoToi.GetArrayLength() == 1,
       "kỹ sư phải thấy đúng file của mình");
 
-// Chỗ quan trọng nhất của mục này.
+// Chỗ quan trọng nhất của mục này. 404 chứ không phải 403: đường dẫn mang tên
+// người khác đã bị gỡ hẳn, nên không có gì để từ chối. Bịt bằng cách xoá đường
+// chắc hơn bịt bằng một câu lệnh kiểm trong thân hàm.
 var (maTrom, _) = await Goi(HttpMethod.Get, "/api/storage/admin@benchconsole.local",
     token: tokenKySu);
-Check(maTrom == HttpStatusCode.Forbidden,
-      $"kỹ sư KHÔNG được xem kho người khác, nhận {maTrom}");
+Check(maTrom == HttpStatusCode.NotFound,
+      $"không còn đường dẫn tới kho người khác, nhận {maTrom}");
 
 // Viewer không có KHO.UPLOAD nên không ghi được gì, kể cả kho của mình.
 var mpChiXem = new MultipartFormDataContent
@@ -237,9 +239,35 @@ var resChiXem = await http.SendAsync(reqChiXem);
 Check(resChiXem.StatusCode == HttpStatusCode.Forbidden,
       $"Viewer KHÔNG được tải file lên, nhận {resChiXem.StatusCode}");
 
+// Kho là chỗ riêng tuyệt đối: không còn đường dẫn nào mang tên người khác,
+// nên gọi tới là 404 chứ không phải 403. Không có gì để từ chối cả.
 var (maAdminXem, _) = await Goi(HttpMethod.Get, "/api/storage/kysu@thu.local",
     token: tokenAdmin);
-Check(maAdminXem == HttpStatusCode.OK, "Admin xem được kho người khác");
+Check(maAdminXem == HttpStatusCode.NotFound,
+      $"không còn đường dẫn xem kho người khác, nhận {maAdminXem}");
+
+// Đường còn lại là tải thẳng theo id file. Id là số tuần tự nên đoán được —
+// đây mới là chỗ dễ hở.
+var idTepKySu = thanKhoToi[0].GetProperty("id").GetInt32();
+var (maAdminTai, _) = await Goi(HttpMethod.Get,
+    $"/api/storage/files/{idTepKySu}/download", token: tokenAdmin);
+Check(maAdminTai == HttpStatusCode.Forbidden,
+      $"Admin KHÔNG tải được file trong kho người khác, nhận {maAdminTai}");
+
+var (maAdminXoa, _) = await Goi(HttpMethod.Delete,
+    $"/api/storage/files/{idTepKySu}", token: tokenAdmin);
+Check(maAdminXoa == HttpStatusCode.Forbidden,
+      $"Admin KHÔNG xoá được file trong kho người khác, nhận {maAdminXoa}");
+
+// Không dùng Goi() ở đây: thân phản hồi là NỘI DUNG FILE, không phải JSON.
+var reqTaiMinh = new HttpRequestMessage(HttpMethod.Get, $"/api/storage/files/{idTepKySu}/download");
+reqTaiMinh.Headers.Add("Authorization", "Bearer " + tokenKySu);
+var resTaiMinh = await http.SendAsync(reqTaiMinh);
+var maTaiCuaMinh = resTaiMinh.StatusCode;
+Check(await resTaiMinh.Content.ReadAsStringAsync() == "cua ky su",
+      "tải về phải ra đúng nội dung đã gửi lên");
+Check(maTaiCuaMinh == HttpStatusCode.OK,
+      $"chủ kho vẫn tải được file của mình, nhận {maTaiCuaMinh}");
 
 // ---------------------------------------------------------------- chốt chặn
 Nhom("Chốt chặn chống tự khoá mình ra ngoài");

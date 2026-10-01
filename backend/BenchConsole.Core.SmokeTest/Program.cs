@@ -412,30 +412,38 @@ Check(!QuyenTruyCap.ChoPhep([], ["Admin"], ""),
       "kể cả Admin, yêu cầu quyền rỗng vẫn phải từ chối — đó là lỗi khai báo");
 
 Console.WriteLine();
-Console.WriteLine("── Kho theo user: quyền sở hữu, thứ RBAC thuần không nói được");
+Console.WriteLine("── Kho là chỗ riêng tuyệt đối");
 
 string[] chiKhoView = [MaQuyen.KhoView];
-string[] coViewAll = [MaQuyen.KhoView, MaQuyen.KhoViewAll];
 
 Check(QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, "long.pt", "long.pt"),
       "kho của chính mình thì chỉ cần KHO.VIEW");
 Check(!QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, "long.pt", "nguoi.khac"),
       "KHO.VIEW KHÔNG cho xem kho người khác");
-Check(QuyenTruyCap.XemDuocKho(coViewAll, khongVaiTro, "long.pt", "nguoi.khac"),
-      "có KHO.VIEW_ALL mới xem được kho người khác");
-Check(QuyenTruyCap.XemDuocKho([], ["Admin"], "admin", "nguoi.khac"),
-      "Admin xem được mọi kho");
+
+// Không có ngoại lệ nào, kể cả Admin. Admin vẫn xoá được tài khoản kèm toàn bộ
+// file của tài khoản đó — xoá là việc quản trị, đọc nội dung thì không.
+Check(!QuyenTruyCap.XemDuocKho([], ["Admin"], "admin", "nguoi.khac"),
+      "Admin KHÔNG xem được kho người khác");
+Check(!QuyenTruyCap.XemDuocKho(chiKhoView, ["Admin"], "admin", "nguoi.khac"),
+      "Admin có thêm KHO.VIEW cũng không xem được kho người khác");
+Check(QuyenTruyCap.XemDuocKho(chiKhoView, ["Admin"], "admin", "admin"),
+      "Admin vẫn xem được kho của chính mình");
+
 Check(QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, "Long.PT", "long.pt"),
       "tên người dùng so không phân biệt hoa thường");
 Check(!QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, null, "long.pt"),
       "chưa đăng nhập thì không xem được kho nào");
-Check(!QuyenTruyCap.XemDuocKho(coViewAll, khongVaiTro, "long.pt", null),
+Check(!QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, "long.pt", null),
       "không nêu chủ kho thì từ chối");
+// Thiếu cả KHO.VIEW thì kho của chính mình cũng không xem được.
+Check(!QuyenTruyCap.XemDuocKho([], khongVaiTro, "long.pt", "long.pt"),
+      "không có KHO.VIEW thì không xem được kho nào");
 
 Console.WriteLine();
 Console.WriteLine("── Danh mục quyền");
 
-Check(MaQuyen.TatCa.Count >= 24, $"danh mục phải đủ quyền, đang có {MaQuyen.TatCa.Count}");
+Check(MaQuyen.TatCa.Count >= 23, $"danh mục phải đủ quyền, đang có {MaQuyen.TatCa.Count}");
 Check(MaQuyen.TatCa.Select(q => q.Ma).Distinct().Count() == MaQuyen.TatCa.Count,
       "mã quyền không được trùng nhau — trùng là seed vào database sẽ vỡ unique index");
 Check(MaQuyen.TatCa.All(q => q.Ma == $"{q.Module}.{q.Action}"),
@@ -447,6 +455,9 @@ Check(MaQuyen.TatCa.All(q => !string.IsNullOrWhiteSpace(q.Ten)),
 // Nộp báo cáo là việc của Qauto, mà Qauto cố ý KHÔNG xác thực.
 Check(MaQuyen.TatCa.All(q => q.Ma != "REPORT.UPLOAD"),
       "không được có REPORT.UPLOAD — endpoint đó để mở cho Qauto");
+// Chốt lại bằng phép kiểm để không ai thêm lại mã quyền mở kho người khác.
+Check(MaQuyen.TatCa.All(q => q.Ma != "KHO.VIEW_ALL"),
+      "không được có KHO.VIEW_ALL — kho là chỗ riêng tuyệt đối");
 
 Check(AuthConstants.PermissionClaimType == "permission"
       && AuthConstants.TokenUseAccess == "access",

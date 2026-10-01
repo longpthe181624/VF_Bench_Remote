@@ -62,9 +62,11 @@ public static class QuyenTruyCap
     /// <summary>
     /// Người này xem được kho của <paramref name="chuKho"/> không.
     ///
+    /// **Chỉ chủ kho, không có ngoại lệ nào — kể cả Admin.** Chốt 01/10.
+    ///
     /// RBAC thuần không diễn tả được quyền sở hữu: `KHO.VIEW` chỉ nói được là
-    /// có xem kho hay không, không nói được xem kho của ai. Nên kho của chính
-    /// mình thì chỉ cần `KHO.VIEW`, kho người khác thì phải có `KHO.VIEW_ALL`.
+    /// có xem kho hay không, không nói được xem kho của ai. Nên phải kiểm thêm
+    /// quyền sở hữu ở đây chứ không chỉ dựa vào mã quyền.
     /// </summary>
     public static bool XemDuocKho(
         IEnumerable<string>? quyenCoSan,
@@ -73,15 +75,17 @@ public static class QuyenTruyCap
         string? chuKho)
     {
         if (string.IsNullOrWhiteSpace(chuKho)) return false;
-        if (LaAdmin(vaiTro)) return true;
 
+        // KHÔNG có ngoại lệ cho Admin, và không còn quyền nào mở được kho người
+        // khác. Kho là chỗ riêng của từng người; ai cần xem thì chủ kho tự gửi.
+        //
+        // Admin vẫn xoá được tài khoản kèm toàn bộ file của tài khoản đó — xoá
+        // là việc quản trị, đọc nội dung thì không.
         var laKhoCuaMinh = !string.IsNullOrWhiteSpace(nguoiDangDangNhap)
             && string.Equals(nguoiDangDangNhap.Trim(), chuKho.Trim(),
                              StringComparison.OrdinalIgnoreCase);
 
-        return laKhoCuaMinh
-            ? ChoPhep(quyenCoSan, vaiTro, MaQuyen.KhoView)
-            : ChoPhep(quyenCoSan, vaiTro, MaQuyen.KhoViewAll);
+        return laKhoCuaMinh && ChoPhep(quyenCoSan, vaiTro, MaQuyen.KhoView);
     }
 
     private static string ChuanHoa(string ma) => ma.Trim().ToUpperInvariant();

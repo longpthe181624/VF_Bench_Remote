@@ -22,16 +22,31 @@ public static class AuthSeed
     public static async Task RunAsync(AppDbContext db, IConfiguration cfg, ILogger log,
                                       CancellationToken ct = default)
     {
-        await DongBoQuyenAsync(db, ct);
+        await DongBoQuyenAsync(db, log, ct);
         await DungVaiTroAsync(db, ct);
         await TaoAdminDauTienAsync(db, cfg, log, ct);
     }
 
-    /// <summary>Thêm quyền mới có trong code mà chưa có trong database.</summary>
-    private static async Task DongBoQuyenAsync(AppDbContext db, CancellationToken ct)
+    /// <summary>Đồng bộ bảng Permissions theo danh mục trong code: thêm quyền
+    /// mới, gỡ quyền đã bỏ.</summary>
+    private static async Task DongBoQuyenAsync(AppDbContext db, ILogger log, CancellationToken ct)
     {
         var daCo = await db.Permissions.Select(p => p.Ma).ToListAsync(ct);
         var thieu = MaQuyen.TatCa.Where(q => !daCo.Contains(q.Ma)).ToList();
+
+        // Danh mục trong code là nguồn sự thật, nên quyền đã gỡ khỏi danh mục
+        // phải biến mất khỏi database luôn. Để lại thì nó vẫn hiện trên màn
+        // Vai trò và vẫn tích được, trong khi code không còn kiểm nó nữa —
+        // người ta tưởng vừa cấp quyền cho ai đó mà thật ra không cấp gì cả.
+        // Khoá ngoại Cascade dọn luôn các dòng RolePermissions trỏ vào.
+        var hopLe = MaQuyen.TatCa.Select(q => q.Ma).ToList();
+        var thua = await db.Permissions.Where(p => !hopLe.Contains(p.Ma)).ToListAsync(ct);
+        if (thua.Count > 0)
+        {
+            log.LogWarning("Gỡ {So} quyền không còn trong danh mục: {Ma}",
+                thua.Count, string.Join(", ", thua.Select(p => p.Ma)));
+            db.Permissions.RemoveRange(thua);
+        }
         if (thieu.Count == 0) return;
 
         db.Permissions.AddRange(thieu.Select(q => new Permission
@@ -53,12 +68,11 @@ public static class AuthSeed
             quyen.Select(p => p.Ma), ct);
 
         // Kỹ sư test: làm được mọi việc chuyên môn, không đụng vào người dùng
-        // và vai trò, và không xem được kho của người khác.
+        // và vai trò.
         await VaiTroAsync(db, RoleEngineer, "Kỹ sư test",
             "Chạy test, quản lý gói và xem báo cáo. Không quản trị người dùng.",
             quyen.Select(p => p.Ma).Where(m =>
-                !m.StartsWith("USER.") && !m.StartsWith("ROLE.")
-                && m != MaQuyen.KhoViewAll), ct);
+                !m.StartsWith("USER.") && !m.StartsWith("ROLE.")), ct);
 
         // Chỉ xem phần CHUYÊN MÔN, không phải xem mọi thứ.
         //
