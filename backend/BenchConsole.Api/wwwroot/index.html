@@ -100,8 +100,16 @@
     <form class="addbench show" id="dn-form">
       <input id="dn-email" type="email" placeholder="email" style="width:240px" required>
       <input id="dn-mk" type="password" placeholder="mật khẩu" style="width:200px" required>
+      <span id="dn-buoc2" style="display:none">
+        <input id="dn-ma" placeholder="mã 6 số" style="width:110px" autocomplete="one-time-password" inputmode="numeric">
+        <input id="dn-kp" placeholder="hoặc mã khôi phục" style="width:170px; display:none">
+        <button type="button" id="dn-doi-cach" class="ghost">Mất điện thoại?</button>
+      </span>
       <button type="submit">Đăng nhập</button>
     </form>
+    <div class="meta" id="dn-nhac" style="display:none">
+      Mở Microsoft Authenticator và nhập mã 6 số đang hiện.
+    </div>
   </section>
 
   <div id="man-chinh">
@@ -112,6 +120,17 @@
       <button type="submit">Đổi mật khẩu</button>
       <button type="button" id="mk-huy">Huỷ</button>
     </form>
+
+    <section id="sec-totp">
+      <div class="sec-head">
+        <h2>Xác thực hai lớp</h2>
+        <span class="count" id="totp-tinh-trang"></span>
+        <span class="grow"></span>
+        <button id="totp-bat">Bật</button>
+        <button id="totp-tat" class="ghost" style="display:none">Tắt</button>
+      </div>
+      <div id="totp-khung"></div>
+    </section>
 
   <div class="meta">Trang tạm gọi thẳng REST API — dùng thay Swagger cho các thao tác thường ngày. Tự làm mới mỗi 5 giây.</div>
 
@@ -1175,6 +1194,7 @@ function veManChinh(){
   const nd = phien?.nguoiDung;
   document.getElementById("ai-day").textContent =
     nd ? `${nd.hoTen} · ${(nd.vaiTro || []).join(", ") || "không vai trò"}` : "";
+  napTinhTrangTotp();
 }
 
 /// Ẩn những mục người này không có quyền dùng.
@@ -1231,25 +1251,158 @@ userForm.addEventListener("submit", async (ev) => {
   } catch(e){ showErr(e.message); }
 });
 
+/// Hiện phần nhập mã khi máy chủ báo tài khoản có bật hai lớp.
+function hienBuoc2(co){
+  document.getElementById("dn-buoc2").style.display = co ? "" : "none";
+  document.getElementById("dn-nhac").style.display = co ? "" : "none";
+  if (co) document.getElementById("dn-ma").focus();
+}
+
+document.getElementById("dn-doi-cach").addEventListener("click", () => {
+  const oMa = document.getElementById("dn-ma");
+  const oKp = document.getElementById("dn-kp");
+  const dangDungKp = oKp.style.display !== "none";
+  oKp.style.display = dangDungKp ? "none" : "";
+  oMa.style.display = dangDungKp ? "" : "none";
+  document.getElementById("dn-doi-cach").textContent = dangDungKp ? "Mất điện thoại?" : "Dùng mã 6 số";
+  document.getElementById("dn-nhac").textContent = dangDungKp
+    ? "Mở Microsoft Authenticator và nhập mã 6 số đang hiện."
+    : "Nhập một mã khôi phục đã lưu lúc bật. Mỗi mã chỉ dùng được một lần.";
+  (dangDungKp ? oMa : oKp).focus();
+});
+
 document.getElementById("dn-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const email = document.getElementById("dn-email").value.trim();
   const matKhau = document.getElementById("dn-mk").value;
+  const maTotp = document.getElementById("dn-ma").value.trim() || null;
+  const maKhoiPhuc = document.getElementById("dn-kp").value.trim() || null;
   try {
     const res = await fetch(API + "/api/auth/login", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({email, matKhau}),
+      body: JSON.stringify({email, matKhau, maTotp, maKhoiPhuc}),
     });
     const body = await res.json().catch(() => null);
     if (!res.ok) throw new Error(body?.error || (res.status + " " + res.statusText));
 
+    // Mật khẩu đúng nhưng còn thiếu mã: máy chủ cố ý trả 200 mà KHÔNG kèm
+    // token. Hiện ô nhập mã rồi dừng ở đây.
+    if (body?.canMaTotp){
+      hienBuoc2(true);
+      showErr(null);
+      return;
+    }
+
+    hienBuoc2(false);
+    document.getElementById("dn-ma").value = "";
+    document.getElementById("dn-kp").value = "";
     luuPhien(body);
     document.getElementById("dn-mk").value = "";
     showErr(null);
     veManChinh();
-    showToast(`Xin chào ${body.nguoiDung.hoTen}`);
+    // Vừa tiêu một mã khôi phục thì ĐÓ mới là thứ cần nói, không phải lời chào.
+    // Hiện cả hai thì cái sau đè mất cái trước — và cái bị đè luôn là cái quan
+    // trọng hơn.
+    const conLai = body?.maKhoiPhucConLai;
+    showToast(conLai === null || conLai === undefined
+      ? `Xin chào ${body.nguoiDung.hoTen}`
+      : `Đã tiêu một mã khôi phục, còn ${conLai} mã. Tắt rồi bật lại hai lớp để lấy bộ mới.`);
     load();
+  } catch(e){ showErr(e.message); }
+});
+
+// ---------------------------------------------------------------- hai lớp
+//
+// Mã sinh theo RFC 6238 nên Microsoft Authenticator, Google Authenticator hay
+// app nào cùng chuẩn đều dùng được. Trang này KHÔNG vẽ mã QR: vẽ QR phải kéo
+// thêm thư viện, mà Microsoft Authenticator có sẵn đường "Add account → Other
+// → Enter key manually". Gõ tay 32 ký tự một lần đổi lấy không thêm phụ thuộc.
+
+let totpBiMatDangGhiDanh = null;
+
+async function napTinhTrangTotp(){
+  if (!phien?.accessToken) return;
+  try {
+    const t = await api("/api/auth/totp");
+    document.getElementById("totp-tinh-trang").textContent = t.daBat
+      ? `đang bật · còn ${t.maKhoiPhucConLai} mã khôi phục`
+      : "đang tắt";
+    document.getElementById("totp-bat").style.display = t.daBat ? "none" : "";
+    document.getElementById("totp-tat").style.display = t.daBat ? "" : "none";
+
+    // Còn ít mã khôi phục mà không nhắc thì tới lúc hết người ta mới biết, và
+    // lúc đó thường là lúc vừa mất điện thoại.
+    if (t.daBat && t.maKhoiPhucConLai <= 2){
+      document.getElementById("totp-khung").innerHTML = "";
+      document.getElementById("totp-khung").appendChild(el("div", {class:"err show"},
+        `Chỉ còn ${t.maKhoiPhucConLai} mã khôi phục. Tắt rồi bật lại để lấy bộ mới.`));
+    }
+  } catch(e){ /* chưa đăng nhập hoặc token hỏng, để load() lo */ }
+}
+
+document.getElementById("totp-bat").addEventListener("click", async () => {
+  const khung = document.getElementById("totp-khung");
+  try {
+    const g = await api("/api/auth/totp/ghi-danh", {method:"POST"});
+    totpBiMatDangGhiDanh = g.biMat;
+
+    const oMa = el("input", {placeholder:"mã 6 số", style:"width:110px", inputmode:"numeric"});
+    khung.innerHTML = "";
+    khung.appendChild(el("div", {class:"addbench show"},
+      el("div", {},
+        el("div", {}, "1. Mở Microsoft Authenticator → Add account → Other → Enter key manually."),
+        el("div", {}, "2. Tên tài khoản gõ gì cũng được. Khoá là dãy dưới đây:"),
+        el("div", {class:"code", style:"font-size:16px; letter-spacing:1px; margin:6px 0"}, g.biMatChiaNhom),
+        el("div", {class:"meta"}, "3. Nhập mã 6 số app vừa hiện để xác nhận:"),
+        el("div", {style:"margin-top:6px"}, oMa,
+          el("button", {class:"primary", style:"margin-left:6px", onclick: async () => {
+            try {
+              const r = await api("/api/auth/totp/xac-nhan", {
+                method:"POST", body: JSON.stringify({ma: oMa.value.trim()}),
+              });
+              hienMaKhoiPhuc(r.ma);
+              napTinhTrangTotp();
+              showErr(null);
+            } catch(e){ showErr(e.message); }
+          }}, "Xác nhận")),
+      )));
+    showErr(null);
+  } catch(e){ showErr(e.message); }
+});
+
+/// Mã khôi phục chỉ hiện ĐÚNG MỘT LẦN — máy chủ chỉ giữ bản băm nên không in
+/// lại được. Nói thẳng điều đó ra, đừng để người dùng đóng đi rồi mới biết.
+function hienMaKhoiPhuc(ds){
+  const khung = document.getElementById("totp-khung");
+  khung.innerHTML = "";
+  khung.appendChild(el("div", {class:"addbench show"},
+    el("div", {},
+      el("div", {class:"err show"},
+        "Chép 8 mã này ra chỗ an toàn NGAY. Đóng trang là không xem lại được — "
+        + "máy chủ chỉ giữ bản băm. Mất điện thoại mà không có chúng thì phải nhờ quản trị gỡ."),
+      el("div", {class:"code", style:"font-size:15px; line-height:1.9; margin:8px 0"},
+        ...ds.flatMap(m => [m, el("br")])),
+      el("button", {onclick: () => {
+        navigator.clipboard?.writeText(ds.join("\n"));
+        showToast("Đã chép 8 mã khôi phục");
+      }}, "Chép tất cả"),
+      el("button", {class:"ghost", style:"margin-left:6px", onclick: () => {
+        if (!confirm("Đã chép và cất đi rồi chứ? Đóng là không xem lại được.")) return;
+        khung.innerHTML = "";
+      }}, "Tôi đã lưu"),
+    )));
+}
+
+document.getElementById("totp-tat").addEventListener("click", async () => {
+  const mk = prompt("Nhập mật khẩu để tắt xác thực hai lớp:");
+  if (!mk) return;
+  try {
+    await api("/api/auth/totp", {method:"DELETE", body: JSON.stringify({matKhau: mk})});
+    document.getElementById("totp-khung").innerHTML = "";
+    showToast("Đã tắt xác thực hai lớp");
+    napTinhTrangTotp();
+    showErr(null);
   } catch(e){ showErr(e.message); }
 });
 

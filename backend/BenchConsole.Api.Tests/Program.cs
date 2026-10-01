@@ -58,6 +58,16 @@ async Task<(HttpStatusCode Ma, JsonElement Than)> Goi(
     return (res.StatusCode, doc);
 }
 
+/// <summary>Đăng nhập hai bước bằng mã khôi phục.</summary>
+async Task<string> DangNhap2(string email, string matKhau, string maKhoiPhuc)
+{
+    var (ma, than) = await Goi(HttpMethod.Post, "/api/auth/login",
+        new { email, matKhau, maKhoiPhuc });
+    if (ma != HttpStatusCode.OK)
+        throw new Exception($"đăng nhập hai bước {email} hỏng: {ma} {than}");
+    return than.GetProperty("accessToken").GetString()!;
+}
+
 async Task<string> DangNhap(string email, string matKhau)
 {
     var (ma, than) = await Goi(HttpMethod.Post, "/api/auth/login",
@@ -405,6 +415,137 @@ foreach (var cu in new[]{
     var (ma, _) = await Goi(HttpMethod.Get, cu, token: tokenAdmin);
     Check(ma == HttpStatusCode.NotFound, $"{cu} phải trả 404, nhận {ma}");
 }
+
+// ---------------------------------------------------------------- TOTP
+Nhom("Xác thực hai lớp (TOTP)");
+
+// Tài khoản riêng cho mục này: bật TOTP lên tài khoản mà các mục khác còn dùng
+// thì chúng sẽ không đăng nhập lại được.
+await Goi(HttpMethod.Post, "/api/users", new
+{
+    email = "haibuoc@thu.local", hoTen = "Người thử hai lớp",
+    matKhau = "Haibuoc@12345", vaiTro = new[] { "Viewer" },
+}, tokenAdmin);
+var tokenHai = await DangNhap("haibuoc@thu.local", "Haibuoc@12345");
+
+// Mã đúng tại thời điểm này, tính bằng chính thuật toán đã đối chiếu RFC 6238.
+string MaBayGio(string biMat, int lechNhip = 0) =>
+    Totp.SinhMa(Totp.GiaiMaBase32(biMat), Totp.NhipTai(DateTimeOffset.UtcNow) + lechNhip);
+
+var (maTt0, thanTt0) = await Goi(HttpMethod.Get, "/api/auth/totp", token: tokenHai);
+Check(maTt0 == HttpStatusCode.OK && !thanTt0.GetProperty("daBat").GetBoolean(),
+      "tài khoản mới phải chưa bật hai lớp");
+
+// ---- ghi danh
+var (maGd, thanGd) = await Goi(HttpMethod.Post, "/api/auth/totp/ghi-danh", null, tokenHai);
+Check(maGd == HttpStatusCode.OK, $"bắt đầu ghi danh, nhận {maGd}");
+var biMatThu = thanGd.GetProperty("biMat").GetString()!;
+Check(biMatThu.Length == 32, "bí mật phải là 32 ký tự Base32");
+Check(thanGd.GetProperty("uri").GetString()!.StartsWith("otpauth://totp/"),
+      "phải trả chuỗi otpauth để app quét");
+Check(thanGd.GetProperty("biMatChiaNhom").GetString()!.Contains(' '),
+      "phải có bản chia nhóm để gõ tay vào điện thoại");
+
+// Cấp bí mật rồi NHƯNG CHƯA BẬT: người dùng có thể quét hỏng, bật ngay là khoá
+// họ ra ngoài. Đăng nhập lúc này vẫn chỉ cần mật khẩu.
+var (_, thanChuaBat) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345" });
+Check(thanChuaBat.GetProperty("accessToken").GetString()!.Length > 50,
+      "ghi danh dở thì vẫn đăng nhập được bằng mật khẩu, chưa đòi mã");
+
+var (maSaiXn, _) = await Goi(HttpMethod.Post, "/api/auth/totp/xac-nhan",
+    new { ma = "000000" }, tokenHai);
+Check(maSaiXn == HttpStatusCode.Unauthorized, $"xác nhận bằng mã sai phải bị từ chối, nhận {maSaiXn}");
+
+var (maXn, thanXn) = await Goi(HttpMethod.Post, "/api/auth/totp/xac-nhan",
+    new { ma = MaBayGio(biMatThu) }, tokenHai);
+Check(maXn == HttpStatusCode.OK, $"xác nhận bằng mã đúng, nhận {maXn}");
+var maKhoiPhuc = thanXn.GetProperty("ma").EnumerateArray().Select(x => x.GetString()!).ToList();
+Check(maKhoiPhuc.Count == 8, $"phải cấp 8 mã khôi phục, nhận {maKhoiPhuc.Count}");
+// Mất điện thoại mà không có mã khôi phục là khoá chết tài khoản.
+Check(maKhoiPhuc.Distinct().Count() == 8, "8 mã khôi phục phải khác nhau");
+Check(maKhoiPhuc.All(m => m.Length == 9 && m[4] == '-'),
+      "mã khôi phục phải dạng XXXX-XXXX cho dễ chép tay");
+// Bỏ hẳn ký tự dễ đọc nhầm khi chép từ giấy.
+Check(maKhoiPhuc.All(m => !m.Any(c => c is '0' or 'O' or '1' or 'I' or 'L' or '8' or 'B')),
+      "mã khôi phục không được chứa ký tự dễ nhìn nhầm");
+
+// ---- từ giờ đăng nhập phải hai bước
+var (maB1, thanB1) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345" });
+Check(maB1 == HttpStatusCode.OK && thanB1.GetProperty("canMaTotp").GetBoolean(),
+      "mật khẩu đúng mà thiếu mã thì phải báo cần mã");
+Check(thanB1.GetProperty("accessToken").GetString() == "",
+      "bước một TUYỆT ĐỐI không được kèm token — kèm là lớp thứ hai thành trang trí");
+
+// Lấy mã của nhịp KẾ TIẾP: mã vừa dùng để xác nhận ghi danh đã tiêu mất nhịp
+// hiện tại, đúng theo chốt chống dùng lại. Đây cũng là hành vi người dùng thật
+// gặp — bật xong phải chờ mã mới hiện ra mới đăng nhập được.
+var maLanDau = MaBayGio(biMatThu, 1);
+var (maB2, thanB2) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345", maTotp = maLanDau });
+Check(maB2 == HttpStatusCode.OK && thanB2.GetProperty("accessToken").GetString()!.Length > 50,
+      $"mật khẩu + mã đúng phải cấp token, nhận {maB2}");
+
+// Chống dùng lại: cửa sổ rộng 90 giây nên thiếu chốt này là mã nhìn trộm được
+// vẫn vào được sau khi chủ nhân đã dùng. Gửi LẠI ĐÚNG mã vừa thành công.
+var (maLai, _) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345", maTotp = maLanDau });
+Check(maLai == HttpStatusCode.Unauthorized,
+      $"mã đã dùng không được nhận lại dù còn trong cửa sổ, nhận {maLai}");
+
+var (maSaiMk, _) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "haibuoc@thu.local", matKhau = "SAI", maTotp = MaBayGio(biMatThu, 1) });
+Check(maSaiMk == HttpStatusCode.Unauthorized, "sai mật khẩu thì mã đúng cũng không vào được");
+
+// ---- mã khôi phục
+var (maKp, thanKp) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345", maKhoiPhuc = maKhoiPhuc[0] });
+Check(maKp == HttpStatusCode.OK && thanKp.GetProperty("accessToken").GetString()!.Length > 50,
+      $"mã khôi phục phải đăng nhập được khi mất điện thoại, nhận {maKp}");
+Check(thanKp.GetProperty("maKhoiPhucConLai").GetInt32() == 7,
+      "phải báo còn 7 mã, để người dùng biết sắp hết");
+
+var (maKpLai, _) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345", maKhoiPhuc = maKhoiPhuc[0] });
+Check(maKpLai == HttpStatusCode.Unauthorized, "mã khôi phục chỉ tiêu được một lần");
+
+var tokenHai2 = await DangNhap2("haibuoc@thu.local", "Haibuoc@12345", maKhoiPhuc[1]);
+var (_, thanTt1) = await Goi(HttpMethod.Get, "/api/auth/totp", token: tokenHai2);
+Check(thanTt1.GetProperty("daBat").GetBoolean()
+      && thanTt1.GetProperty("maKhoiPhucConLai").GetInt32() == 6,
+      "tình trạng phải nói đúng đã bật và còn 6 mã");
+
+// ---- tắt phải nhập lại mật khẩu, không thì ai mượn máy đang mở cũng gỡ được
+var (maTatSai, _) = await Goi(HttpMethod.Delete, "/api/auth/totp",
+    new { matKhau = "SAI" }, tokenHai2);
+Check(maTatSai == HttpStatusCode.Unauthorized, $"tắt bằng mật khẩu sai phải bị chặn, nhận {maTatSai}");
+
+// ---- quản trị gỡ hộ: đường thoát duy nhất khi mất cả điện thoại lẫn mã giấy
+int idHai;
+using (var scope = may.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    idHai = db.Users.First(u => u.Email == "haibuoc@thu.local").Id;
+}
+var (maGoViewer, _) = await Goi(HttpMethod.Delete, $"/api/users/{idHai}/totp", token: tokenViewer);
+Check(maGoViewer == HttpStatusCode.Forbidden, $"Viewer không được gỡ hai lớp của người khác, nhận {maGoViewer}");
+
+var (maGo, _) = await Goi(HttpMethod.Delete, $"/api/users/{idHai}/totp", token: tokenAdmin);
+Check(maGo == HttpStatusCode.NoContent, $"quản trị gỡ được hai lớp, nhận {maGo}");
+
+var (_, thanSauGo) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345" });
+Check(thanSauGo.GetProperty("accessToken").GetString()!.Length > 50,
+      "gỡ xong thì đăng nhập lại chỉ cần mật khẩu");
+
+// Người dùng cũ chưa bật gì thì KHÔNG được đụng tới — đây là thứ sẽ xảy ra với
+// mọi tài khoản đang có trên máy A sau khi áp migration.
+var (_, thanAdminVanOk) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "admin@benchconsole.local", matKhau = MatKhauAdmin });
+Check(thanAdminVanOk.GetProperty("accessToken").GetString()!.Length > 50
+      && !thanAdminVanOk.GetProperty("canMaTotp").GetBoolean(),
+      "tài khoản chưa bật hai lớp phải đăng nhập y như cũ");
 
 // ---------------------------------------------------------------- /health
 Nhom("/health phải kiểm thật");

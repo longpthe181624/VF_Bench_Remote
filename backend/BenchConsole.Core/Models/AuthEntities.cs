@@ -38,10 +38,60 @@ public class User
     public string? RefreshToken { get; set; }
     public DateTimeOffset? RefreshTokenHetHan { get; set; }
 
+    /// <summary>
+    /// Bí mật TOTP dạng Base32. Null là chưa ghi danh.
+    ///
+    /// Có bí mật mà <see cref="TotpBatLuc"/> còn null nghĩa là đang ghi danh dở:
+    /// máy chủ đã cấp bí mật nhưng người dùng chưa gõ được mã nào để chứng minh
+    /// điện thoại quét đúng. Bật ngay lúc cấp là tự khoá mình ra ngoài nếu họ
+    /// quét hỏng.
+    /// </summary>
+    public string? TotpBiMat { get; set; }
+
+    /// <summary>Lúc bật TOTP. Null là chưa bật — đăng nhập chỉ cần mật khẩu.</summary>
+    public DateTimeOffset? TotpBatLuc { get; set; }
+
+    /// <summary>
+    /// Nhịp 30 giây của lần dùng mã thành công gần nhất.
+    ///
+    /// Chặn dùng lại: cửa sổ chấp nhận rộng 90 giây, nên thiếu cột này thì một
+    /// mã nhìn trộm được qua vai vẫn đăng nhập được sau khi chủ nhân đã dùng.
+    /// </summary>
+    public long? TotpNhipCuoi { get; set; }
+
     public DateTimeOffset TaoLuc { get; set; }
     public DateTimeOffset? SuaLuc { get; set; }
 
     public List<UserRole> UserRoles { get; set; } = new();
+    public List<MaKhoiPhuc> MaKhoiPhucs { get; set; } = new();
+}
+
+/// <summary>
+/// Mã khôi phục dùng một lần, thay cho mã trên điện thoại khi mất máy.
+///
+/// Không có nó thì mất điện thoại là khoá chết tài khoản — và với tài khoản
+/// quản trị cuối cùng thì không ai mở lại được, kể cả admin, vì admin chính là
+/// người đang bị khoá.
+///
+/// Mỗi mã một hàng chứ không nhét cả mảng vào một cột: đánh dấu từng mã đã
+/// tiêu thì phải sửa đúng một hàng, không phải đọc ra, sửa chuỗi, ghi đè — mà
+/// ghi đè kiểu đó thì hai lần đăng nhập song song sẽ xoá mất dấu của nhau.
+/// </summary>
+public class MaKhoiPhuc
+{
+    public int Id { get; set; }
+
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    /// <summary>BCrypt, y như mật khẩu. Mã khôi phục bỏ qua được cả hai lớp
+    /// xác thực nên giữ thô là tệ hơn giữ mật khẩu thô.</summary>
+    public string Hash { get; set; } = "";
+
+    /// <summary>Null là chưa dùng. Dùng rồi thì không bao giờ nhận lại.</summary>
+    public DateTimeOffset? DaDungLuc { get; set; }
+
+    public DateTimeOffset TaoLuc { get; set; }
 }
 
 /// <summary>Vai trò, ví dụ Admin, Engineer, Viewer.</summary>

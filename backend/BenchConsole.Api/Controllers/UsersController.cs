@@ -127,6 +127,23 @@ public class UsersController(
     public Task<IActionResult> MoKhoa(int id, CancellationToken ct)
         => DoiKhoaAsync(id, null, ct);
 
+    /// <summary>
+    /// Quản trị gỡ xác thực hai lớp của người khác.
+    ///
+    /// Đây là **đường thoát duy nhất** khi ai đó mất cả điện thoại lẫn mã khôi
+    /// phục — không có nó thì tài khoản khoá vĩnh viễn. Đổi lại, nó cũng là
+    /// đường vòng qua lớp bảo vệ thứ hai, nên đi kèm quyền USER.UPDATE và được
+    /// ghi log cảnh báo.
+    /// </summary>
+    [HttpDelete("{id:int}/totp")]
+    [HasPermission(MaQuyen.UserUpdate)]
+    public async Task<IActionResult> GoTotp(int id, [FromServices] AuthService auth, CancellationToken ct)
+    {
+        if (!await db.Users.AnyAsync(u => u.Id == id, ct)) return NotFound();
+        await auth.GoChoNguoiKhacAsync(id, ct);
+        return NoContent();
+    }
+
     [HttpPost("{id:int}/reset-password")]
     [HasPermission(MaQuyen.UserUpdate)]
     public async Task<IActionResult> DatLaiMatKhau(

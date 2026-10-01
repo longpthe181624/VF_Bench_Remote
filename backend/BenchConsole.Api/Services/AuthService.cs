@@ -45,12 +45,12 @@ public class AuthService(
     private const int KhoaPhut = 15;
 
     public async Task<DangNhapResponse> DangNhapAsync(
-        string? email, string? matKhau, CancellationToken ct)
+        string? email, string? matKhau, string? maTotp, string? maKhoiPhuc, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(matKhau))
             throw new DangNhapThatBai("Thiếu email hoặc mật khẩu.");
 
-        var user = await repo.TheoEmailAsync(email.Trim(), ct);
+        var user = await repo.TheoEmailKemMaKhoiPhucAsync(email.Trim(), ct);
 
         // Cùng một câu cho "không có email này" và "sai mật khẩu". Phân biệt
         // hai trường hợp là để lộ email nào có tài khoản.
@@ -75,11 +75,210 @@ public class AuthService(
             throw new DangNhapThatBai("Email hoặc mật khẩu không đúng.");
         }
 
+        // ---- bước hai: mã trên điện thoại
+        int? conLai = null;
+        if (user.TotpBatLuc is not null)
+        {
+            // Mật khẩu đúng nhưng chưa gõ mã: KHÔNG cấp token, cũng không coi
+            // là sai. Báo cho client biết để hiện ô nhập mã.
+            //
+            // Chỗ này để lộ "mật khẩu đã đúng" — chấp nhận được và không tránh
+            // được: phải nói cho người ta biết là cần gõ mã tiếp.
+            if (string.IsNullOrWhiteSpace(maTotp) && string.IsNullOrWhiteSpace(maKhoiPhuc))
+                return DangNhapResponse.DoiMaTotp();
+
+            var xong = false;
+
+            if (!string.IsNullOrWhiteSpace(maKhoiPhuc))
+            {
+                conLai = DungMaKhoiPhuc(user, maKhoiPhuc);
+                xong = conLai is not null;
+            }
+            else if (Totp.HopLe(user.TotpBiMat, maTotp, DateTimeOffset.UtcNow,
+                                user.TotpNhipCuoi, out var nhip))
+            {
+                // Ghi lại nhịp vừa dùng để chính mã đó không vào được lần nữa.
+                user.TotpNhipCuoi = nhip;
+                xong = true;
+            }
+
+            if (!xong)
+            {
+                // Mã sai phải tính vào bộ đếm khoá y như mật khẩu sai. Không
+                // đếm thì sáu chữ số thành thứ dò được thoải mái, mà dò xong
+                // là bỏ qua luôn lớp thứ hai.
+                await GhiNhanSaiAsync(user, "mã xác thực", ct);
+                throw new DangNhapThatBai("Mã xác thực không đúng hoặc đã dùng rồi.");
+            }
+        }
+
         // Đăng nhập đúng thì xoá dấu vết các lần sai trước.
         user.SoLanSai = 0;
         user.KhoaDenLuc = null;
 
-        return await CapTokenAsync(user, ct);
+        var token = await CapTokenAsync(user, ct);
+        return conLai is null ? token : token with { MaKhoiPhucConLai = conLai };
+    }
+
+    /// <summary>
+    /// Tiêu một mã khôi phục. Trả về số mã còn lại, hoặc null nếu không khớp.
+    /// </summary>
+    private int? DungMaKhoiPhuc(User user, string go)
+    {
+        var sach = ChuanHoaMaKhoiPhuc(go);
+
+        // Phải duyệt hết thay vì tra bảng: mã lưu dạng băm BCrypt, mỗi hàng một
+        // muối khác nhau nên không tra theo giá trị được.
+        foreach (var m in user.MaKhoiPhucs.Where(x => x.DaDungLuc is null))
+        {
+            if (!BCrypt.Net.BCrypt.Verify(sach, m.Hash)) continue;
+
+            m.DaDungLuc = DateTimeOffset.UtcNow;
+            log.LogWarning("{Email} đăng nhập bằng mã khôi phục", user.Email);
+            // Mã vừa dùng đã được đánh dấu ngay trên, nên phép đếm này KHÔNG
+            // còn tính nó — không trừ thêm một lần nữa.
+            return user.MaKhoiPhucs.Count(x => x.DaDungLuc is null);
+        }
+        return null;
+    }
+
+    /// <summary>Đếm một lần sai và khoá tạm khi quá ngưỡng.</summary>
+    private async Task GhiNhanSaiAsync(User user, string vi, CancellationToken ct)
+    {
+        user.SoLanSai++;
+        if (user.SoLanSai >= SoLanSaiToiDa)
+        {
+            user.KhoaDenLuc = DateTimeOffset.UtcNow.AddMinutes(KhoaPhut);
+            user.SoLanSai = 0;
+            log.LogWarning("Khoá tài khoản {Email} vì sai {Vi} quá {So} lần",
+                user.Email, vi, SoLanSaiToiDa);
+        }
+        await repo.LuuAsync(ct);
+    }
+
+    // ---------------------------------------------------------- ghi danh TOTP
+
+    /// <summary>
+    /// Cấp bí mật mới nhưng CHƯA bật. Bật ngay là tự khoá mình ra ngoài nếu
+    /// điện thoại quét hỏng — phải gõ đúng một mã mới coi là xong.
+    /// </summary>
+    public async Task<GhiDanhTotpResponse> BatDauGhiDanhAsync(int userId, CancellationToken ct)
+    {
+        var user = await repo.TheoIdAsync(userId, ct)
+                   ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
+        if (user.TotpBatLuc is not null)
+            throw new DangNhapThatBai("Tài khoản đã bật xác thực hai lớp rồi. Tắt trước nếu muốn ghi danh lại.");
+
+        var biMat = Totp.SinhBiMat();
+        user.TotpBiMat = biMat;
+        user.TotpNhipCuoi = null;
+        await repo.LuuAsync(ct);
+
+        return new GhiDanhTotpResponse(biMat, Totp.ChiaNhom(biMat), Totp.UriGhiDanh(user.Email, biMat));
+    }
+
+    /// <summary>
+    /// Gõ đúng một mã thì bật, và trả về mã khôi phục ĐÚNG MỘT LẦN.
+    /// </summary>
+    public async Task<List<string>> XacNhanGhiDanhAsync(int userId, string? ma, CancellationToken ct)
+    {
+        var user = await repo.TheoIdAsync(userId, ct)
+                   ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
+        if (string.IsNullOrWhiteSpace(user.TotpBiMat))
+            throw new DangNhapThatBai("Chưa bắt đầu ghi danh.");
+        if (user.TotpBatLuc is not null)
+            throw new DangNhapThatBai("Tài khoản đã bật xác thực hai lớp rồi.");
+
+        if (!Totp.HopLe(user.TotpBiMat, ma, DateTimeOffset.UtcNow, null, out var nhip))
+            throw new DangNhapThatBai(
+                "Mã không đúng. Kiểm tra lại giờ trên điện thoại — lệch vài phút là mọi mã đều sai.");
+
+        user.TotpBatLuc = DateTimeOffset.UtcNow;
+        user.TotpNhipCuoi = nhip;
+
+        await repo.XoaMaKhoiPhucAsync(user.Id, ct);
+        var tho = new List<string>();
+        for (var i = 0; i < SoMaKhoiPhuc; i++)
+        {
+            var ma1 = SinhMaKhoiPhuc();
+            tho.Add(ma1);
+            repo.ThemMaKhoiPhuc(new MaKhoiPhuc
+            {
+                UserId = user.Id,
+                // Băm bản ĐÃ CHUẨN HOÁ, vì lúc đăng nhập cũng chuẩn hoá trước
+                // khi so. Băm bản có gạch rồi so bản không gạch thì không bao
+                // giờ khớp — và hỏng kiểu đó chỉ lộ ra đúng lúc ai đó mất điện
+                // thoại và cần tới mã khôi phục, tức lúc tệ nhất.
+                Hash = BCrypt.Net.BCrypt.HashPassword(ChuanHoaMaKhoiPhuc(ma1)),
+                TaoLuc = DateTimeOffset.UtcNow,
+            });
+        }
+        await repo.LuuAsync(ct);
+
+        log.LogInformation("{Email} đã bật xác thực hai lớp", user.Email);
+        return tho;
+    }
+
+    /// <summary>Tắt TOTP. Bắt nhập lại mật khẩu — không thì ai mượn được máy
+    /// đang đăng nhập cũng gỡ được lớp thứ hai.</summary>
+    public async Task TatAsync(int userId, string? matKhau, CancellationToken ct)
+    {
+        var user = await repo.TheoIdAsync(userId, ct)
+                   ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
+        if (string.IsNullOrWhiteSpace(matKhau) || !BCrypt.Net.BCrypt.Verify(matKhau, user.MatKhauHash))
+            throw new DangNhapThatBai("Mật khẩu không đúng.");
+
+        user.TotpBiMat = null;
+        user.TotpBatLuc = null;
+        user.TotpNhipCuoi = null;
+        await repo.XoaMaKhoiPhucAsync(user.Id, ct);
+        await repo.LuuAsync(ct);
+        log.LogWarning("{Email} đã TẮT xác thực hai lớp", user.Email);
+    }
+
+    /// <summary>
+    /// Quản trị gỡ TOTP cho người khác — dùng khi họ mất cả điện thoại lẫn mã
+    /// khôi phục. Không có đường này thì tài khoản đó khoá vĩnh viễn.
+    /// </summary>
+    public async Task GoChoNguoiKhacAsync(int userId, CancellationToken ct)
+    {
+        var user = await repo.TheoIdAsync(userId, ct)
+                   ?? throw new DangNhapThatBai("Không có người dùng này.");
+        user.TotpBiMat = null;
+        user.TotpBatLuc = null;
+        user.TotpNhipCuoi = null;
+        await repo.XoaMaKhoiPhucAsync(user.Id, ct);
+        await repo.LuuAsync(ct);
+        log.LogWarning("Quản trị gỡ xác thực hai lớp của {Email}", user.Email);
+    }
+
+    public async Task<TinhTrangTotpDto> TinhTrangAsync(int userId, CancellationToken ct)
+    {
+        var user = await repo.TheoIdAsync(userId, ct)
+                   ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
+        var con = user.TotpBatLuc is null ? 0 : await repo.SoMaKhoiPhucConLaiAsync(userId, ct);
+        return new TinhTrangTotpDto(user.TotpBatLuc is not null, user.TotpBatLuc, con);
+    }
+
+    private const int SoMaKhoiPhuc = 8;
+
+    /// <summary>
+    /// Mã khôi phục dạng `XXXX-XXXX`. Bỏ hẳn các ký tự dễ đọc nhầm khi chép tay
+    /// từ giấy: 0/O, 1/I/L, 8/B.
+    /// </summary>
+    /// <summary>
+    /// Bỏ gạch nối, khoảng trắng và đưa về chữ in. Người ta chép mã từ giấy nên
+    /// gõ thiếu gạch hay gõ chữ thường là chuyện thường.
+    /// </summary>
+    private static string ChuanHoaMaKhoiPhuc(string s)
+        => s.Replace(" ", "").Replace("-", "").Trim().ToUpperInvariant();
+
+    private static string SinhMaKhoiPhuc()
+    {
+        const string bang = "ACDEFGHJKMNPQRTUVWXY2345679";
+        var c = new char[8];
+        for (var i = 0; i < c.Length; i++) c[i] = bang[RandomNumberGenerator.GetInt32(bang.Length)];
+        return new string(c, 0, 4) + "-" + new string(c, 4, 4);
     }
 
     public async Task<DangNhapResponse> LamMoiAsync(string? refreshToken, CancellationToken ct)

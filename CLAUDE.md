@@ -840,6 +840,110 @@ Ba lần liên tiếp làm tay, lần này còn phải đổi cả index. **Chuy
 migration trước khi thêm bảng thứ tư** — chi phí đang dồn lại, và một câu SQL
 gõ sai trên máy A thì không có gì bắt được.
 
+## Xác thực hai lớp bằng Microsoft Authenticator — làm 01/10
+
+Sếp hỏi "dùng Microsoft Authenticator được không". **Có hai thứ cùng tên đó**,
+và chọn nhầm là làm sai hẳn hướng:
+
+| | Làm gì | Phụ thuộc |
+| --- | --- | --- |
+| **TOTP** (đã làm) | App sinh mã 6 số, chuẩn RFC 6238 | **Không có gì** |
+| Entra ID SSO | Đăng nhập bằng tài khoản Microsoft công ty | TLS + IT đăng ký app |
+
+**Đã chọn TOTP.** Microsoft không tham gia gì cả — điện thoại tính mã offline
+từ bí mật máy chủ cấp lúc ghi danh, không gọi Azure, không cần mạng. Nó chỉ
+tình cờ là app của Microsoft; Google Authenticator hay app nào cùng chuẩn cũng
+dùng được.
+
+**Entra SSO vướng một chặn cứng:** backend đang chạy **HTTP thuần**. Entra bắt
+buộc redirect URI phải là `https://`, chỉ miễn cho `http://localhost` — mà
+localhost thì vô dụng vì người dùng vào từ máy khác qua tailnet. Muốn đi đường
+đó thì **phải dựng TLS trước**, rồi mới nhờ IT đăng ký ứng dụng trong tenant.
+
+Và nhớ: **hai cái này không cộng dồn.** Lên Entra thì phần mật khẩu + TOTP bỏ
+đi; chỉ bảng user/vai trò/quyền giữ nguyên, vì Entra chỉ thay bước "anh là ai",
+không thay bước "anh được làm gì".
+
+### Thuật toán nằm ở Core và đối chiếu với RFC
+
+`BenchConsole.Core/Auth/Totp.cs`, viết tay chứ không lấy gói ngoài — Core không
+được phụ thuộc gói nào, và `System.Security.Cryptography` nằm trong bộ khung
+.NET nên dùng được.
+
+Viết tay loại code này thì **phải có đáp án ngoài để so**: sai một chi tiết nhỏ
+thì nó vẫn sinh ra sáu chữ số trông rất thuyết phục mà không khớp điện thoại.
+Phép kiểm dùng **vector trong phụ lục B của RFC 6238** (6 mốc thời gian, mã 8
+chữ số) và vector Base32 của RFC 4648 — cả 6 đều khớp.
+
+### Bốn chốt chặn, đừng gỡ cái nào
+
+- **Chống dùng lại (`TotpNhipCuoi`).** Cửa sổ chấp nhận rộng 90 giây, nên thiếu
+  cột này thì một mã nhìn trộm qua vai vẫn vào được **sau khi** chủ nhân đã
+  dùng. Hệ quả phụ: bật xong phải chờ mã mới, vì mã dùng để xác nhận ghi danh
+  đã tiêu mất nhịp đó.
+- **Mã sai tính vào bộ đếm khoá** y như mật khẩu sai. Không đếm thì sáu chữ số
+  thành thứ dò được thoải mái.
+- **Ghi danh hai bước.** Cấp bí mật xong **chưa bật**; phải gõ đúng một mã mới
+  bật. Bật ngay lúc cấp là tự khoá mình ra ngoài nếu điện thoại quét hỏng.
+- **8 mã khôi phục**, băm BCrypt, mỗi mã tiêu một lần. Không có chúng thì mất
+  điện thoại là khoá chết — và với tài khoản quản trị cuối cùng thì không ai mở
+  lại được. Đường thoát cuối là `DELETE /api/users/{id}/totp` (quyền
+  `USER.UPDATE`), dùng khi mất cả điện thoại lẫn mã giấy.
+
+Mã khôi phục bỏ hẳn `0 O 1 I L 8 B` vì chép tay từ giấy là nhìn nhầm.
+
+### Không vẽ mã QR, cố ý
+
+Vẽ QR phải kéo thêm thư viện, mà Microsoft Authenticator có sẵn đường
+**Add account → Other → Enter key manually**. Giao diện hiện bí mật chia nhóm 4
+ký tự cho dễ gõ. Gõ tay một lần đổi lấy không thêm phụ thuộc — thêm QR sau cũng
+được, `otpauth://` đã trả sẵn trong `GhiDanhTotpResponse.Uri`.
+
+### Ba lỗi tự bắt được khi kiểm, đáng ghi lại
+
+1. **Mã khôi phục băm kèm dấu gạch nhưng lúc so lại bỏ gạch** — không bao giờ
+   khớp. Hỏng kiểu này chỉ lộ ra đúng lúc ai đó mất điện thoại và cần tới mã
+   khôi phục, tức lúc tệ nhất. Nay chuẩn hoá ở **một chỗ duy nhất**, dùng cho
+   cả lúc băm lẫn lúc so.
+2. **Đếm lệch một**: đã đánh dấu mã đã dùng rồi còn trừ thêm 1, nên báo còn 6
+   trong khi thật ra còn 7.
+3. **Cảnh báo "chép 8 mã này ngay" không hiện ra.** `.err` trong CSS có
+   `display:none`, phải thêm lớp `show` mới hiện. Chữ nằm đủ trong DOM, không
+   lỗi gì cả — chỉ là không ai nhìn thấy. Đúng thứ cần nhìn nhất.
+
+Lỗi 3 là loại chỉ ảnh chụp màn hình mới bắt được; đọc code và đọc DOM đều thấy
+bình thường.
+
+### Máy bench KHÔNG dùng được cái này
+
+Máy bench chạy không người trực — không ai gõ mã 6 số. Hai endpoint
+`/api/test-cases/{id}/download` và `/api/runs/{cmdId}/report` vẫn
+`[AllowAnonymous]`, không đổi. Câu hỏi chặn #6 (tài khoản dịch vụ cho máy bench)
+vẫn treo, và chọn TOTP hay SSO đều không đụng tới nó.
+
+### Áp lên máy A
+
+Migration `20261001070402_XacThucHaiLop` — ba cột trên `Users` **đều nullable**
+và một bảng `MaKhoiPhucs` mới. Không có bẫy `defaultValue` như lần
+`HoTroRemote`: null = chưa bật = đăng nhập y như cũ. **Mọi tài khoản đang có
+không bị ảnh hưởng gì**, ai muốn bật thì tự vào bật.
+
+### Đã kiểm chứng
+
+- SmokeTest **173/173** (6 vector RFC 6238 + Base32 + cửa sổ lệch giờ + chống
+  dùng lại), Api.Tests **96/96** chạy qua HTTP thật.
+- Giao diện: chạy thật trong trình duyệt với `fetch` bị bắt lại — bước một
+  **không cấp token** và không vào màn chính; bước hai vào được; nút "Mất điện
+  thoại?" đổi qua lại đúng cả hai chiều; cảnh báo mã khôi phục không còn bị lời
+  chào đè mất.
+
+### Chưa kiểm chứng
+
+- **Chưa quét bằng điện thoại thật.** Thuật toán khớp vector RFC nên mã sinh ra
+  đúng, nhưng chuỗi `otpauth://` đưa vào Microsoft Authenticator thật thì chưa
+  ai thử. Đây là việc đầu tiên nên làm trên máy A.
+- Chưa chạy trên SQL Server thật.
+
 ## Đổi đường dẫn REST — làm 30/09
 
 **Đường dẫn tiếng Anh, tên trường JSON tiếng Việt.** Ranh giới đặt ở đó vì:

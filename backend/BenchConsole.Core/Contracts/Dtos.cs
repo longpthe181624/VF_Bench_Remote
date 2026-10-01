@@ -217,7 +217,14 @@ public record TepNguoiDungDto(
 
 // --------------------------------------------------------------- xác thực
 
-public record DangNhapRequest(string Email, string MatKhau);
+/// <summary>
+/// <paramref name="MaTotp"/> để trống ở lần gọi đầu. Mật khẩu đúng mà tài khoản
+/// có bật TOTP thì máy chủ trả về <see cref="DangNhapResponse"/> với
+/// <c>CanMaTotp = true</c> và KHÔNG kèm token; client hỏi mã rồi gọi lại.
+///
+/// <paramref name="MaKhoiPhuc"/> dùng thay khi mất điện thoại. Mỗi mã tiêu một lần.
+/// </summary>
+public record DangNhapRequest(string Email, string MatKhau, string? MaTotp = null, string? MaKhoiPhuc = null);
 
 public record LamMoiRequest(string RefreshToken);
 
@@ -241,7 +248,33 @@ public record DangNhapResponse(
     string AccessToken,
     string RefreshToken,
     DateTimeOffset HetHanLuc,
-    NguoiDungDto NguoiDung);
+    NguoiDungDto NguoiDung)
+{
+    /// <summary>
+    /// True nghĩa là mật khẩu đúng nhưng còn thiếu mã trên điện thoại — ba
+    /// trường token ở trên đều rỗng. Client thấy cờ này thì hiện ô nhập mã.
+    /// </summary>
+    public bool CanMaTotp { get; init; }
+
+    /// <summary>Lần đăng nhập này tiêu một mã khôi phục, còn lại bấy nhiêu.</summary>
+    public int? MaKhoiPhucConLai { get; init; }
+
+    public static DangNhapResponse DoiMaTotp() =>
+        new("", "", default, new NguoiDungDto(0, "", "", [], [])) { CanMaTotp = true };
+}
+
+/// <summary>Kết quả bắt đầu ghi danh TOTP. Bí mật chỉ hiện đúng lần này.</summary>
+public record GhiDanhTotpResponse(string BiMat, string BiMatChiaNhom, string Uri);
+
+public record XacNhanTotpRequest(string Ma);
+
+/// <summary>Mã khôi phục trả về đúng MỘT lần, máy chủ chỉ giữ bản băm.</summary>
+public record MaKhoiPhucResponse(List<string> Ma);
+
+public record TatTotpRequest(string MatKhau);
+
+/// <summary>Tình trạng TOTP của chính mình, để giao diện biết hiện nút gì.</summary>
+public record TinhTrangTotpDto(bool DaBat, DateTimeOffset? BatLuc, int MaKhoiPhucConLai);
 
 // ------------------------------------------------- quản trị người dùng
 

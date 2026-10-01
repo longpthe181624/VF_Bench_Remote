@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TepNguoiDung> TepNguoiDungs => Set<TepNguoiDung>();
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<MaKhoiPhuc> MaKhoiPhucs => Set<MaKhoiPhuc>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
@@ -70,6 +71,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(x => x.BenchId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.DuAn).WithMany(x => x.ThietBis)
                 .HasForeignKey(x => x.DuAnId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<MaKhoiPhuc>(e =>
+        {
+            e.Property(x => x.Hash).HasMaxLength(100).IsRequired();
+            e.HasIndex(x => x.UserId);
+            // Xoá người dùng thì mã khôi phục đi theo — giữ lại là để sót một
+            // nắm hash trỏ vào tài khoản không còn tồn tại.
+            e.HasOne(x => x.User).WithMany(x => x.MaKhoiPhucs)
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<BenchCommand>(e =>
@@ -145,6 +156,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<User>(e =>
         {
+            e.Property(x => x.TotpBiMat).HasMaxLength(64);
             // Đăng nhập bằng email nên nó phải duy nhất. Không có index này
             // thì hai tài khoản cùng email, và đăng nhập trả về cái nào là
             // tuỳ thứ tự trong bảng.

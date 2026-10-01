@@ -25,7 +25,7 @@ public class AuthController(AuthService auth) : ControllerBase
     {
         try
         {
-            return await auth.DangNhapAsync(req.Email, req.MatKhau, ct);
+            return await auth.DangNhapAsync(req.Email, req.MatKhau, req.MaTotp, req.MaKhoiPhuc, ct);
         }
         catch (DangNhapThatBai ex)
         {
@@ -94,5 +94,58 @@ public class AuthController(AuthService auth) : ControllerBase
         return hoSo is null
             ? Unauthorized(new { error = "Tài khoản không còn tồn tại." })
             : hoSo;
+    }
+
+    // ------------------------------------------------- xác thực hai lớp (TOTP)
+    //
+    // Mã sinh theo RFC 6238 nên Microsoft Authenticator, Google Authenticator
+    // hay bất kỳ app nào cùng chuẩn đều dùng được. Máy chủ KHÔNG gọi ra ngoài:
+    // điện thoại tự tính mã từ bí mật cấp lúc ghi danh.
+    //
+    // Cả cụm này đều là việc người dùng tự làm cho CHÍNH MÌNH, nên chỉ cần
+    // [Authorize], không gắn [HasPermission]. Gắn quyền vào đây nghĩa là có
+    // người không được phép tự bảo vệ tài khoản của họ.
+
+    [Authorize]
+    [HttpGet("totp")]
+    public async Task<ActionResult<TinhTrangTotpDto>> TinhTrangTotp(CancellationToken ct)
+        => await ChayAsync(id => auth.TinhTrangAsync(id, ct));
+
+    [Authorize]
+    [HttpPost("totp/ghi-danh")]
+    public async Task<ActionResult<GhiDanhTotpResponse>> GhiDanhTotp(CancellationToken ct)
+        => await ChayAsync(id => auth.BatDauGhiDanhAsync(id, ct));
+
+    /// <summary>
+    /// Gõ đúng một mã thì bật. Trả về mã khôi phục — **chỉ lần này**, máy chủ
+    /// chỉ giữ bản băm nên không in lại được.
+    /// </summary>
+    [Authorize]
+    [HttpPost("totp/xac-nhan")]
+    public async Task<ActionResult<MaKhoiPhucResponse>> XacNhanTotp(
+        XacNhanTotpRequest req, CancellationToken ct)
+        => await ChayAsync(async id => new MaKhoiPhucResponse(
+            await auth.XacNhanGhiDanhAsync(id, req.Ma, ct)));
+
+    [Authorize]
+    [HttpDelete("totp")]
+    public async Task<IActionResult> TatTotp(TatTotpRequest req, CancellationToken ct)
+    {
+        var ket = await ChayAsync<object?>(async id =>
+        {
+            await auth.TatAsync(id, req.MatKhau, ct);
+            return null;
+        });
+        return ket.Result ?? NoContent();
+    }
+
+    /// <summary>Lấy mã người dùng từ token rồi chạy, gói lỗi về 401.</summary>
+    private async Task<ActionResult<T>> ChayAsync<T>(Func<int, Task<T>> viec)
+    {
+        var ma = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(ma, out var id))
+            return Unauthorized(new { error = "Token không mang mã người dùng." });
+        try { return await viec(id); }
+        catch (DangNhapThatBai ex) { return Unauthorized(new { error = ex.Message }); }
     }
 }

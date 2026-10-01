@@ -11,6 +11,12 @@ public interface IUserRepository
     Task<User?> TheoRefreshTokenAsync(string token, CancellationToken ct);
     Task<List<string>> MaQuyenCuaAsync(int userId, CancellationToken ct);
     Task<List<string>> MaVaiTroCuaAsync(int userId, CancellationToken ct);
+
+    /// <summary>Nạp kèm mã khôi phục — chỉ dùng ở luồng đăng nhập có TOTP.</summary>
+    Task<User?> TheoEmailKemMaKhoiPhucAsync(string email, CancellationToken ct);
+    Task<int> SoMaKhoiPhucConLaiAsync(int userId, CancellationToken ct);
+    void ThemMaKhoiPhuc(MaKhoiPhuc ma);
+    Task XoaMaKhoiPhucAsync(int userId, CancellationToken ct);
     Task LuuAsync(CancellationToken ct);
 }
 
@@ -51,6 +57,23 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .Where(ur => ur.UserId == userId)
             .Select(ur => ur.Role!.Ma)
             .ToListAsync(ct);
+
+    // Chỉ Include ở luồng đăng nhập có TOTP, không gộp vào TheoEmailAsync:
+    // mọi lần đăng nhập thường sẽ phải kéo thêm một bảng mà không dùng tới.
+    public Task<User?> TheoEmailKemMaKhoiPhucAsync(string email, CancellationToken ct)
+        => db.Users.Include(u => u.MaKhoiPhucs)
+                   .FirstOrDefaultAsync(u => u.Email == email, ct);
+
+    public Task<int> SoMaKhoiPhucConLaiAsync(int userId, CancellationToken ct)
+        => db.MaKhoiPhucs.CountAsync(m => m.UserId == userId && m.DaDungLuc == null, ct);
+
+    public void ThemMaKhoiPhuc(MaKhoiPhuc ma) => db.MaKhoiPhucs.Add(ma);
+
+    public async Task XoaMaKhoiPhucAsync(int userId, CancellationToken ct)
+    {
+        var cu = await db.MaKhoiPhucs.Where(m => m.UserId == userId).ToListAsync(ct);
+        db.MaKhoiPhucs.RemoveRange(cu);
+    }
 
     public Task LuuAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
 }

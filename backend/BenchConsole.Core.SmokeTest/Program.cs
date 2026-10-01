@@ -513,6 +513,99 @@ Check(!dtoCon.HoTroRemote && dtoCon.Tang == "T2", "cờ remote và tầng phải
 Check(dtoCon.DuAns is not null && dtoCon.DuAns.SequenceEqual(new[] { "VF8-ME", "VF8-VN" }),
       "danh sách dự án phải xếp theo mã để giao diện không nhảy thứ tự mỗi lần tải");
 
+Console.WriteLine();
+Console.WriteLine("── TOTP đối chiếu vector RFC 6238");
+
+// Phụ lục B của RFC 6238 cho sẵn mã đúng tại từng mốc thời gian, với bí mật
+// "12345678901234567890" và 8 chữ số. Đây là chỗ DUY NHẤT có đáp án đúng để
+// so — tự nghĩ ra ca kiểm thử thì chỉ chứng minh code khớp với chính nó.
+var khoaRfc = System.Text.Encoding.ASCII.GetBytes("12345678901234567890");
+var vector = new (long Giay, string Ma)[]
+{
+    (59,          "94287082"),
+    (1111111109,  "07081804"),
+    (1111111111,  "14050471"),
+    (1234567890,  "89005924"),
+    (2000000000,  "69279037"),
+    (20000000000, "65353130"),
+};
+foreach (var (giay, maDung) in vector)
+{
+    var tinh = Totp.SinhMa(khoaRfc, giay / Totp.NhipGiay, soChuSo: 8);
+    Check(tinh == maDung, $"RFC 6238 mốc {giay}: phải ra {maDung}, tính được {tinh}");
+}
+
+Console.WriteLine();
+Console.WriteLine("── TOTP: Base32 và sinh bí mật");
+
+// Vector Base32 của RFC 4648. Sai bảng mã thì điện thoại nhận bí mật khác hẳn
+// mà vẫn sinh ra sáu chữ số trông bình thường.
+Check(Totp.MaHoaBase32(System.Text.Encoding.ASCII.GetBytes("foobar")) == "MZXW6YTBOI",
+      "Base32 phải khớp vector RFC 4648");
+Check(System.Text.Encoding.ASCII.GetString(Totp.GiaiMaBase32("MZXW6YTBOI")) == "foobar",
+      "giải Base32 phải ra lại chuỗi gốc");
+// Người dùng chép từ màn hình sang điện thoại thì dính đủ cả ba thứ này.
+Check(Totp.GiaiMaBase32("mzxw 6ytb-oi==").SequenceEqual(Totp.GiaiMaBase32("MZXW6YTBOI")),
+      "giải Base32 phải bỏ qua chữ thường, khoảng trắng, gạch nối và dấu đệm");
+Check(Totp.GiaiMaBase32("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567").Length == 20,
+      "32 ký tự Base32 phải ra đúng 20 byte");
+// Bảng Base32 không có 0, 1, 8, 9 — chính vì chúng dễ lẫn với O, I, B, g.
+Check(!Totp.HopLe("0189ABCD", "123456", DateTimeOffset.UnixEpoch, null, out _),
+      "ký tự ngoài bảng Base32 phải bị từ chối chứ không ném");
+
+var biMat = Totp.SinhBiMat();
+Check(biMat.Length == 32 && Totp.GiaiMaBase32(biMat).Length == 20,
+      "bí mật sinh ra phải là 160 bit, đúng khuyến nghị RFC 4226");
+Check(Totp.SinhBiMat() != Totp.SinhBiMat(), "hai lần sinh phải ra hai bí mật khác nhau");
+
+var uri = Totp.UriGhiDanh("long.pt@vinfast.vn", biMat);
+Check(uri.StartsWith("otpauth://totp/") && uri.Contains("secret=" + biMat)
+      && uri.Contains("issuer=Bench%20Console") && uri.Contains("digits=6") && uri.Contains("period=30"),
+      "chuỗi otpauth phải đủ secret, issuer, digits, period");
+// Dấu hai chấm và @ trong nhãn phải được thoát, không thì app đọc hỏng.
+Check(uri.Contains("Bench%20Console%3Along.pt%40vinfast.vn"),
+      "nhãn trong otpauth phải thoát ký tự đặc biệt");
+Check(Totp.ChiaNhom("ABCDEFGHIJ") == "ABCD EFGH IJ", "bí mật phải chia nhóm 4 cho dễ gõ tay");
+
+Console.WriteLine();
+Console.WriteLine("── TOTP: kiểm mã người dùng gõ");
+
+var khoaThu = Totp.SinhBiMat();
+var mocThu = new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero);
+var nhip = Totp.NhipTai(mocThu);
+var maDungBayGio = Totp.SinhMa(Totp.GiaiMaBase32(khoaThu), nhip);
+
+Check(Totp.HopLe(khoaThu, maDungBayGio, mocThu, null, out var nhipRa) && nhipRa == nhip,
+      "mã đúng của nhịp hiện tại phải được nhận");
+Check(Totp.HopLe(khoaThu, Totp.ChiaNhom(maDungBayGio), mocThu, null, out _),
+      "mã có khoảng trắng ở giữa vẫn phải nhận — app hiện '123 456'");
+
+// Cửa sổ lệch giờ: đồng hồ điện thoại và máy chủ không bao giờ khớp tuyệt đối.
+Check(Totp.HopLe(khoaThu, Totp.SinhMa(Totp.GiaiMaBase32(khoaThu), nhip - 1), mocThu, null, out _),
+      "mã của nhịp ngay trước phải còn nhận — người dùng cần vài giây để gõ");
+Check(!Totp.HopLe(khoaThu, Totp.SinhMa(Totp.GiaiMaBase32(khoaThu), nhip - 2), mocThu, null, out _),
+      "mã cũ hơn hai nhịp phải bị từ chối, không nới cửa sổ thêm");
+
+// Chống dùng lại: đây là chỗ dễ bỏ sót nhất. Thiếu nó thì một mã nhìn trộm
+// được vẫn đăng nhập được suốt 90 giây sau khi chủ nhân đã dùng.
+Check(!Totp.HopLe(khoaThu, maDungBayGio, mocThu, nhip, out _),
+      "mã đã dùng rồi thì KHÔNG được nhận lại, dù vẫn còn trong cửa sổ");
+Check(!Totp.HopLe(khoaThu, Totp.SinhMa(Totp.GiaiMaBase32(khoaThu), nhip - 1), mocThu, nhip, out _),
+      "mã cũ hơn nhịp đã dùng cũng phải bị từ chối");
+
+var maSai = maDungBayGio == "000000" ? "111111" : "000000";
+Check(!Totp.HopLe(khoaThu, maSai, mocThu, null, out _), "mã sai phải bị từ chối");
+Check(!Totp.HopLe(khoaThu, "12345", mocThu, null, out _), "mã thiếu chữ số phải bị từ chối");
+Check(!Totp.HopLe(khoaThu, "12345a", mocThu, null, out _), "mã lẫn chữ cái phải bị từ chối");
+Check(!Totp.HopLe(khoaThu, null, mocThu, null, out _) && !Totp.HopLe(khoaThu, "", mocThu, null, out _),
+      "không gõ gì thì từ chối");
+Check(!Totp.HopLe(null, maDungBayGio, mocThu, null, out _),
+      "chưa bật TOTP (chưa có bí mật) thì không mã nào hợp lệ");
+// Bí mật hỏng trong database thì phải từ chối đăng nhập, KHÔNG được ném
+// exception — ném là lỗi 500 và không ai đăng nhập được nữa.
+Check(!Totp.HopLe("khong-phai-base32!!!", maDungBayGio, mocThu, null, out _),
+      "bí mật hỏng phải trả false chứ không ném");
+
 // ---------------------------------------------------------------- kết quả
 Console.WriteLine($"\n{'='}{new string('=', 50)}");
 if (failures.Count == 0)
