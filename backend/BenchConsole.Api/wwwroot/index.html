@@ -589,26 +589,50 @@ async function load(){
   if (loai) params.set("loai", loai);
   if (duAnLoc) params.set("duAn", duAnLoc);
 
+  // Mỗi mục gọi độc lập: thiếu quyền thì bỏ qua hẳn, lỗi thì trả mảng rỗng và
+  // ghi tên lại. Trước đây cả chín lời gọi nằm trong một Promise.all, nên MỘT
+  // endpoint trả 403 là toàn bộ trang trắng kèm một dòng đỏ — người dùng mất cả
+  // những mục họ có quyền xem. Vai trò tự tạo mà thiếu một quyền VIEW nào đó là
+  // dính ngay.
+  const loiTai = [];
+  async function lay(ten, quyen, goi){
+    if (quyen && !coQuyen(quyen)) return [];
+    try {
+      const r = await goi();
+      // Luôn trả mảng: một phản hồi méo cũng chỉ làm rỗng một mục, không ném
+      // "is not iterable" rồi chẹn cả hàm vẽ.
+      return Array.isArray(r) ? r : [];
+    } catch(e){
+      loiTai.push(`${ten} (${e.message})`);
+      return [];
+    }
+  }
+
   try {
     const [benches, alerts, goi, baoCao, kho, users, roles, quyenDanhMuc, duAns] = await Promise.all([
-      api("/api/devices" + (params.toString() ? "?" + params.toString() : "")),
-      api("/api/alerts"),
-      api("/api/test-cases"),
-      api("/api/runs/reports/recent?limit=20"),
-      // Kho đi theo user nên phải biết xem kho của ai. Ô trống thì bỏ qua chứ
-      // đừng gọi API với tên rỗng — server trả 400 và màn hình đầy chữ đỏ.
-      // Không chọn ai thì xem kho của chính mình — không phải ghép email vào
-      // URL, ghép tay là sớm muộn có chỗ nhầm mà nhầm ở đây là xem kho người khác.
-      (coQuyen("KHO.VIEW")
-        ? (khoDangXem ? api(`/api/storage/${encodeURIComponent(khoDangXem)}`) : api("/api/storage"))
-        : Promise.resolve([])),
-      // Chỉ hỏi khi có quyền — không thì mỗi lần làm mới lại ăn một cặp 403.
-      coQuyen("USER.VIEW") ? api("/api/users") : Promise.resolve([]),
-      coQuyen("ROLE.VIEW") ? api("/api/roles") : Promise.resolve([]),
-      coQuyen("ROLE.VIEW") ? api("/api/permissions") : Promise.resolve([]),
-      api("/api/projects"),
+      lay("thiết bị", "BENCH.VIEW", () =>
+        api("/api/devices" + (params.toString() ? "?" + params.toString() : ""))),
+      lay("cảnh báo", "BENCH.VIEW", () => api("/api/alerts")),
+      lay("gói", "TESTCASE.VIEW", () => api("/api/test-cases")),
+      lay("báo cáo", "REPORT.VIEW", () => api("/api/runs/reports/recent?limit=20")),
+      // Kho đi theo user nên phải biết xem kho của ai. Không chọn ai thì xem kho
+      // của chính mình — không ghép email vào URL, ghép tay là sớm muộn có chỗ
+      // nhầm mà nhầm ở đây là xem kho người khác.
+      lay("kho", "KHO.VIEW", () =>
+        khoDangXem ? api(`/api/storage/${encodeURIComponent(khoDangXem)}`) : api("/api/storage")),
+      lay("người dùng", "USER.VIEW", () => api("/api/users")),
+      lay("vai trò", "ROLE.VIEW", () => api("/api/roles")),
+      lay("danh mục quyền", "ROLE.VIEW", () => api("/api/permissions")),
+      lay("dự án", "BENCH.VIEW", () => api("/api/projects")),
     ]);
-    showErr(null);
+
+    // Token hết hạn thì api() đã đưa về màn đăng nhập rồi. Vẽ tiếp là rải chín
+    // dòng lỗi lên trên màn hình đó.
+    if (!phien?.accessToken) return;
+
+    showErr(loiTai.length
+      ? "Không tải được: " + loiTai.join(", ") + ". Các mục còn lại vẫn đúng."
+      : null);
     benchesHienTai = benches;
     dsDuAn = duAns;
     // Dựng ô chọn TRƯỚC khi vẽ bảng: ô lọc dự án và ô chọn thiết bị cha đều

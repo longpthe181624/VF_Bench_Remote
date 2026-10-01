@@ -840,6 +840,39 @@ Ba lần liên tiếp làm tay, lần này còn phải đổi cả index. **Chuy
 migration trước khi thêm bảng thứ tư** — chi phí đang dồn lại, và một câu SQL
 gõ sai trên máy A thì không có gì bắt được.
 
+## Một endpoint hỏng không được làm trắng cả trang — sửa 01/10
+
+`load()` gọi chín endpoint trong **một `Promise.all`**, và năm trong số đó
+**không chặn theo quyền**. Một cái trả 403 là cả `Promise.all` vỡ: trang trắng,
+chỉ còn một dòng đỏ, người dùng mất luôn những mục họ có quyền xem.
+
+Ai dính: **vai trò tự tạo trong màn Vai trò** mà thiếu một quyền VIEW nào đó.
+Ba vai trò seed sẵn (Admin/Engineer/Viewer) đều đủ quyền nên không lộ ra — lỗi
+nằm im cho tới khi có người tạo vai trò hẹp hơn.
+
+Nay mỗi mục gọi độc lập qua hàm `lay(tên, quyền, gọi)`:
+
+- Thiếu quyền thì **không gọi**, trả mảng rỗng. Đúng quy ước đã có cho
+  `/api/users` và `/api/roles`, chỉ là năm chỗ kia bị quên.
+- Lỗi thì trả rỗng và ghi tên lại, cuối cùng hiện **một dòng** nói rõ mục nào
+  hỏng kèm câu "các mục còn lại vẫn đúng".
+- Luôn ép về mảng: một phản hồi méo chỉ làm rỗng một mục chứ không ném
+  `is not iterable` rồi chẹn cả hàm vẽ.
+- Token hết hạn thì thoát sớm, không rải chín dòng lỗi lên màn đăng nhập.
+
+**Phát hiện ra nhờ nhìn ảnh chụp màn hình.** Dòng `dsDuAn is not iterable` xuất
+hiện trong lúc thử giao diện; tôi đã gạt đi là tạo tác của bộ `fetch` giả, đúng
+là vậy, nhưng nó che một lỗi thật ngay dưới. **Người dùng chỉ nó thì mới lần
+ra.** Bài học: thấy dòng lỗi lạ trong lúc thử thì truy tới cùng, đừng giải
+thích cho qua.
+
+Đã kiểm trong trình duyệt, ba tình huống: đủ quyền thì sạch; vai trò chỉ có
+`REPORT.VIEW` thì **trang vẫn dựng, không một dòng lỗi** (trước đây trắng);
+một endpoint trả 403 thật thì báo đúng tên mục đó mà bảng bench vẫn vẽ.
+
+**Còn thô một chỗ:** mục nào bị bỏ qua vì thiếu quyền sẽ hiện "Chưa có bench
+nào" thay vì "bạn không có quyền xem". Chưa sửa.
+
 ## Xác thực hai lớp bằng Microsoft Authenticator — làm 01/10
 
 Sếp hỏi "dùng Microsoft Authenticator được không". **Có hai thứ cùng tên đó**,
