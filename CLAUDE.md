@@ -1008,6 +1008,104 @@ không bị ảnh hưởng gì**, ai muốn bật thì tự vào bật.
   ai thử. Đây là việc đầu tiên nên làm trên máy A.
 - Chưa chạy trên SQL Server thật.
 
+## Dữ liệu dùng chung, chia theo mục — làm 01/10
+
+Học cấu trúc từ **VDSA**: mục "Quản lý dữ liệu App" của họ không phải một kho
+phẳng mà tách thành từng trang theo loại dữ liệu (quản lý phiên bản, file DB,
+hướng dẫn sửa chữa, thông báo).
+
+**Phải phân biệt với kho cá nhân, đây là hai thứ khác bản chất:**
+
+| | Kho cá nhân | Dữ liệu chung |
+| --- | --- | --- |
+| Ai xem được | **chỉ chủ kho**, Admin cũng không | ai có `DULIEU.VIEW` |
+| Phân loại | không | có, mỗi mục một tab |
+| Bảng | `TepNguoiDungs` | `TepDuLieuChungs` |
+| Endpoint | `/api/storage` | `/api/du-lieu-chung` |
+
+Cố ý **không gộp** dù hai bên đều là file cất theo băm sha256. Gộp lại là sớm
+muộn có ngày một file riêng tư lọt sang danh sách chung — mà hỏng kiểu đó thì
+không ai báo, người ta chỉ phát hiện khi đã muộn.
+
+### Danh mục nằm trong code, không nằm trong database
+
+`LoaiDuLieuChung` trong Core, giống cách `MaQuyen` làm: thêm một mục là thêm
+một dòng rồi chạy lại, **không cần migration**.
+
+Không làm bảng danh mục cho người dùng tự thêm, vì mỗi mục còn kéo theo cách
+hiển thị riêng — thêm mục là việc của người viết code, không phải việc nhập liệu.
+
+Bốn mục đầu, chọn theo thứ dự án đang thật sự cần:
+
+| Mã | Để làm gì |
+| --- | --- |
+| `dbc` | File DBC. Hiện mỗi máy cắm cứng đường dẫn riêng (`D:\DBC\NP_11.6.4`, `C:\Tools\DBC\...`) nên không ai chắc hai máy đang dùng cùng một bản |
+| `phien-ban` | Phiên bản phần mềm để nạp xuống xe. Phần flash chưa làm |
+| `tai-lieu` | Tài liệu, hướng dẫn, quy trình |
+| `khac` | Chưa phân loại — **cố ý có sẵn**, thiếu nó thì người ta nhét bừa vào mục gần đúng nhất, còn khó dọn hơn |
+
+Giao diện **lấy danh mục từ server** (`GET /api/du-lieu-chung/muc`, kèm số file
+từng mục) chứ không chép cứng, nên thêm mục trong Core là nó tự hiện ra.
+
+Trùng tên **trong cùng một mục** thì chặn: hai file "NP 11.6.4" trong mục DBC
+thì không ai biết bản nào đang dùng. Khác mục trùng tên thì không sao.
+
+### Trả nợ: gom ba lớp kho về một
+
+Thêm kho thứ ba là lúc phải trả món nợ đã ghi từ 26/09. `KhoBaoCao` và
+`KhoNguoiDung` vốn trùng nhau ~90%, chỉ khác tên thư mục, và comment trong
+`KhoNguoiDung` tự đặt điều kiện *"hợp nhất khi tầng Api có kiểm thử"* — điều
+kiện đó nay đã đủ. Nay cả ba kế thừa `KhoFile`, mỗi lớp chỉ khai khoá cấu hình
+và thư mục mặc định.
+
+**Đường dẫn và khoá cấu hình giữ nguyên** (`BaoCao:ThuMuc` thành
+`App_Data/bao-cao`, `KhoNguoiDung:ThuMuc` thành `App_Data/nguoi-dung`), nên file
+đang có trên máy A không mồ côi.
+
+`KhoGoiTestCase` **không gom vào**: nó còn mở ZIP ra đếm file `.tc` và từ chối
+gói sai định dạng. Đó là luật riêng của gói, không phải việc cất file.
+
+### AuthSeed nay ĐỒNG BỘ LẠI vai trò dựng sẵn — đọc kỹ chỗ này
+
+Bản trước thấy vai trò đã tồn tại là bỏ qua, và cái giá đã trả hai lần:
+
+- Thêm mã quyền mới thì **mọi vai trò trên máy A đều thiếu**, người dùng nhận
+  403 mà không hiểu vì sao. Đây đúng là chuyện sẽ xảy ra với ba quyền
+  `DULIEU.*` vừa thêm.
+- Lần sửa bộ lọc quyền của `Viewer` (nó đang thừa `USER.VIEW` và `ROLE.VIEW`,
+  tức người chỉ có quyền xem lại đọc được cả danh bạ người dùng) **vẫn chưa tới
+  được máy A** vì phải bỏ tick tay mà chưa ai làm.
+
+Nay ba vai trò dựng sẵn coi code là nguồn sự thật, mỗi lần khởi động là đồng bộ
+lại: thêm quyền thiếu, **gỡ quyền thừa**. Khởi động máy A lần tới là lỗi
+`Viewer` tự hết, không phải sửa tay.
+
+**Đổi lại: sửa tay quyền của Admin/Engineer/Viewer sẽ bị ghi đè.** Muốn một bộ
+quyền riêng thì **tạo vai trò mới** — vai trò tự tạo không bị đụng tới. Đã có
+phép kiểm cho đúng hai điều này.
+
+`AuthSeed` cũng **gỡ quyền không còn trong danh mục**, nên `KHO.VIEW_ALL` tự
+biến mất khỏi database máy A.
+
+### Đã kiểm chứng
+
+- SmokeTest **190/190**, Api.Tests **124/124**.
+- Phép kiểm tầng Api phủ: danh mục đếm đúng số file từng mục, chặn trùng tên
+  trong cùng mục, khác mục trùng tên vẫn được, mục lạ trả 400 cả khi tải lên
+  lẫn khi lọc, không khai tên thì lấy tên file, **người khác vẫn xem và tải
+  được** (khác hẳn kho cá nhân), Viewer xem được nhưng không tải lên không xoá,
+  và `nguoiTaiLen` lấy từ token chứ không nhận tham số tự khai.
+- Phép kiểm riêng cho **đồng bộ vai trò**, vì đó là cơ chế sẽ đổi dữ liệu trên
+  máy A: dựng cảnh vai trò bị lệch rồi chạy seed, kiểm nó gỡ quyền thừa, thêm
+  quyền mới, và **không đụng vai trò tự tạo**.
+- Giao diện: chạy thật trong trình duyệt — bốn tab hiện đúng kèm số file, tab
+  đang chọn có viền đậm, bảng đổi theo tab.
+
+### Chưa kiểm chứng
+
+- Chưa chạy trên SQL Server thật. Migration `DuLieuChung` chỉ **tạo bảng mới**,
+  không thêm cột vào bảng cũ nên không có bẫy `defaultValue`.
+
 ## Đổi đường dẫn REST — làm 30/09
 
 **Đường dẫn tiếng Anh, tên trường JSON tiếng Việt.** Ranh giới đặt ở đó vì:
