@@ -104,7 +104,7 @@ public class TestCasesController(
         // Chặn trùng trước khi tốn công đọc hết file lên đĩa. Trùng theo cặp
         // (loại, tên) — gói testcase và gói config cùng tên là hai thứ khác nhau.
         if (await db.GoiTestCases.AnyAsync(g => g.Loai == loai && g.Ten == ten, ct))
-            return Conflict(new { error = $"Đã có gói {loai} tên '{ten}'. Xoá gói cũ hoặc đặt tên khác." });
+            return Conflict(new { error = $"Đã có gói {loai} tên '{ten}'. Xoá gói cũ hoặc dùng tên khác." });
 
         KetQuaLuuGoi luu;
         try

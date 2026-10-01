@@ -107,8 +107,8 @@ public class UsersController(
         if (laChinhToi && toiLaAdmin && !conAdmin)
             return BadRequest(new
             {
-                error = "Không gỡ được vai trò Admin của chính mình — "
-                        + "làm vậy là tự khoá mình ra ngoài. Nhờ người khác gỡ hộ.",
+                error = "Không gỡ được vai trò Admin của chính mình. "
+                        + "Nhờ một quản trị viên khác thực hiện.",
             });
 
         var ganDuoc = await GanVaiTroAsync(id, req.VaiTro ?? [], ct);

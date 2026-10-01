@@ -96,7 +96,7 @@ public class BenchesController(
             .Include(b => b.ThuocVe)
             .Include(b => b.DuAns).ThenInclude(x => x.DuAn)
             .FirstOrDefaultAsync(b => b.Code == code, ct);
-        return bench is null ? NotFound(new { error = $"Không có bench {code}" }) : BenchDto.From(bench);
+        return bench is null ? NotFound(new { error = $"Không có thiết bị {code}" }) : BenchDto.From(bench);
     }
 
     [HttpPost]
@@ -104,7 +104,7 @@ public class BenchesController(
     public async Task<ActionResult<BenchDto>> Create(CreateBenchRequest req, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.Model))
-            return BadRequest(new { error = "Thiếu mã bench hoặc dòng xe" });
+            return BadRequest(new { error = "Thiếu mã thiết bị hoặc dòng xe" });
 
         var code = req.Code.Trim().ToUpperInvariant();
         // Giữ nguyên tên người gõ ("VF8New ME") để hiển thị; topic dùng mã đã
@@ -112,7 +112,7 @@ public class BenchesController(
         var model = req.Model.Trim();
 
         if (await db.Benches.AnyAsync(b => b.Code == code, ct))
-            return Conflict(new { error = $"Bench {code} đã tồn tại" });
+            return Conflict(new { error = $"Thiết bị {code} đã tồn tại" });
 
         LoaiThietBi loai = LoaiThietBi.Bench;
         if (!string.IsNullOrWhiteSpace(req.Loai))
@@ -175,7 +175,7 @@ public class BenchesController(
             .Include(b => b.ThuocVe)
             .Include(b => b.DuAns).ThenInclude(x => x.DuAn)
             .FirstOrDefaultAsync(b => b.Code == code, ct);
-        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+        if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
 
         // Code thì KHÔNG cho đổi — nó là danh tính bench, đổi là mồ côi toàn bộ
         // lịch sử chạy.
@@ -254,10 +254,10 @@ public class BenchesController(
     public async Task<IActionResult> Delete(string code, CancellationToken ct)
     {
         var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
-        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+        if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
 
         if (bench.State == BenchState.Running)
-            return Conflict(new { error = "Bench đang chạy test, dừng test trước khi xoá" });
+            return Conflict(new { error = "Thiết bị đang chạy test. Dừng test trước khi xoá." });
 
         db.Benches.Remove(bench);
         await db.SaveChangesAsync(ct);
@@ -370,7 +370,7 @@ public class BenchesController(
         if (string.IsNullOrWhiteSpace(goc))
             return StatusCode(StatusCodes.Status500InternalServerError, new
             {
-                error = "Chưa cấu hình GoiTestCase:BaseUrlChoAgent — agent sẽ không biết tải gói ở đâu.",
+                error = "Chưa cấu hình GoiTestCase:BaseUrlChoAgent. Agent không biết tải gói ở đâu.",
             });
 
         var them = new Dictionary<string, object?>
@@ -398,7 +398,7 @@ public class BenchesController(
         CancellationToken ct, IReadOnlyDictionary<string, object?>? them = null)
     {
         var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
-        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+        if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
 
         // Chặn TRƯỚC mọi kiểm tra khác: thiết bị không có agent thì lệnh gửi đi
         // sẽ rơi vào một topic không ai nghe, và Console báo "bench không phản
@@ -406,8 +406,8 @@ public class BenchesController(
         if (!bench.HoTroRemote)
             return Conflict(new
             {
-                error = $"{code} không hỗ trợ chạy từ xa, không có agent nào nhận lệnh. "
-                        + "Bật 'hỗ trợ remote' trong hồ sơ thiết bị nếu đã cài agent.",
+                error = $"Thiết bị {code} không hỗ trợ điều khiển từ xa. "
+                        + "Bật tuỳ chọn Có agent trong hồ sơ thiết bị.",
             });
 
         if (action == "start_test")
@@ -418,11 +418,11 @@ public class BenchesController(
             // Chặn ở đây để khỏi làm rối bench, nhưng agent vẫn phải tự kiểm tra
             // lại — trạng thái trong DB có thể trễ vài giây so với thực tế.
             if (bench.State == BenchState.Running)
-                return Conflict(new { error = $"Bench đang chạy {bench.CurrentTestCase}" });
+                return Conflict(new { error = $"Thiết bị đang chạy {bench.CurrentTestCase}" });
             if (bench.State is BenchState.Offline or BenchState.Unknown)
-                return Conflict(new { error = "Bench đang mất kết nối" });
+                return Conflict(new { error = "Thiết bị đang mất kết nối" });
             if (bench.State == BenchState.Maintenance)
-                return Conflict(new { error = "Bench đang bảo trì" });
+                return Conflict(new { error = "Thiết bị đang bảo trì" });
         }
 
         try
@@ -455,7 +455,7 @@ public class BenchesController(
         CancellationToken ct = default)
     {
         var bench = await db.Benches.AsNoTracking().FirstOrDefaultAsync(b => b.Code == code, ct);
-        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+        if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
 
         minutes = Math.Clamp(minutes, 1, 180);
         var since = DateTimeOffset.UtcNow.AddMinutes(-minutes);
@@ -483,7 +483,7 @@ public class BenchesController(
         string code, [FromQuery] int take = 50, CancellationToken ct = default)
     {
         var bench = await db.Benches.AsNoTracking().FirstOrDefaultAsync(b => b.Code == code, ct);
-        if (bench is null) return NotFound(new { error = $"Không có bench {code}" });
+        if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
 
         var rows = await db.Runs.AsNoTracking()
             .Where(r => r.BenchId == bench.Id)

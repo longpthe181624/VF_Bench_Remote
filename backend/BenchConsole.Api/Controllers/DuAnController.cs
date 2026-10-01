@@ -97,7 +97,7 @@ public class DuAnController(AppDbContext db) : ControllerBase
         if (so > 0)
             return Conflict(new
             {
-                error = $"Dự án {ma} còn {so} thiết bị, gỡ thiết bị khỏi dự án trước khi xoá",
+                error = $"Dự án {ma} còn {so} thiết bị. Gỡ thiết bị khỏi dự án trước khi xoá.",
             });
 
         db.DuAns.Remove(duAn);

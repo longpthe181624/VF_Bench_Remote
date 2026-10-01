@@ -88,7 +88,7 @@ public class KhoGoiTestCase
             var soTc = DemTestCase(tam);
             if (batBuocCoTestCase && soTc == 0)
                 throw new GoiKhongHopLe(
-                    "Gói không chứa file .tc hay .mtc nào. Kiểm tra lại thư mục đã nén.");
+                    "Gói không chứa file .tc hoặc .mtc. Kiểm tra lại thư mục đã nén.");
 
             var sha = await TinhShaAsync(tam, ct);
             var dich = DuongDan(sha);

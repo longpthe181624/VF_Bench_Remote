@@ -92,8 +92,8 @@ public class RolesController(AppDbContext db, ILogger<RolesController> log) : Co
         if (string.Equals(role.Ma, AuthSeed.RoleAdmin, StringComparison.OrdinalIgnoreCase))
             return BadRequest(new
             {
-                error = "Không sửa được quyền của vai trò Admin — nó bỏ qua mọi "
-                        + "kiểm tra quyền, nên sửa ở đây không có tác dụng gì.",
+                error = "Không sửa được quyền của vai trò Admin. "
+                        + "Vai trò này bỏ qua mọi kiểm tra quyền.",
             });
 
         var ganDuoc = await GanQuyenAsync(id, req.Quyen ?? [], ct);
@@ -116,7 +116,7 @@ public class RolesController(AppDbContext db, ILogger<RolesController> log) : Co
         if (soNguoi > 0)
             return BadRequest(new
             {
-                error = $"Còn {soNguoi} người đang giữ vai trò này. Gỡ họ ra trước đã.",
+                error = $"Còn {soNguoi} người giữ vai trò này. Gỡ vai trò của họ trước khi xoá.",
             });
 
         db.Roles.Remove(role);

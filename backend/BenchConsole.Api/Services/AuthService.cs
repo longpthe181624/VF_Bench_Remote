@@ -108,7 +108,7 @@ public class AuthService(
                 // đếm thì sáu chữ số thành thứ dò được thoải mái, mà dò xong
                 // là bỏ qua luôn lớp thứ hai.
                 await GhiNhanSaiAsync(user, "mã xác thực", ct);
-                throw new DangNhapThatBai("Mã xác thực không đúng hoặc đã dùng rồi.");
+                throw new DangNhapThatBai("Mã xác thực không đúng hoặc đã sử dụng.");
             }
         }
 
@@ -167,7 +167,7 @@ public class AuthService(
         var user = await repo.TheoIdAsync(userId, ct)
                    ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
         if (user.TotpBatLuc is not null)
-            throw new DangNhapThatBai("Tài khoản đã bật xác thực hai lớp rồi. Tắt trước nếu muốn ghi danh lại.");
+            throw new DangNhapThatBai("Tài khoản đã bật xác thực hai lớp. Tắt trước khi ghi danh lại.");
 
         var biMat = Totp.SinhBiMat();
         user.TotpBiMat = biMat;
@@ -185,13 +185,13 @@ public class AuthService(
         var user = await repo.TheoIdAsync(userId, ct)
                    ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
         if (string.IsNullOrWhiteSpace(user.TotpBiMat))
-            throw new DangNhapThatBai("Chưa bắt đầu ghi danh.");
+            throw new DangNhapThatBai("Chưa bắt đầu ghi danh xác thực hai lớp.");
         if (user.TotpBatLuc is not null)
-            throw new DangNhapThatBai("Tài khoản đã bật xác thực hai lớp rồi.");
+            throw new DangNhapThatBai("Tài khoản đã bật xác thực hai lớp.");
 
         if (!Totp.HopLe(user.TotpBiMat, ma, DateTimeOffset.UtcNow, null, out var nhip))
             throw new DangNhapThatBai(
-                "Mã không đúng. Kiểm tra lại giờ trên điện thoại — lệch vài phút là mọi mã đều sai.");
+                "Mã xác thực không đúng. Kiểm tra lại giờ trên điện thoại.");
 
         user.TotpBatLuc = DateTimeOffset.UtcNow;
         user.TotpNhipCuoi = nhip;
@@ -290,7 +290,7 @@ public class AuthService(
                    ?? throw new DangNhapThatBai("Refresh token không hợp lệ.");
 
         if (user.RefreshTokenHetHan is null || user.RefreshTokenHetHan <= DateTimeOffset.UtcNow)
-            throw new DangNhapThatBai("Refresh token đã hết hạn, đăng nhập lại.");
+            throw new DangNhapThatBai("Phiên đăng nhập đã hết hạn.");
 
         // Cấp token mới thì refresh token cũ mất hiệu lực luôn (xoay vòng).
         // Dùng lại một refresh token đã tiêu là dấu hiệu nó bị lộ.

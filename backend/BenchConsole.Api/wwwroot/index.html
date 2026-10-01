@@ -101,14 +101,14 @@
       <input id="dn-email" type="email" placeholder="email" style="width:240px" required>
       <input id="dn-mk" type="password" placeholder="mật khẩu" style="width:200px" required>
       <span id="dn-buoc2" style="display:none">
-        <input id="dn-ma" placeholder="mã 6 số" style="width:110px" autocomplete="one-time-password" inputmode="numeric">
-        <input id="dn-kp" placeholder="hoặc mã khôi phục" style="width:170px; display:none">
-        <button type="button" id="dn-doi-cach" class="ghost">Mất điện thoại?</button>
+        <input id="dn-ma" placeholder="Mã xác thực" style="width:110px" autocomplete="one-time-password" inputmode="numeric">
+        <input id="dn-kp" placeholder="Mã khôi phục" style="width:170px; display:none">
+        <button type="button" id="dn-doi-cach" class="ghost">Dùng mã khôi phục</button>
       </span>
       <button type="submit">Đăng nhập</button>
     </form>
     <div class="meta" id="dn-nhac" style="display:none">
-      Mở Microsoft Authenticator và nhập mã 6 số đang hiện.
+      Nhập mã xác thực trong Microsoft Authenticator.
     </div>
   </section>
 
@@ -132,16 +132,16 @@
       <div id="totp-khung"></div>
     </section>
 
-  <div class="meta">Trang tạm gọi thẳng REST API — dùng thay Swagger cho các thao tác thường ngày. Tự làm mới mỗi 5 giây.</div>
+  <div class="meta">Giao diện tạm. Dữ liệu tự làm mới mỗi 5 giây.</div>
 
   <div class="err" id="err"></div>
 
   <section>
     <div class="sec-head">
-      <h2>Bench</h2>
+      <h2>Thiết bị</h2>
       <span class="count" id="bench-count"></span>
       <span class="grow"></span>
-      <input id="q" placeholder="Tìm mã bench / xưởng / test case…" style="width:220px">
+      <input id="q" placeholder="Tìm kiếm" style="width:220px">
       <select id="filter-state">
         <option value="">Mọi trạng thái</option>
         <option value="idle">Sẵn sàng</option>
@@ -159,11 +159,11 @@
       <select id="filter-duan">
         <option value="">Mọi dự án</option>
       </select>
-      <button id="toggle-add">+ Thêm bench</button>
+      <button id="toggle-add">Tạo mới</button>
     </div>
 
     <form class="addbench" id="add-form">
-      <div class="field"><label>Mã bench *</label><input name="code" required placeholder="HIL-A05"></div>
+      <div class="field"><label>Mã thiết bị *</label><input name="code" required placeholder="HIL-A05"></div>
       <div class="field"><label>Dòng xe *</label><input name="model" required placeholder="vf6"></div>
       <div class="field"><label>Loại</label>
         <select name="loai">
@@ -172,8 +172,8 @@
           <option value="vehicle">Xe</option>
         </select>
       </div>
-      <div class="field"><label>Nằm trong</label>
-        <select name="thuocVe" id="add-thuocve"><option value="">— không —</option></select>
+      <div class="field"><label>Thuộc thiết bị</label>
+        <select name="thuocVe" id="add-thuocve"><option value="">Không</option></select>
       </div>
       <div class="field"><label>Xưởng</label><input name="workshop" placeholder="Xưởng 2"></div>
       <div class="field"><label>Tầng</label><input name="tang" placeholder="T2"></div>
@@ -184,10 +184,10 @@
       <div class="field"><label>Dự án</label><span id="add-duan" class="meta">chưa có dự án nào</span></div>
       <div class="field"><label>&nbsp;</label>
         <label style="font-weight:400">
-          <input type="checkbox" name="hoTroRemote" checked> có agent (chạy được từ xa)
+          <input type="checkbox" name="hoTroRemote" checked> Có agent
         </label>
       </div>
-      <button type="submit" class="primary">Tạo</button>
+      <button type="submit" class="primary">Lưu</button>
       <button type="button" id="cancel-add">Huỷ</button>
     </form>
 
@@ -199,14 +199,14 @@
       <h2>Dự án</h2>
       <span class="count" id="duan-count"></span>
       <span class="grow"></span>
-      <button id="toggle-duan">+ Thêm dự án</button>
+      <button id="toggle-duan">Tạo mới</button>
     </div>
 
     <form class="addbench" id="duan-form">
       <div class="field"><label>Mã *</label><input name="ma" required placeholder="VF8-VN"></div>
       <div class="field"><label>Tên *</label><input name="ten" required placeholder="VF8 thị trường Việt Nam" style="width:220px"></div>
       <div class="field"><label>Mô tả</label><input name="moTa" style="width:220px"></div>
-      <button type="submit" class="primary">Tạo</button>
+      <button type="submit" class="primary">Lưu</button>
       <button type="button" id="duan-huy">Huỷ</button>
     </form>
 
@@ -218,7 +218,7 @@
       <h2>Gói test case</h2>
       <span class="count" id="goi-count"></span>
       <span style="flex:1"></span>
-      <button id="toggle-goi">+ Tải gói lên</button>
+      <button id="toggle-goi">Tải lên</button>
     </div>
 
     <form class="addbench" id="goi-form" enctype="multipart/form-data">
@@ -226,17 +226,12 @@
         <option value="testcase">Gói test case</option>
         <option value="config">Gói cấu hình Qauto</option>
       </select>
-      <input id="goi-ten" placeholder="Tên thư mục bung ra trên máy bench" style="width:240px" required>
+      <input id="goi-ten" placeholder="Tên thư mục trên máy bench" style="width:240px" required>
       <input id="goi-file" type="file" accept=".zip,application/zip" required>
       <input id="goi-by" placeholder="Người tải lên" style="width:140px">
       <button type="submit">Tải lên</button>
       <button type="button" id="goi-cancel">Huỷ</button>
-      <div class="meta" style="flex-basis:100%">
-        Nén thành <b>ZIP</b> (không phải 7z). Tên gói là tên thư mục sẽ bung ra
-        trên máy bench: gói test case vào <code>AutoTests/</code>, gói cấu hình
-        vào thư mục cấu hình riêng. Gói test case phải có ít nhất một
-        <code>.tc</code>; gói cấu hình thì không cần.
-      </div>
+      <div class="meta">Định dạng ZIP. Tên gói là tên thư mục bung ra trên máy bench. Gói test case cần ít nhất một file .tc; gói cấu hình không bắt buộc.</div>
     </form>
 
     <div id="goi-area"></div>
@@ -244,23 +239,19 @@
 
   <section>
     <div class="sec-head">
-      <h2>Kho theo user</h2>
+      <h2>Kho cá nhân</h2>
       <span class="count" id="kho-count"></span>
     </div>
 
     <form class="addbench show" id="kho-form" enctype="multipart/form-data">
       <input id="kho-file" type="file" multiple required>
-      <input id="kho-mota" placeholder="ghi chú (không bắt buộc)" style="width:200px">
-      <button type="submit">Tải lên kho của tôi</button>
+      <input id="kho-mota" placeholder="Ghi chú" style="width:200px">
+      <button type="submit">Tải lên</button>
       <span id="kho-chon-boc" style="display:none">
         <span class="meta">Xem kho của</span>
         <select id="kho-user"></select>
       </span>
-      <div class="meta" style="flex-basis:100%">
-        Nhận <b>file bất kỳ</b>, chưa chốt sẽ chứa gì. Kho đi theo tài khoản
-        đang đăng nhập — tải lên luôn vào kho của mình, và chỉ ai có
-        <code>KHO.VIEW_ALL</code> mới xem được kho người khác.
-      </div>
+      <div class="meta">Nhận mọi định dạng file. File tải lên thuộc về tài khoản đang đăng nhập.</div>
     </form>
 
     <div id="kho-area"></div>
@@ -268,7 +259,7 @@
 
   <section>
     <div class="sec-head">
-      <h2>Báo cáo nhận về</h2>
+      <h2>Báo cáo</h2>
       <span class="count" id="bc-count"></span>
     </div>
     <div id="bc-area"></div>
@@ -279,7 +270,7 @@
       <h2>Người dùng</h2>
       <span class="count" id="user-count"></span>
       <span style="flex:1"></span>
-      <button id="toggle-user">+ Thêm người dùng</button>
+      <button id="toggle-user">Tạo mới</button>
     </div>
 
     <form class="addbench" id="user-form">
@@ -287,7 +278,7 @@
       <input id="u-hoten" placeholder="họ tên" style="width:160px">
       <input id="u-mk" type="password" placeholder="mật khẩu (từ 8 ký tự)" style="width:180px" required>
       <span class="meta" id="u-vaitro"></span>
-      <button type="submit">Tạo</button>
+      <button type="submit" class="primary">Lưu</button>
       <button type="button" id="u-huy">Huỷ</button>
     </form>
 
@@ -305,7 +296,7 @@
 
   <section>
     <div class="sec-head">
-      <h2>Cảnh báo đang mở</h2>
+      <h2>Cảnh báo</h2>
       <span class="count" id="alert-count"></span>
     </div>
     <div id="alert-area"></div>
@@ -432,9 +423,9 @@ async function api(path, opts, daThuLamMoi){
     // còn quyền.
     if (!daThuLamMoi && await thuLamMoiToken()) return api(path, opts, true);
     luuPhien(null); veManDangNhap();
-    throw new Error("Phiên hết hạn, đăng nhập lại.");
+    throw new Error("Phiên đăng nhập đã hết hạn.");
   }
-  if (res.status === 403) throw new Error("Bạn không có quyền làm việc này.");
+  if (res.status === 403) throw new Error("Không có quyền thực hiện.");
   if (!res.ok){
     let msg = res.status + " " + res.statusText;
     try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
@@ -463,9 +454,9 @@ async function taiFile(duong, tenFile, daThuLamMoi){
   if (res.status === 401){
     if (!daThuLamMoi && await thuLamMoiToken()) return taiFile(duong, tenFile, true);
     luuPhien(null); veManDangNhap();
-    throw new Error("Phiên hết hạn, đăng nhập lại.");
+    throw new Error("Phiên đăng nhập đã hết hạn.");
   }
-  if (res.status === 403) throw new Error("Bạn không có quyền tải file này.");
+  if (res.status === 403) throw new Error("Không có quyền tải file.");
   if (!res.ok){
     let msg = res.status + " " + res.statusText;
     try { const body = await res.json(); if (body?.error) msg = body.error; } catch {}
@@ -493,7 +484,7 @@ function nutTai(duong, tenFile){
 }
 
 function fmtAgo(seconds){
-  if (seconds === null || seconds === undefined) return "chưa từng kết nối";
+  if (seconds === null || seconds === undefined) return "Chưa kết nối";
   if (seconds < 60) return seconds + " giây trước";
   if (seconds < 3600) return Math.floor(seconds/60) + " phút trước";
   if (seconds < 86400) return Math.floor(seconds/3600) + " giờ trước";
@@ -522,31 +513,31 @@ function benchRow(b){
   const testCaseInput = el("input", {placeholder:"tên test case", value: pendingTestCase[b.code] || ""});
   testCaseInput.addEventListener("input", () => { pendingTestCase[b.code] = testCaseInput.value; });
   const startBtn = el("button", {onclick: async () => {
-    if (!testCaseInput.value.trim()){ showErr("Nhập tên test case trước khi bấm Chạy."); return; }
+    if (!testCaseInput.value.trim()){ showErr("Chưa nhập tên test case."); return; }
     try {
       await api(`/api/devices/${b.code}/start`, {method:"POST", body: JSON.stringify({
         testCase: testCaseInput.value.trim(), plan: null, issuedBy: "console-tam"
       })});
       delete pendingTestCase[b.code];
-      showToast(`Đã gửi lệnh chạy tới ${b.code}`);
+      showToast(`Đã gửi lệnh chạy tới ${b.code}.`);
       showErr(null);
       load();
     } catch(e){ showErr(e.message); }
   }}, "Chạy");
 
   const stopBtn = el("button", {class:"danger", onclick: async () => {
-    try { await api(`/api/devices/${b.code}/stop?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh dừng tới ${b.code}`); showErr(null); load(); }
+    try { await api(`/api/devices/${b.code}/stop?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh dừng tới ${b.code}.`); showErr(null); load(); }
     catch(e){ showErr(e.message); }
   }}, "Dừng");
 
   const resetBtn = el("button", {onclick: async () => {
-    try { await api(`/api/devices/${b.code}/reset?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh reset tới ${b.code}`); showErr(null); load(); }
+    try { await api(`/api/devices/${b.code}/reset?by=console-tam`, {method:"POST"}); showToast(`Đã gửi lệnh reset tới ${b.code}.`); showErr(null); load(); }
     catch(e){ showErr(e.message); }
   }}, "Reset");
 
   const delBtn = !coQuyen("BENCH.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
-    if (!confirm(`Xoá bench ${b.code}?`)) return;
-    try { await api(`/api/devices/${b.code}`, {method:"DELETE"}); showToast(`Đã xoá ${b.code}`); load(); }
+    if (!confirm(`Xoá thiết bị ${b.code}?`)) return;
+    try { await api(`/api/devices/${b.code}`, {method:"DELETE"}); showToast(`Đã xoá ${b.code}.`); load(); }
     catch(e){ showErr(e.message); }
   }}, "Xoá");
 
@@ -557,7 +548,7 @@ function benchRow(b){
   // chứ không phải bench đang hỏng.
   let dieuKhien = [];
   if (b.hoTroRemote === false){
-    dieuKhien = [el("span", {class:"meta"}, "không có agent")];
+    dieuKhien = [el("span", {class:"meta"}, "Không có agent")];
   } else if (coQuyen("BENCH.RUN")){
     dieuKhien = [testCaseInput, startBtn, stopBtn, resetBtn];
   }
@@ -631,7 +622,7 @@ async function load(){
     if (!phien?.accessToken) return;
 
     showErr(loiTai.length
-      ? "Không tải được: " + loiTai.join(", ") + ". Các mục còn lại vẫn đúng."
+      ? "Không tải được: " + loiTai.join(", ") + "."
       : null);
     benchesHienTai = benches;
     dsDuAn = duAns;
@@ -652,7 +643,7 @@ async function load(){
     renderRoles(roles);
     apDungQuyen();
   } catch(e){
-    showErr("Không tải được dữ liệu: " + e.message);
+    showErr("Không tải được dữ liệu.");
   }
 }
 
@@ -665,12 +656,12 @@ function renderBenches(rows){
   document.getElementById("bench-count").textContent = rows.length + " bench";
   area.innerHTML = "";
   if (!rows.length){
-    area.appendChild(el("div", {class:"empty"}, "Chưa có bench nào."));
+    area.appendChild(el("div", {class:"empty"}, "Không có dữ liệu."));
     return;
   }
   const table = el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", {}, "Bench"), el("th", {}, "Loại"), el("th", {}, "Dòng xe"), el("th", {}, "Trạng thái"),
+      el("th", {}, "Thiết bị"), el("th", {}, "Loại"), el("th", {}, "Dòng xe"), el("th", {}, "Trạng thái"),
       el("th", {}, "Test case"), el("th", {}, "Cập nhật"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...rows.map(benchRow)));
   area.appendChild(table);
@@ -691,7 +682,7 @@ function dungOChonDuAn(){
   const daTick = new Set([...khung.querySelectorAll("input:checked")].map(x => x.value));
   khung.innerHTML = "";
   if (!dsDuAn.length){
-    khung.appendChild(el("span", {class:"meta"}, "chưa có dự án nào"));
+    khung.appendChild(el("span", {class:"meta"}, "Chưa có dự án"));
     return;
   }
   khung.className = "";
@@ -724,14 +715,14 @@ function renderDuAn(rows){
   document.getElementById("duan-count").textContent = rows.length + " dự án";
   area.innerHTML = "";
   if (!rows.length){
-    area.appendChild(el("div", {class:"empty"}, "Chưa có dự án nào."));
+    area.appendChild(el("div", {class:"empty"}, "Không có dữ liệu."));
     return;
   }
 
   const dong = (d) => {
     const xoa = !coQuyen("BENCH.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
       if (!confirm(`Xoá dự án ${d.ma}?`)) return;
-      try { await api(`/api/projects/${encodeURIComponent(d.ma)}`, {method:"DELETE"}); showToast(`Đã xoá dự án ${d.ma}`); load(); }
+      try { await api(`/api/projects/${encodeURIComponent(d.ma)}`, {method:"DELETE"}); showToast(`Đã xoá dự án ${d.ma}.`); load(); }
       catch(e){ showErr(e.message); }
     }}, "Xoá");
     return el("tr", {},
@@ -759,20 +750,20 @@ function goiRow(g){
   // lại hàng đợi phía Console, còn từ chối thẳng ở đây thì người dùng không
   // hiểu vì sao bench vừa thấy trên màn hình lại không chọn được.
   const chon = el("select", {});
-  chon.appendChild(el("option", {value:""}, "— chọn bench —"));
+  chon.appendChild(el("option", {value:""}, "Chọn thiết bị"));
   for (const b of benchesHienTai){
     chon.appendChild(el("option", {value:b.code}, `${b.code} (${b.model})`));
   }
 
   const quyenDay = g.loai === "config" ? "CONFIG.DEPLOY" : "TESTCASE.DEPLOY";
   const dayBtn = !coQuyen(quyenDay) ? null : el("button", {onclick: async () => {
-    if (!chon.value){ showErr("Chưa chọn bench để đẩy gói."); return; }
+    if (!chon.value){ showErr("Chưa chọn thiết bị."); return; }
     try {
       const r = await api(`/api/devices/${chon.value}/deploy`, {
         method:"POST",
         body: JSON.stringify({goiId: g.id, issuedBy: "console-tam"}),
       });
-      showToast(`Đã gửi gói ${g.loai === "config" ? "cấu hình" : "test case"} ${g.ten} tới ${chon.value} (cmd ${r.cmdId})`);
+      showToast(`Đã gửi gói ${g.ten} tới ${chon.value}. Mã lệnh ${r.cmdId}.`);
       showErr(null);
     } catch(e){ showErr(e.message); }
   }}, "Đẩy xuống");
@@ -784,13 +775,13 @@ function goiRow(g){
   // Gói cấu hình KHÔNG có nút này: chạy một gói cấu hình là vô nghĩa, để nút ở
   // đó chỉ dẫn người dùng bấm rồi nhận lỗi.
   const chayBtn = (g.loai === "config" || !coQuyen("BENCH.RUN")) ? null : el("button", {onclick: async () => {
-    if (!chon.value){ showErr("Chưa chọn bench để chạy."); return; }
+    if (!chon.value){ showErr("Chưa chọn thiết bị."); return; }
     try {
       const r = await api(`/api/devices/${chon.value}/start`, {
         method:"POST",
         body: JSON.stringify({testCase: g.ten, plan: null, issuedBy: "console-tam"}),
       });
-      showToast(`Đã ra lệnh chạy ${g.ten} trên ${chon.value} (cmd ${r.cmdId})`);
+      showToast(`Đã gửi lệnh chạy ${g.ten} tới ${chon.value}. Mã lệnh ${r.cmdId}.`);
       showErr(null);
       load();
     } catch(e){ showErr(e.message); }
@@ -798,7 +789,7 @@ function goiRow(g){
 
   const xoaBtn = !coQuyen("TESTCASE.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
     if (!confirm(`Xoá gói ${g.ten}?`)) return;
-    try { await api(`/api/test-cases/${g.id}`, {method:"DELETE"}); showToast(`Đã xoá gói ${g.ten}`); load(); }
+    try { await api(`/api/test-cases/${g.id}`, {method:"DELETE"}); showToast(`Đã xoá gói ${g.ten}.`); load(); }
     catch(e){ showErr(e.message); }
   }}, "Xoá");
 
@@ -820,12 +811,12 @@ function renderGoi(rows){
   document.getElementById("goi-count").textContent = rows.length + " gói";
   area.innerHTML = "";
   if (!rows.length){
-    area.appendChild(el("div", {class:"empty"}, "Chưa có gói test case nào."));
+    area.appendChild(el("div", {class:"empty"}, "Không có dữ liệu."));
     return;
   }
   const table = el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", {}, "Gói"), el("th", {}, "Loại"), el("th", {}, "Số bài"),
+      el("th", {}, "Gói"), el("th", {}, "Loại"), el("th", {}, "Số test case"),
       el("th", {}, "Dung lượng"),
       el("th", {}, "sha256"), el("th", {}, "Tải lên"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...rows.map(goiRow)));
@@ -842,12 +833,12 @@ function renderKho(rows){
     rows.length + " file · " + (khoDangXem ? "kho của " + khoDangXem : "kho của tôi");
   area.innerHTML = "";
   if (!rows.length){
-    area.appendChild(el("div", {class:"empty"}, "Kho của user này chưa có file nào."));
+    area.appendChild(el("div", {class:"empty"}, "Không có dữ liệu."));
     return;
   }
   const table = el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", {}, "File"), el("th", {}, "Cỡ"), el("th", {}, "Ghi chú"),
+      el("th", {}, "File"), el("th", {}, "Dung lượng"), el("th", {}, "Ghi chú"),
       el("th", {}, "Tải lên lúc"), el("th", {}, ""))),
     el("tbody", {}, ...rows.map(t => el("tr", {},
       el("td", {}, el("span", {class:"code"}, t.tenFile)),
@@ -858,7 +849,7 @@ function renderKho(rows){
         nutTai(`/api/storage/files/${t.id}/download`, t.tenFile),
         !coQuyen("KHO.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
           if (!confirm(`Xoá ${t.tenFile}?`)) return;
-          try { await api(`/api/storage/files/${t.id}`, {method:"DELETE"}); showToast(`Đã xoá ${t.tenFile}`); load(); }
+          try { await api(`/api/storage/files/${t.id}`, {method:"DELETE"}); showToast(`Đã xoá ${t.tenFile}.`); load(); }
           catch(e){ showErr(e.message); }
         }}, "Xoá")))))));
   area.appendChild(table);
@@ -886,7 +877,7 @@ function renderUsers(rows){
   const area = document.getElementById("user-area");
   area.innerHTML = "";
   if (!rows.length){
-    area.appendChild(el("div", {class:"empty"}, "Chưa có người dùng nào."));
+    area.appendChild(el("div", {class:"empty"}, "Không có dữ liệu."));
     return;
   }
 
@@ -908,7 +899,7 @@ function renderUsers(rows){
           }).map(x => x.ma);
           try {
             await api(`/api/users/${u.id}/roles`, {method:"PUT", body: JSON.stringify({vaiTro: chon})});
-            showToast(`Đã đổi vai trò của ${u.email}`);
+            showToast(`Đã đổi vai trò của ${u.email}.`);
             showErr(null); load();
           } catch(e){ showErr(e.message); box.checked = !box.checked; }
         });
@@ -926,10 +917,10 @@ function renderUsers(rows){
         }}, u.dangBiKhoa ? "Mở khoá" : "Khoá"));
 
         nut.push(el("button", {onclick: async () => {
-          const mk = prompt(`Mật khẩu mới cho ${u.email} (từ 8 ký tự):`);
+          const mk = prompt(`Mật khẩu mới cho ${u.email}:`);
           if (!mk) return;
           try { await api(`/api/users/${u.id}/reset-password`, {method:"POST", body: JSON.stringify({matKhauMoi: mk})});
-                showToast("Đã đặt lại mật khẩu, phiên cũ bị đăng xuất"); showErr(null); }
+                showToast("Đã đặt lại mật khẩu. Các phiên cũ đã đăng xuất."); showErr(null); }
           catch(e){ showErr(e.message); }
         }}, "Đặt lại mật khẩu"));
       }
@@ -1004,14 +995,14 @@ function veBangQuyen(role){
       })));
 
   khung.appendChild(el("div", {class:"addbench show", style:"flex-direction:column;align-items:flex-start"},
-    el("div", {class:"meta"}, `Quyền của vai trò ${role.ma} — ${role.ten}`),
+    el("div", {class:"meta"}, `Phân quyền: ${role.ten}`),
     ...hang,
     el("div", {class:"actions", style:"margin-top:8px"},
       el("button", {onclick: async () => {
         const chon = dsQuyen.filter(q => document.getElementById("q-" + q.ma)?.checked).map(q => q.ma);
         try {
           await api(`/api/roles/${role.id}/permissions`, {method:"PUT", body: JSON.stringify({quyen: chon})});
-          showToast(`Đã lưu ${chon.length} quyền cho ${role.ma}`);
+          showToast(`Đã lưu ${chon.length} quyền cho ${role.ma}.`);
           showErr(null); vaiTroDangSua = null; khung.innerHTML = ""; load();
         } catch(e){ showErr(e.message); }
       }}, "Lưu"),
@@ -1024,13 +1015,13 @@ function renderBaoCao(rows){
   area.innerHTML = "";
   if (!rows.length){
     area.appendChild(el("div", {class:"empty"},
-      "Chưa nhận được báo cáo nào. Đẩy gói xuống bench rồi bấm Chạy."));
+      "Không có dữ liệu."));
     return;
   }
   const table = el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", {}, "Bench"), el("th", {}, "Bài"), el("th", {}, "File"),
-      el("th", {}, "Cỡ"), el("th", {}, "Nhận lúc"), el("th", {}, ""))),
+      el("th", {}, "Thiết bị"), el("th", {}, "Test case"), el("th", {}, "File"),
+      el("th", {}, "Dung lượng"), el("th", {}, "Nhận lúc"), el("th", {}, ""))),
     el("tbody", {}, ...rows.map(b => el("tr", {},
       el("td", {}, el("span", {class:"code"}, b.benchCode)),
       el("td", {}, b.testCase || "—"),
@@ -1046,13 +1037,13 @@ function renderAlerts(rows){
   document.getElementById("alert-count").textContent = rows.length + " cảnh báo";
   area.innerHTML = "";
   if (!rows.length){
-    area.appendChild(el("div", {class:"empty"}, "Không có cảnh báo nào đang mở."));
+    area.appendChild(el("div", {class:"empty"}, "Không có dữ liệu."));
     return;
   }
   const table = el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", {}, "Bench"), el("th", {}, "Loại"), el("th", {}, "Nội dung"),
-      el("th", {}, "Lúc"), el("th", {}, ""))),
+      el("th", {}, "Thiết bị"), el("th", {}, "Loại"), el("th", {}, "Nội dung"),
+      el("th", {}, "Thời điểm"), el("th", {}, ""))),
     el("tbody", {}, ...rows.map(a => el("tr", {class:"alert-row"},
       el("td", {}, el("span", {class:"code"}, a.benchCode)),
       el("td", {}, a.kind),
@@ -1088,7 +1079,7 @@ document.getElementById("add-form").addEventListener("submit", async (ev) => {
 
   try {
     await api("/api/devices", {method:"POST", body: JSON.stringify(body)});
-    showToast(`Đã tạo bench ${body.code}`);
+    showToast(`Đã tạo thiết bị ${body.code}.`);
     ev.target.reset();
     ev.target.classList.remove("show");
     showErr(null);
@@ -1116,7 +1107,7 @@ duAnForm.addEventListener("submit", async (ev) => {
   for (const k of Object.keys(body)) if (body[k] === "") body[k] = null;
   try {
     await api("/api/projects", {method:"POST", body: JSON.stringify(body)});
-    showToast(`Đã tạo dự án ${body.ma}`);
+    showToast(`Đã tạo dự án ${body.ma}.`);
     ev.target.reset();
     ev.target.classList.remove("show");
     showErr(null);
@@ -1156,8 +1147,8 @@ goiForm.addEventListener("submit", async (ev) => {
     }
     const g = await res.json();
     showToast(g.loai === "config"
-      ? `Đã nhận gói cấu hình ${g.ten}`
-      : `Đã nhận gói test case ${g.ten}: ${g.soTestCase} bài`);
+      ? `Đã tải lên gói cấu hình ${g.ten}.`
+      : `Đã tải lên gói ${g.ten}. ${g.soTestCase} test case.`);
     showErr(null);
     goiForm.reset();
     goiForm.classList.remove("show");
@@ -1193,7 +1184,7 @@ khoForm.addEventListener("submit", async (ev) => {
       throw new Error(msg);
     }
     const ds = await res.json();
-    showToast(`Đã nhận ${ds.length} file vào kho của bạn`);
+    showToast(`Đã tải lên ${ds.length} file.`);
     showErr(null);
     document.getElementById("kho-file").value = "";
     document.getElementById("kho-mota").value = "";
@@ -1217,7 +1208,7 @@ function veManChinh(){
   document.getElementById("doi-mk").style.display = "";
   const nd = phien?.nguoiDung;
   document.getElementById("ai-day").textContent =
-    nd ? `${nd.hoTen} · ${(nd.vaiTro || []).join(", ") || "không vai trò"}` : "";
+    nd ? `${nd.hoTen} · ${(nd.vaiTro || []).join(", ") || "Chưa gán vai trò"}` : "";
   napTinhTrangTotp();
 }
 
@@ -1267,7 +1258,7 @@ userForm.addEventListener("submit", async (ev) => {
   };
   try {
     const u = await api("/api/users", {method:"POST", body: JSON.stringify(body)});
-    showToast(`Đã tạo ${u.email}`);
+    showToast(`Đã tạo tài khoản ${u.email}.`);
     showErr(null);
     userForm.reset();
     userForm.classList.remove("show");
@@ -1288,10 +1279,10 @@ document.getElementById("dn-doi-cach").addEventListener("click", () => {
   const dangDungKp = oKp.style.display !== "none";
   oKp.style.display = dangDungKp ? "none" : "";
   oMa.style.display = dangDungKp ? "" : "none";
-  document.getElementById("dn-doi-cach").textContent = dangDungKp ? "Mất điện thoại?" : "Dùng mã 6 số";
+  document.getElementById("dn-doi-cach").textContent = dangDungKp ? "Dùng mã khôi phục" : "Dùng mã xác thực";
   document.getElementById("dn-nhac").textContent = dangDungKp
-    ? "Mở Microsoft Authenticator và nhập mã 6 số đang hiện."
-    : "Nhập một mã khôi phục đã lưu lúc bật. Mỗi mã chỉ dùng được một lần.";
+    ? "Nhập mã xác thực trong Microsoft Authenticator."
+    : "Mỗi mã khôi phục chỉ dùng được một lần.";
   (dangDungKp ? oMa : oKp).focus();
 });
 
@@ -1330,8 +1321,8 @@ document.getElementById("dn-form").addEventListener("submit", async (ev) => {
     // trọng hơn.
     const conLai = body?.maKhoiPhucConLai;
     showToast(conLai === null || conLai === undefined
-      ? `Xin chào ${body.nguoiDung.hoTen}`
-      : `Đã tiêu một mã khôi phục, còn ${conLai} mã. Tắt rồi bật lại hai lớp để lấy bộ mới.`);
+      ? "Đăng nhập thành công."
+      : `Đã dùng 1 mã khôi phục. Còn ${conLai} mã.`);
     load();
   } catch(e){ showErr(e.message); }
 });
@@ -1350,8 +1341,8 @@ async function napTinhTrangTotp(){
   try {
     const t = await api("/api/auth/totp");
     document.getElementById("totp-tinh-trang").textContent = t.daBat
-      ? `đang bật · còn ${t.maKhoiPhucConLai} mã khôi phục`
-      : "đang tắt";
+      ? `Đang bật · ${t.maKhoiPhucConLai} mã khôi phục`
+      : "Đang tắt";
     document.getElementById("totp-bat").style.display = t.daBat ? "none" : "";
     document.getElementById("totp-tat").style.display = t.daBat ? "" : "none";
 
@@ -1360,7 +1351,7 @@ async function napTinhTrangTotp(){
     if (t.daBat && t.maKhoiPhucConLai <= 2){
       document.getElementById("totp-khung").innerHTML = "";
       document.getElementById("totp-khung").appendChild(el("div", {class:"err show"},
-        `Chỉ còn ${t.maKhoiPhucConLai} mã khôi phục. Tắt rồi bật lại để lấy bộ mới.`));
+        `Còn ${t.maKhoiPhucConLai} mã khôi phục. Tắt và bật lại để cấp bộ mới.`));
     }
   } catch(e){ /* chưa đăng nhập hoặc token hỏng, để load() lo */ }
 }
@@ -1371,14 +1362,14 @@ document.getElementById("totp-bat").addEventListener("click", async () => {
     const g = await api("/api/auth/totp/ghi-danh", {method:"POST"});
     totpBiMatDangGhiDanh = g.biMat;
 
-    const oMa = el("input", {placeholder:"mã 6 số", style:"width:110px", inputmode:"numeric"});
+    const oMa = el("input", {placeholder:"Mã xác thực", style:"width:110px", inputmode:"numeric"});
     khung.innerHTML = "";
     khung.appendChild(el("div", {class:"addbench show"},
       el("div", {},
-        el("div", {}, "1. Mở Microsoft Authenticator → Add account → Other → Enter key manually."),
-        el("div", {}, "2. Tên tài khoản gõ gì cũng được. Khoá là dãy dưới đây:"),
+        el("div", {}, "Mở Microsoft Authenticator, chọn Add account → Other → Enter key manually."),
+        el("div", {class:"meta", style:"margin-top:8px"}, "Khoá bí mật"),
         el("div", {class:"code", style:"font-size:16px; letter-spacing:1px; margin:6px 0"}, g.biMatChiaNhom),
-        el("div", {class:"meta"}, "3. Nhập mã 6 số app vừa hiện để xác nhận:"),
+        el("div", {class:"meta"}, "Mã xác thực"),
         el("div", {style:"margin-top:6px"}, oMa,
           el("button", {class:"primary", style:"margin-left:6px", onclick: async () => {
             try {
@@ -1403,28 +1394,27 @@ function hienMaKhoiPhuc(ds){
   khung.appendChild(el("div", {class:"addbench show"},
     el("div", {},
       el("div", {class:"err show"},
-        "Chép 8 mã này ra chỗ an toàn NGAY. Đóng trang là không xem lại được — "
-        + "máy chủ chỉ giữ bản băm. Mất điện thoại mà không có chúng thì phải nhờ quản trị gỡ."),
+        "Lưu 8 mã khôi phục vào nơi an toàn. Mã chỉ hiển thị một lần."),
       el("div", {class:"code", style:"font-size:15px; line-height:1.9; margin:8px 0"},
         ...ds.flatMap(m => [m, el("br")])),
       el("button", {onclick: () => {
         navigator.clipboard?.writeText(ds.join("\n"));
-        showToast("Đã chép 8 mã khôi phục");
-      }}, "Chép tất cả"),
+        showToast("Đã sao chép 8 mã khôi phục.");
+      }}, "Sao chép"),
       el("button", {class:"ghost", style:"margin-left:6px", onclick: () => {
-        if (!confirm("Đã chép và cất đi rồi chứ? Đóng là không xem lại được.")) return;
+        if (!confirm("Mã khôi phục sẽ không hiển thị lại. Đóng?")) return;
         khung.innerHTML = "";
-      }}, "Tôi đã lưu"),
+      }}, "Đóng"),
     )));
 }
 
 document.getElementById("totp-tat").addEventListener("click", async () => {
-  const mk = prompt("Nhập mật khẩu để tắt xác thực hai lớp:");
+  const mk = prompt("Nhập mật khẩu để xác nhận:");
   if (!mk) return;
   try {
     await api("/api/auth/totp", {method:"DELETE", body: JSON.stringify({matKhau: mk})});
     document.getElementById("totp-khung").innerHTML = "";
-    showToast("Đã tắt xác thực hai lớp");
+    showToast("Đã tắt xác thực hai lớp.");
     napTinhTrangTotp();
     showErr(null);
   } catch(e){ showErr(e.message); }
@@ -1455,14 +1445,14 @@ mkForm.addEventListener("submit", async (ev) => {
     mkForm.reset();
     mkForm.classList.remove("show");
     showErr(null);
-    showToast("Đã đổi mật khẩu. Thiết bị khác đã bị đăng xuất.");
+    showToast("Đã đổi mật khẩu. Các phiên khác đã đăng xuất.");
   } catch(e){ showErr(e.message); }
 });
 
 document.getElementById("dang-xuat").addEventListener("click", () => {
   luuPhien(null);
   veManDangNhap();
-  showToast("Đã đăng xuất");
+  showToast("Đã đăng xuất.");
 });
 
 function tickClock(){

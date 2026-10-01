@@ -1366,5 +1366,24 @@ trên bench có adapter CAN.
   đừng làm theo.** Đặc tả là bản v0.1 ngày 15/09, quy ước này có sau.
 - Giao diện: tối giản, gần đơn sắc, màu chỉ dùng cho chấm trạng thái và chữ
   lỗi. Không KPI card, không biểu đồ trên thẻ bench. Viền thay vì đổ bóng.
+- **Chữ trên giao diện viết theo lối phần mềm nội bộ, lấy VDSA làm chuẩn**
+  (`vdsa.vinfast.vn`). Sửa một lượt ngày 01/10 vì giọng văn cũ nghe như máy
+  viết: dài dòng, giải thích cơ chế, trò chuyện với người dùng.
+
+  | Nên | Không nên |
+  | --- | --- |
+  | Nút là động từ ngắn: `Tạo mới`, `Tải lên`, `Lưu`, `Xoá` | `+ Thêm bench`, `Tôi đã lưu` |
+  | Tiêu đề là danh từ: `Thiết bị`, `Báo cáo`, `Cảnh báo` | `Báo cáo nhận về`, `Cảnh báo đang mở` |
+  | Một câu, hết ý thì chấm | Câu ghép có dấu gạch dài giải thích thêm |
+  | `Không có dữ liệu.` cho mọi bảng rỗng | `Chưa nhận được báo cáo nào. Đẩy gói xuống bench rồi bấm Chạy.` |
+  | `Không có quyền thực hiện.` | `Bạn không có quyền làm việc này.` |
+  | `Lưu 8 mã khôi phục vào nơi an toàn. Mã chỉ hiển thị một lần.` | `Chép 8 mã này ra chỗ an toàn NGAY. Đóng trang là không xem lại được — máy chủ chỉ giữ bản băm.` |
+
+  Cụ thể: không viết hoa để nhấn mạnh, không dấu gạch dài trong câu, không hỏi
+  lại kiểu thân mật (`rồi chứ?`), không xưng `bạn`, không giải thích cơ chế bên
+  trong, và **không để lộ mã quyền** (`KHO.VIEW_ALL`) ra màn hình người dùng.
+
+  Áp cho cả **câu lỗi trả về từ API**, vì chúng hiện thẳng lên giao diện. Không
+  áp cho log của `ILogger` — người đọc log là người vận hành, viết dài hơn được.
 - **Tài liệu viết ra để mộc, không tuỳ tiện trang trí bằng màu.** Cột trạng
   thái dùng chữ ("Đã có", "Cần sửa", "Chưa có") thay vì nhãn màu hay biểu tượng.
