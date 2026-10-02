@@ -19,12 +19,18 @@ public static class MucDuLieuSeed
         var thieu = LoaiDuLieuChung.MacDinh.Where(x => !daCo.Contains(x.Ma)).ToList();
         if (thieu.Count == 0) return;
 
+        // Nối tiếp số đang có chứ không bắt đầu lại từ 1: chạy trên database đã
+        // có mục rồi mà đánh lại từ đầu là hai mục trùng số.
+        var tiep = await db.MucDuLieuChungs.AnyAsync(ct)
+            ? await db.MucDuLieuChungs.MaxAsync(m => m.ThuTu, ct) + 1
+            : 1;
+
         db.MucDuLieuChungs.AddRange(thieu.Select(x => new MucDuLieuChung
         {
             Ma = x.Ma,
             Ten = x.Ten,
             MoTa = x.MoTa,
-            ThuTu = x.ThuTu,
+            ThuTu = tiep++,
             MacDinh = true,
             TaoLuc = DateTimeOffset.UtcNow,
         }));

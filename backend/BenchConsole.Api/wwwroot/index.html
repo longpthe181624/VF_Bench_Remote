@@ -253,10 +253,8 @@
     </div>
 
     <form class="addbench" id="dlc-muc-form">
-      <div class="field"><label>Mã *</label><input name="ma" required placeholder="so-do-mach" style="width:140px"></div>
-      <div class="field"><label>Tên *</label><input name="ten" required placeholder="Sơ đồ mạch" style="width:180px"></div>
-      <div class="field"><label>Mô tả</label><input name="moTa" style="width:180px"></div>
-      <div class="field"><label>Thứ tự</label><input name="thuTu" type="number" style="width:80px"></div>
+      <div class="field"><label>Tên mục *</label><input name="ten" required placeholder="Sơ đồ mạch" style="width:200px"></div>
+      <div class="field"><label>Mô tả</label><input name="moTa" style="width:200px"></div>
       <button type="submit" class="primary">Lưu</button>
       <button type="button" id="dlc-muc-huy">Huỷ</button>
     </form>
@@ -266,7 +264,7 @@
     <div id="dlc-muc" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px"></div>
 
     <form class="addbench" id="dlc-form" enctype="multipart/form-data">
-      <div class="field"><label>Mục *</label><select name="loai" id="dlc-loai"></select></div>
+      <div class="field"><label>Tải vào mục</label><span id="dlc-dich" class="code"></span></div>
       <div class="field"><label>Tên</label><input name="ten" placeholder="Để trống thì lấy tên file" style="width:200px"></div>
       <div class="field"><label>File *</label><input name="file" type="file" required></div>
       <div class="field"><label>Mô tả</label><input name="moTa" style="width:200px"></div>
@@ -791,6 +789,12 @@ let mucDangXem = "";
 /// thêm một loại trong Core là nó tự hiện ra, không phải sửa hai chỗ.
 function renderMucDuLieu(muc){
   dsMucDuLieu = muc;
+
+  // LUÔN có một mục đang chọn. File tải lên đi vào đúng mục đang mở, nên không
+  // có trạng thái "xem tất cả" — không thì người dùng bấm Tải lên mà không biết
+  // file sẽ nằm đâu.
+  if (!muc.some(m => m.ma === mucDangXem)) mucDangXem = muc[0]?.ma || "";
+
   const khung = document.getElementById("dlc-muc");
   khung.innerHTML = "";
   for (const m of muc){
@@ -800,12 +804,8 @@ function renderMucDuLieu(muc){
     }, `${m.ten} (${m.soFile})`));
   }
 
-  // Ô chọn mục trong form tải lên, cùng một danh mục.
-  const o = document.getElementById("dlc-loai");
-  const dang = o.value;
-  o.innerHTML = "";
-  for (const m of muc) o.appendChild(el("option", {value:m.ma}, m.ten));
-  o.value = muc.some(m => m.ma === dang) ? dang : (mucDangXem || muc[0]?.ma || "");
+  const dang = muc.find(m => m.ma === mucDangXem);
+  document.getElementById("dlc-dich").textContent = dang ? dang.ten : "—";
 }
 
 /// Bảng quản lý mục, chỉ hiện khi bấm "Quản lý mục" và có quyền DULIEU.MUC.
@@ -834,10 +834,12 @@ function renderBangMuc(){
     }}, "Lưu");
 
     return el("tr", {},
+      // Số thứ tự do máy chủ cấp và tự đánh lại khi xoá, nên chỉ hiện chứ
+      // không cho sửa.
+      el("td", {}, String(m.thuTu)),
       el("td", {}, el("span", {class:"code"}, m.ma)),
       el("td", {}, oTen),
       el("td", {}, m.moTa || "—"),
-      el("td", {}, String(m.thuTu)),
       el("td", {}, m.soFile + " file"),
       el("td", {}, el("div", {class:"actions"}, luu, xoa)));
   };
@@ -845,8 +847,8 @@ function renderBangMuc(){
   khung.innerHTML = "";
   khung.appendChild(el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", {}, "Mã"), el("th", {}, "Tên"), el("th", {}, "Mô tả"),
-      el("th", {}, "Thứ tự"), el("th", {}, "Số file"), el("th", {}, "Hành động"))),
+      el("th", {class:"stt"}, "STT"), el("th", {}, "Mã"), el("th", {}, "Tên"),
+      el("th", {}, "Mô tả"), el("th", {}, "Số file"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...dsMucDuLieu.map(dong))));
 }
 
@@ -1242,11 +1244,11 @@ dlcMucForm.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const body = Object.fromEntries(new FormData(ev.target).entries());
   for (const k of Object.keys(body)) if (body[k] === "") body[k] = null;
-  if (body.thuTu !== null) body.thuTu = Number(body.thuTu);
   try {
     const m = await api("/api/du-lieu-chung/muc", {method:"POST", body: JSON.stringify(body)});
-    // Máy chủ chuẩn hoá mã, nên báo lại mã THẬT chứ không phải chuỗi người gõ.
-    showToast(`Đã tạo mục ${m.ma}.`);
+    // Mã do máy chủ suy từ tên và bỏ dấu, nên báo lại mã THẬT để người dùng
+    // biết đường dẫn của mục vừa tạo.
+    showToast(`Đã tạo mục ${m.ten} (${m.ma}).`);
     ev.target.reset();
     showErr(null);
     load();
@@ -1268,6 +1270,9 @@ document.getElementById("dlc-q").addEventListener("input", () => {
 dlcForm.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const fd = new FormData(ev.target);
+  // Đích đến là mục đang mở, không phải một ô chọn riêng: "vào mục nào thì file
+  // lên mục đó".
+  fd.set("loai", mucDangXem);
   try {
     // Không dùng api(): thân là multipart, gắn Content-Type: application/json
     // vào là server đọc hỏng.

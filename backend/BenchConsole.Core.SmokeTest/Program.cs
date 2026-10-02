@@ -630,10 +630,22 @@ Check(LoaiDuLieuChung.MacDinh.All(x => LoaiDuLieuChung.LyDoMaKhongDung(x.Ma) is 
       "mục dựng sẵn phải tự thoả luật đặt mã của chính nó");
 Check(LoaiDuLieuChung.MacDinh.All(x => !string.IsNullOrWhiteSpace(x.Ten)),
       "mục nào cũng phải có tên tiếng Việt để hiện trên giao diện");
-// "Khác" là chỗ chứa tạm, phải luôn nằm cuối chứ không ngang hàng các mục khác.
-Check(LoaiDuLieuChung.MacDinh.Single(x => x.Ma == LoaiDuLieuChung.Khac).ThuTu
-      > LoaiDuLieuChung.MacDinh.Where(x => x.Ma != LoaiDuLieuChung.Khac).Max(x => x.ThuTu),
-      "mục Khác phải xếp sau mọi mục khác");
+Check(LoaiDuLieuChung.MacDinh.Any(x => x.Ma == LoaiDuLieuChung.Khac),
+      "phải có mục Khác — nó là chỗ file rơi vào khi tải lên không chọn mục");
+
+// Mã suy từ TÊN nên phải bỏ dấu, không thì "Sơ đồ mạch" ra `s-m-ch`.
+Check(LoaiDuLieuChung.ChuanHoaMa("Sơ đồ mạch") == "so-do-mach",
+      $"bỏ dấu tiếng Việt, nhận '{LoaiDuLieuChung.ChuanHoaMa("Sơ đồ mạch")}'");
+Check(LoaiDuLieuChung.ChuanHoaMa("Tài liệu kỹ thuật") == "tai-lieu-ky-thuat",
+      $"bỏ dấu cả câu dài, nhận '{LoaiDuLieuChung.ChuanHoaMa("Tài liệu kỹ thuật")}'");
+// `đ` là chữ cái riêng trong Unicode, FormD không tách ra được nên phải thay tay.
+Check(LoaiDuLieuChung.ChuanHoaMa("Đo đạc") == "do-dac",
+      $"chữ đ phải thành d, nhận '{LoaiDuLieuChung.ChuanHoaMa("Đo đạc")}'");
+Check(LoaiDuLieuChung.ChuanHoaMa("Báo cáo lỗi") == "bao-cao-loi",
+      $"nhận '{LoaiDuLieuChung.ChuanHoaMa("Báo cáo lỗi")}'");
+// Tên khác nhau mà bỏ dấu ra giống nhau thì trùng mã — chặn ở tầng Api bằng 409.
+Check(LoaiDuLieuChung.ChuanHoaMa("Sơ đồ mạch") == LoaiDuLieuChung.ChuanHoaMa("So do mach"),
+      "có dấu và không dấu cho ra cùng một mã");
 
 // Chuẩn hoá chứ không từ chối: gõ "File DBC" làm mã là nhầm rất thường gặp.
 Check(LoaiDuLieuChung.ChuanHoaMa("File DBC") == "file-dbc",

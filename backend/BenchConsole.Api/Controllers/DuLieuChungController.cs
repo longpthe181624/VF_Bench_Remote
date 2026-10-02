@@ -173,26 +173,30 @@ public class DuLieuChungController(
     [HasPermission(MaQuyen.DuLieuMuc)]
     public async Task<ActionResult<MucDuLieuChungDto>> TaoMuc(TaoMucRequest req, CancellationToken ct)
     {
-        // Chuẩn hoá trước rồi mới kiểm: gõ "File DBC" làm mã là nhầm rất thường
-        // gặp, biến thành `file-dbc` vừa đúng ý vừa khỏi bắt gõ lại.
-        var ma = LoaiDuLieuChung.ChuanHoaMa(req.Ma);
-        var lyDo = LoaiDuLieuChung.LyDoMaKhongDung(ma);
-        if (lyDo is not null) return BadRequest(new { error = lyDo });
-
         if (string.IsNullOrWhiteSpace(req.Ten))
             return BadRequest(new { error = "Thiếu tên mục." });
 
+        // Mã suy từ tên, người dùng không phải gõ. Bỏ dấu tiếng Việt vì mã đi
+        // vào URL: "Sơ đồ mạch" ra `so-do-mach`.
+        var ma = LoaiDuLieuChung.ChuanHoaMa(req.Ten);
+        var lyDo = LoaiDuLieuChung.LyDoMaKhongDung(ma);
+        if (lyDo is not null) return BadRequest(new { error = lyDo });
+
         if (await db.MucDuLieuChungs.AnyAsync(m => m.Ma == ma, ct))
-            return Conflict(new { error = $"Đã có mục mã '{ma}'." });
+            return Conflict(new { error = $"Đã có mục tên này (mã '{ma}')." });
+
+        // Số thứ tự nối tiếp mục cuối. Không cho gõ tay: để người dùng tự đặt
+        // thì sớm muộn có hai mục cùng số, và dãy thủng lỗ chỗ.
+        var tiep = await db.MucDuLieuChungs.AnyAsync(ct)
+            ? await db.MucDuLieuChungs.MaxAsync(m => m.ThuTu, ct) + 1
+            : 1;
 
         var muc = new MucDuLieuChung
         {
             Ma = ma,
             Ten = req.Ten.Trim(),
             MoTa = req.MoTa,
-            // Không khai thứ tự thì xếp sau mục cuối, nhưng TRƯỚC "Khác" —
-            // mục đó cố ý giữ số rất lớn để luôn nằm cuối.
-            ThuTu = req.ThuTu ?? 100,
+            ThuTu = tiep,
             TaoLuc = DateTimeOffset.UtcNow,
         };
         db.MucDuLieuChungs.Add(muc);
@@ -215,7 +219,6 @@ public class DuLieuChungController(
         // file thuộc mục đó. Đổi mã là mồ côi toàn bộ số file ấy.
         if (req.Ten is not null && req.Ten.Trim().Length > 0) muc.Ten = req.Ten.Trim();
         if (req.MoTa is not null) muc.MoTa = req.MoTa;
-        if (req.ThuTu is not null) muc.ThuTu = req.ThuTu.Value;
 
         await db.SaveChangesAsync(ct);
 
@@ -246,11 +249,35 @@ public class DuLieuChungController(
         db.MucDuLieuChungs.Remove(muc);
         await db.SaveChangesAsync(ct);
 
+        await DanhLaiThuTuAsync(ct);
+
         log.LogWarning("Dữ liệu chung: {Ai} xoá mục {Ma}", User.Email(), muc.Ma);
         return NoContent();
     }
 
     // ------------------------------------------------------- dùng chung
+
+    /// <summary>
+    /// Đánh lại số thứ tự thành 1, 2, 3… liên tiếp, giữ nguyên thứ tự đang có.
+    ///
+    /// Xoá mục giữa dãy thì để lại một lỗ; không vá thì sau vài lần xoá số thứ
+    /// tự trông như ngẫu nhiên và chẳng còn nói lên điều gì.
+    /// </summary>
+    private async Task DanhLaiThuTuAsync(CancellationToken ct)
+    {
+        var tatCa = await db.MucDuLieuChungs
+            .OrderBy(m => m.ThuTu).ThenBy(m => m.Id)
+            .ToListAsync(ct);
+
+        var doi = false;
+        for (var i = 0; i < tatCa.Count; i++)
+        {
+            if (tatCa[i].ThuTu == i + 1) continue;
+            tatCa[i].ThuTu = i + 1;
+            doi = true;
+        }
+        if (doi) await db.SaveChangesAsync(ct);
+    }
 
     private async Task<Dictionary<string, string>> TenMucAsync(CancellationToken ct)
         => await db.MucDuLieuChungs.AsNoTracking()

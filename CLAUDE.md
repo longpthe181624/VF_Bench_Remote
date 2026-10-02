@@ -1165,12 +1165,39 @@ database — nhờ vậy kiểm thử được mà không dựng hạ tầng:
 - **Luật đặt mã**: `ChuanHoaMa` và `LyDoMaKhongDung`.
 - **Danh sách mục dựng sẵn** để `MucDuLieuSeed` seed lúc khởi động.
 
-**Chuẩn hoá mã chứ không từ chối.** Gõ `"File DBC"` làm mã là nhầm lẫn rất
-thường gặp; biến thành `file-dbc` vừa đúng ý vừa khỏi bắt gõ lại. Từ chối hai
-thứ: mã rỗng sau khi chuẩn hoá, và mã toàn số (dễ lẫn với id trong đường dẫn).
+**Tạo mục chỉ cần gõ TÊN.** Mã suy từ tên, số thứ tự do máy chủ cấp — người
+dùng không phải nghĩ về cả hai.
+
+**Suy mã từ tên thì bắt buộc phải bỏ dấu tiếng Việt.** Mã chỉ nhận chữ ASCII vì
+nó đi vào URL, mà bản đầu không bỏ dấu nên cho ra rác:
+
+| Tên | Bản đầu | Nay |
+| --- | --- | --- |
+| `Sơ đồ mạch` | `s-m-ch` | `so-do-mach` |
+| `Tài liệu kỹ thuật` | `t-i-li-u-k-thu-t` | `tai-lieu-ky-thuat` |
+
+Bỏ dấu bằng `Normalize(FormD)` rồi lọc dấu thanh. Riêng **`đ`/`Đ` phải thay
+tay**: nó là một chữ cái riêng trong Unicode chứ không phải `d` cộng dấu, nên
+`FormD` không tách ra được. Hệ quả: `"Sơ đồ mạch"` và `"So do mach"` cho ra
+cùng một mã, nên tên thứ hai bị chặn bằng 409.
+
+Từ chối hai thứ: tên không ra được mã nào (ví dụ `"!!!"`), và mã toàn số (dễ
+lẫn với id trong đường dẫn).
 
 **Mã KHÔNG đổi được sau khi tạo**, kể cả mục tự tạo — mã nằm trong cột `Loai`
 của mọi file thuộc mục đó, đổi là mồ côi hết. Tên hiển thị thì đổi thoải mái.
+
+### Số thứ tự tự quản, luôn liên tiếp 1..N
+
+`ThuTu` **không phải thứ người dùng gõ**. Tạo mục thì nó nối tiếp mục cuối; xoá
+một mục thì cả dãy được **đánh lại thành 1, 2, 3… liên tiếp**, giữ nguyên thứ
+tự tương đối.
+
+Không cho gõ tay vì để người dùng tự đặt thì sớm muộn có hai mục cùng số, và
+dãy thủng lỗ chỗ sau vài lần xoá — lúc đó con số chẳng còn nói lên điều gì.
+
+`MucDuLieuSeed` cũng **nối tiếp số đang có** chứ không bắt đầu lại từ 1: chạy
+trên database đã có mục rồi mà đánh lại từ đầu là hai mục trùng số.
 
 **Mục dựng sẵn không xoá được** (`MacDinh = true`). Riêng `khac` là chỗ file rơi
 vào khi tải lên không chọn mục; xoá nó là để lại file trỏ vào một mã không tồn
@@ -1197,9 +1224,13 @@ Bốn mục dựng sẵn, chọn theo thứ dự án đang thật sự cần:
 | `khac` | Chưa phân loại — **cố ý có sẵn**, thiếu nó thì người ta nhét bừa vào mục gần đúng nhất, còn khó dọn hơn |
 
 Giao diện **lấy danh mục từ server** (`GET /api/du-lieu-chung/muc`, kèm số file
-từng mục) chứ không chép cứng, nên thêm mục là nó tự hiện ra ngay — cả dãy tab
-lẫn ô chọn trong form tải lên. Nút "Quản lý mục" chỉ hiện với ai có
-`DULIEU.MUC`.
+từng mục) chứ không chép cứng, nên thêm mục là nó tự hiện ra ngay. Nút "Quản lý
+mục" chỉ hiện với ai có `DULIEU.MUC`.
+
+**Vào mục nào thì file lên mục đó.** Form tải lên **không có ô chọn mục**; đích
+đến là mục đang mở, và giao diện hiện rõ tên mục đó ngay trong form. Vì vậy
+**luôn có một mục được chọn**, không có trạng thái "xem tất cả" — không thì
+người dùng bấm Tải lên mà không biết file sẽ nằm đâu.
 
 Trùng tên **trong cùng một mục** thì chặn: hai file "NP 11.6.4" trong mục DBC
 thì không ai biết bản nào đang dùng. Khác mục trùng tên thì không sao.

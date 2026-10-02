@@ -29,30 +29,35 @@ public static class LoaiDuLieuChung
     /// Mục dựng sẵn, seed vào database lúc khởi động nếu chưa có. Quản trị
     /// thêm mục mới bên cạnh chúng, và đổi được tên hiển thị của chúng.
     /// </summary>
-    public static readonly (string Ma, string Ten, string? MoTa, int ThuTu)[] MacDinh =
+    /// <remarks>
+    /// Không mang số thứ tự: số đó do database cấp theo kiểu tự tăng, và được
+    /// đánh lại liên tiếp 1..N mỗi khi xoá một mục.
+    /// </remarks>
+    public static readonly (string Ma, string Ten, string? MoTa)[] MacDinh =
     [
-        (Dbc,      "File DBC",           "Ma trận CAN", 10),
-        (PhienBan, "Phiên bản phần mềm", "Bản nạp xuống xe", 20),
-        (TaiLieu,  "Tài liệu",           "Hướng dẫn, quy trình", 30),
-        // Luôn xếp cuối: nó là chỗ chứa tạm, không phải một ngăn ngang hàng.
-        (Khac,     "Khác",               "Chưa phân loại", 999),
+        (Dbc,      "File DBC",           "Ma trận CAN"),
+        (PhienBan, "Phiên bản phần mềm", "Bản nạp xuống xe"),
+        (TaiLieu,  "Tài liệu",           "Hướng dẫn, quy trình"),
+        (Khac,     "Khác",               "Chưa phân loại"),
     ];
 
     /// <summary>Độ dài tối đa của mã. Mã đi vào URL nên không để dài lê thê.</summary>
     public const int DoDaiMaToiDa = 32;
 
     /// <summary>
-    /// Chuẩn hoá mã người dùng gõ: bỏ khoảng trắng hai đầu, về chữ thường, và
-    /// đổi khoảng trắng giữa thành gạch nối.
+    /// Sinh mã từ TÊN người dùng gõ: bỏ dấu tiếng Việt, về chữ thường, mọi thứ
+    /// không phải chữ số thành gạch nối.
     ///
-    /// Chuẩn hoá chứ không từ chối, vì gõ "File DBC" làm mã là nhầm lẫn rất
-    /// thường gặp — biến thành `file-dbc` thì vừa đúng ý vừa khỏi bắt gõ lại.
+    /// Tạo mục chỉ cần gõ tên, mã suy ra từ đó. Nên **bỏ dấu là bắt buộc**,
+    /// không phải cho đẹp: mã chỉ nhận chữ ASCII vì nó đi vào URL, mà bản đầu
+    /// không bỏ dấu nên "Sơ đồ mạch" ra `s-m-ch` và "Tài liệu kỹ thuật" ra
+    /// `t-i-li-u-k-thu-t` — vô dụng, và hai tên khác nhau rất dễ đụng nhau.
     /// </summary>
     public static string ChuanHoaMa(string? ma)
     {
         if (string.IsNullOrWhiteSpace(ma)) return "";
 
-        var sach = ma.Trim().ToLowerInvariant();
+        var sach = BoDau(ma.Trim()).ToLowerInvariant();
         var ra = new System.Text.StringBuilder(sach.Length);
         var gachTruoc = false;
 
@@ -64,6 +69,26 @@ public static class LoaiDuLieuChung
         }
 
         return ra.ToString().Trim('-');
+    }
+
+    /// <summary>
+    /// Bỏ dấu tiếng Việt. `FormD` tách chữ cái khỏi dấu thanh rồi lọc dấu đi.
+    ///
+    /// Riêng `đ`/`Đ` phải thay tay: nó là một chữ cái riêng trong Unicode chứ
+    /// không phải `d` cộng dấu, nên `FormD` không tách ra được.
+    /// </summary>
+    private static string BoDau(string s)
+    {
+        var tach = s.Replace('đ', 'd').Replace('Đ', 'D')
+                    .Normalize(System.Text.NormalizationForm.FormD);
+
+        var ra = new System.Text.StringBuilder(tach.Length);
+        foreach (var c in tach)
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
+                != System.Globalization.UnicodeCategory.NonSpacingMark)
+                ra.Append(c);
+
+        return ra.ToString().Normalize(System.Text.NormalizationForm.FormC);
     }
 
     /// <summary>

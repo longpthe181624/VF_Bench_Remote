@@ -724,27 +724,36 @@ Nhom("Quản trị tự thêm mục dữ liệu chung");
 var (_, thanMucSeed) = await Goi(HttpMethod.Get, "/api/du-lieu-chung/muc", token: tokenAdmin);
 Check(thanMucSeed.EnumerateArray().All(x => x.GetProperty("macDinh").GetBoolean()),
       "bốn mục ban đầu đều phải đánh dấu là mục dựng sẵn");
+// Số thứ tự phải liên tiếp 1..N ngay từ lúc seed.
+Check(thanMucSeed.EnumerateArray().Select(x => x.GetProperty("thuTu").GetInt32())
+        .SequenceEqual(Enumerable.Range(1, thanMucSeed.GetArrayLength())),
+      "số thứ tự sau khi seed phải là 1, 2, 3… liên tiếp");
+var soMucDau = thanMucSeed.GetArrayLength();
 
-// Chuẩn hoá chứ không từ chối: gõ "File DBC" làm mã là nhầm rất thường gặp.
+// Tạo mục CHỈ CẦN TÊN. Mã suy từ tên và bỏ dấu, số thứ tự do máy chủ cấp.
 var (maTaoMuc, thanTaoMuc) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
-    new { ma = "Sơ Đồ Mạch", ten = "Sơ đồ mạch", moTa = "bản vẽ" }, tokenAdmin);
+    new { ten = "Sơ đồ mạch", moTa = "bản vẽ" }, tokenAdmin);
 Check(maTaoMuc == HttpStatusCode.OK, $"admin tạo mục mới, nhận {maTaoMuc}");
 var maMucMoi = thanTaoMuc.GetProperty("ma").GetString()!;
-Check(maMucMoi == maMucMoi.ToLowerInvariant() && !maMucMoi.Contains(' '),
-      $"mã phải được chuẩn hoá cho hợp URL, nhận '{maMucMoi}'");
+Check(maMucMoi == "so-do-mach", $"mã phải suy từ tên và bỏ dấu, nhận '{maMucMoi}'");
+Check(thanTaoMuc.GetProperty("thuTu").GetInt32() == soMucDau + 1,
+      "mục mới phải nối tiếp số thứ tự đang có");
 Check(!thanTaoMuc.GetProperty("macDinh").GetBoolean(), "mục tự tạo không phải mục dựng sẵn");
 
+// Tên khác nhau mà bỏ dấu ra cùng một mã thì phải chặn.
 var (maTrungMuc, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
-    new { ma = maMucMoi, ten = "Trùng" }, tokenAdmin);
-Check(maTrungMuc == HttpStatusCode.Conflict, $"mã mục trùng phải bị chặn, nhận {maTrungMuc}");
+    new { ten = "So do mach" }, tokenAdmin);
+Check(maTrungMuc == HttpStatusCode.Conflict,
+      $"tên cho ra mã đã có phải bị chặn, nhận {maTrungMuc}");
 
-var (maMaSo, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
-    new { ma = "123", ten = "Toàn số" }, tokenAdmin);
-Check(maMaSo == HttpStatusCode.BadRequest, $"mã toàn số phải bị từ chối, nhận {maMaSo}");
+var (maTenRong, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
+    new { ten = "   " }, tokenAdmin);
+Check(maTenRong == HttpStatusCode.BadRequest, $"tên rỗng phải bị từ chối, nhận {maTenRong}");
 
-var (maMaRong, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
-    new { ma = "!!!", ten = "Rỗng sau chuẩn hoá" }, tokenAdmin);
-Check(maMaRong == HttpStatusCode.BadRequest, $"mã rỗng sau chuẩn hoá phải bị từ chối, nhận {maMaRong}");
+// Tên không có chữ cái nào thì mã rỗng sau chuẩn hoá.
+var (maTenLa, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
+    new { ten = "!!!" }, tokenAdmin);
+Check(maTenLa == HttpStatusCode.BadRequest, $"tên không ra được mã phải bị từ chối, nhận {maTenLa}");
 
 // Mục mới dùng được ngay, không phải khởi động lại hay sửa code.
 var (maTaiMucMoi, _) = await TaiLenDuLieu(maMucMoi, "Sơ đồ VF8", "so-do.pdf", "noi dung", tokenAdmin);
@@ -778,9 +787,30 @@ Check(thanSuaMuc.GetProperty("ma").GetString() == maMucMoi, "mã KHÔNG được
 
 // Kỹ sư thêm được file nhưng không được đụng vào danh mục.
 var (maKySuTaoMuc, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
-    new { ma = "lau", ten = "Lậu" }, tokenKySu);
+    new { ten = "Lậu" }, tokenKySu);
 Check(maKySuTaoMuc == HttpStatusCode.Forbidden,
       $"Engineer không được thêm mục, nhận {maKySuTaoMuc}");
+
+// ---- xoá giữa dãy thì số thứ tự phải được đánh lại liên tiếp
+await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc", new { ten = "Tam mot" }, tokenAdmin);
+var (_, thanTamHai) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
+    new { ten = "Tam hai" }, tokenAdmin);
+await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc", new { ten = "Tam ba" }, tokenAdmin);
+
+// Xoá đúng mục ở GIỮA, chỗ để lại lỗ.
+var (maXoaGiua, _) = await Goi(HttpMethod.Delete,
+    $"/api/du-lieu-chung/muc/{thanTamHai.GetProperty("ma").GetString()}", token: tokenAdmin);
+Check(maXoaGiua == HttpStatusCode.NoContent, $"xoá mục rỗng ở giữa, nhận {maXoaGiua}");
+
+var (_, thanSauXoa) = await Goi(HttpMethod.Get, "/api/du-lieu-chung/muc", token: tokenAdmin);
+var stt = thanSauXoa.EnumerateArray().Select(x => x.GetProperty("thuTu").GetInt32()).ToList();
+Check(stt.SequenceEqual(Enumerable.Range(1, stt.Count)),
+      $"xoá xong phải đánh lại 1..N liên tiếp, nhận [{string.Join(", ", stt)}]");
+// Đánh lại nhưng GIỮ NGUYÊN thứ tự tương đối, không xáo trộn danh sách.
+var tenSauXoa = thanSauXoa.EnumerateArray().Select(x => x.GetProperty("ten").GetString()).ToList();
+Check(tenSauXoa.IndexOf("Tam mot") < tenSauXoa.IndexOf("Tam ba"),
+      "đánh lại số nhưng không được đảo thứ tự các mục còn lại");
+Check(!tenSauXoa.Contains("Tam hai"), "mục đã xoá không còn trong danh sách");
 
 // Dọn sạch rồi xoá: lúc này mới được phép.
 var (_, thanDeXoa) = await Goi(HttpMethod.Get, $"/api/du-lieu-chung?loai={maMucMoi}", token: tokenAdmin);

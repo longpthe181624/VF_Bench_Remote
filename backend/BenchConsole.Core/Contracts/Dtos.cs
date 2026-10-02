@@ -159,10 +159,16 @@ public record TepDuLieuChungDto(
 public record MucDuLieuChungDto(
     string Ma, string Ten, string? MoTa, int ThuTu, bool MacDinh, int SoFile);
 
-public record TaoMucRequest(string Ma, string Ten, string? MoTa, int? ThuTu);
+/// <summary>
+/// Tạo mục chỉ cần TÊN. Mã suy ra từ tên, số thứ tự do database cấp.
+/// </summary>
+public record TaoMucRequest(string Ten, string? MoTa);
 
-/// <summary>Mã KHÔNG đổi được: nó nằm trong `Loai` của mọi file thuộc mục đó.</summary>
-public record SuaMucRequest(string? Ten, string? MoTa, int? ThuTu);
+/// <summary>
+/// Mã KHÔNG đổi được: nó nằm trong `Loai` của mọi file thuộc mục đó, đổi là mồ
+/// côi hết. Số thứ tự cũng không sửa tay — nó tự tăng và tự đánh lại.
+/// </summary>
+public record SuaMucRequest(string? Ten, string? MoTa);
 
 /// <summary>Du an dung thiet bi.</summary>
 public record DuAnDto(
