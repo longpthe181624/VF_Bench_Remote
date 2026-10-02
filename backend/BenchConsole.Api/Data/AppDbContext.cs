@@ -39,6 +39,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Rack).HasMaxLength(64);
             e.Property(x => x.Firmware).HasMaxLength(32);
             e.Property(x => x.Tang).HasMaxLength(32);
+            e.Property(x => x.Ten).HasMaxLength(128);
 
             // Lọc theo loại là truy vấn thường xuyên nhất sau khi có ba loại
             // thiết bị trong cùng một bảng.

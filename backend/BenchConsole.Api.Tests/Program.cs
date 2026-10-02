@@ -459,6 +459,85 @@ using (var scope = may.Services.CreateScope())
           "thiết bị không agent phải giữ cờ hoTroRemote = false trong database");
 }
 
+// ---- ECU rời: đăng ký được mà KHÔNG cần dòng xe
+//
+// Dòng xe chỉ bắt buộc với thiết bị có agent, vì nó nằm trong topic MQTT.
+// Trước đây bắt buộc cho mọi loại nên ECU rời không đăng ký nổi.
+var (maEcuRoi, thanEcuRoi) = await Goi(HttpMethod.Post, "/api/devices",
+    new { code = "ECU-ROI", loai = "ecu", hoTroRemote = false, ten = "Cảm biến áp suất" }, tokenAdmin);
+Check(maEcuRoi == HttpStatusCode.Created, $"ECU rời không cần dòng xe, nhận {maEcuRoi}");
+Check(thanEcuRoi.GetProperty("ten").GetString() == "Cảm biến áp suất",
+      "tên hiển thị phải lưu và trả về");
+
+// Nhưng thiết bị CÓ agent thì vẫn bắt buộc: thiếu dòng xe là prefix thiếu khúc
+// giữa, lệnh rơi vào topic không ai nghe mà Console báo "bench không phản hồi".
+var (maThieuModel, thanThieuModel) = await Goi(HttpMethod.Post, "/api/devices",
+    new { code = "HONG-01", hoTroRemote = true }, tokenAdmin);
+Check(maThieuModel == HttpStatusCode.BadRequest,
+      $"thiết bị chạy từ xa mà thiếu dòng xe phải bị chặn, nhận {maThieuModel}");
+Check(thanThieuModel.GetProperty("error").GetString()!.Contains("topic"),
+      "thông báo phải nói rõ vì sao cần dòng xe");
+
+// Bật agent cho thiết bị không có dòng xe cũng phải chặn, không chỉ lúc tạo.
+var (maBatRemote, _) = await Goi(HttpMethod.Patch, "/api/devices/ECU-ROI",
+    new { hoTroRemote = true }, tokenAdmin);
+Check(maBatRemote == HttpStatusCode.BadRequest,
+      $"bật agent cho thiết bị không có dòng xe phải bị chặn, nhận {maBatRemote}");
+
+// ---- luật quan hệ chứa: ECU là thứ nằm trong, bench và xe là thứ chứa
+await Goi(HttpMethod.Post, "/api/devices", new { code = "BENCH-LUAT", model = "VF8" }, tokenAdmin);
+await Goi(HttpMethod.Post, "/api/devices", new { code = "BENCH-LUAT2", model = "VF8" }, tokenAdmin);
+
+var (maBenchTrongBench, thanBTB) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-LUAT2",
+    new { thuocVe = "BENCH-LUAT" }, tokenAdmin);
+Check(maBenchTrongBench == HttpStatusCode.BadRequest,
+      $"bench KHÔNG nằm trong bench được, nhận {maBenchTrongBench}");
+Check(thanBTB.GetProperty("error").GetString()!.Contains("ECU"),
+      "lý do phải nói rõ chỉ ECU mới nằm trong được");
+
+await Goi(HttpMethod.Post, "/api/devices",
+    new { code = "ECU-CHA", loai = "ecu", hoTroRemote = false }, tokenAdmin);
+var (maEcuTrongEcu, _) = await Goi(HttpMethod.Post, "/api/devices",
+    new { code = "ECU-CON", loai = "ecu", hoTroRemote = false, thuocVe = "ECU-CHA" }, tokenAdmin);
+Check(maEcuTrongEcu == HttpStatusCode.BadRequest,
+      $"ECU KHÔNG chứa được ECU khác, nhận {maEcuTrongEcu}");
+
+// Đây mới là chỗ dễ sót nhất: lắp đúng luật rồi ĐỔI LOẠI sau.
+await Goi(HttpMethod.Post, "/api/devices",
+    new { code = "MHU-LUAT", loai = "ecu", hoTroRemote = false, thuocVe = "BENCH-LUAT" }, tokenAdmin);
+
+var (maDoiConThanhBench, _) = await Goi(HttpMethod.Patch, "/api/devices/MHU-LUAT",
+    new { loai = "bench" }, tokenAdmin);
+Check(maDoiConThanhBench == HttpStatusCode.BadRequest,
+      $"đổi thiết bị con thành bench trong khi nó đang nằm trong bench khác phải bị chặn, nhận {maDoiConThanhBench}");
+
+var (maDoiChaThanhEcu, thanDCTE) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-LUAT",
+    new { loai = "ecu" }, tokenAdmin);
+Check(maDoiChaThanhEcu == HttpStatusCode.BadRequest,
+      $"đổi thiết bị đang chứa thành ECU phải bị chặn, nhận {maDoiChaThanhEcu}");
+Check(thanDCTE.GetProperty("error").GetString()!.Contains("đang chứa"),
+      "lý do phải nói rõ nó đang chứa thiết bị khác");
+
+// Thao con ra thì mới đổi được loại — chứng minh chốt chặn không chặn oan.
+await Goi(HttpMethod.Patch, "/api/devices/MHU-LUAT", new { thuocVe = "" }, tokenAdmin);
+var (maDoiSauKhiThao, _) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-LUAT",
+    new { loai = "ecu" }, tokenAdmin);
+Check(maDoiSauKhiThao == HttpStatusCode.OK,
+      $"thao hết con ra rồi thì đổi loại được, nhận {maDoiSauKhiThao}");
+
+// ---- API phải trả danh sách thiết bị con, không chỉ chiều con -> cha
+await Goi(HttpMethod.Post, "/api/devices", new { code = "BENCH-CAY", model = "VF8" }, tokenAdmin);
+await Goi(HttpMethod.Post, "/api/devices",
+    new { code = "MHU-CAY", loai = "ecu", hoTroRemote = false, thuocVe = "BENCH-CAY", ten = "MHU chính" }, tokenAdmin);
+
+var (_, thanCay) = await Goi(HttpMethod.Get, "/api/devices/BENCH-CAY", token: tokenAdmin);
+var con = thanCay.GetProperty("chuaNhung");
+Check(con.GetArrayLength() == 1 && con[0].GetProperty("code").GetString() == "MHU-CAY",
+      "xem chi tiết phải trả danh sách thiết bị con");
+Check(con[0].GetProperty("ten").GetString() == "MHU chính"
+      && con[0].GetProperty("loai").GetString() == "ecu",
+      "thiết bị con phải kèm tên hiển thị và loại");
+
 // ---- xoá thiết bị CHỨA thì con phải đứng riêng, không xoá theo và không chặn
 //
 // Khoá ngoại tự tham chiếu dùng ClientSetNull, nghĩa là EF phải tự gỡ liên kết.

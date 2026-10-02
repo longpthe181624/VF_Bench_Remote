@@ -41,4 +41,34 @@ public static class MaLoaiThietBi
 
     /// <summary>Danh sách hợp lệ, dùng trong thông báo lỗi để người dùng biết gõ gì.</summary>
     public const string DanhSachHopLe = "bench, ecu, vehicle";
+
+    /// <summary>
+    /// Loại này nằm bên trong loại kia được không. Trả lý do từ chối, hoặc
+    /// <c>null</c> nếu hợp lệ.
+    ///
+    /// Luật: **ECU là thứ nằm trong; bench và xe là thứ chứa.** Một bench nằm
+    /// trong bench khác, hay một ECU chứa thiết bị, đều vô nghĩa ngoài đời.
+    ///
+    /// Trước đây chỉ chặn vòng (A trong B, B trong A) nên lắp kiểu gì cũng được
+    /// miễn không thành vòng. Dữ liệu sai kiểu đó trông vẫn hợp lệ, và lúc dựng
+    /// cây thiết bị mới lòi ra.
+    /// </summary>
+    public static string? LyDoKhongChuaDuoc(LoaiThietBi loaiCha, LoaiThietBi loaiCon)
+    {
+        if (loaiCon != LoaiThietBi.Ecu)
+            return $"Chỉ ECU mới nằm trong thiết bị khác được. {Ten(loaiCon)} thì không.";
+
+        if (loaiCha == LoaiThietBi.Ecu)
+            return "ECU không chứa được thiết bị khác. Chỉ bench và xe mới chứa.";
+
+        return null;
+    }
+
+    /// <summary>Tên tiếng Việt để ghép vào câu thông báo.</summary>
+    public static string Ten(LoaiThietBi loai) => loai switch
+    {
+        LoaiThietBi.Ecu => "ECU",
+        LoaiThietBi.Vehicle => "Xe",
+        _ => "Bench",
+    };
 }

@@ -1032,6 +1032,101 @@ chụp lại cấu hình này; migration nào sinh ra trước lúc vá đều k
 cũ, nên để nguyên thì mỗi migration mới lại nhân bản thêm một lần. Migration
 `BatBuocTotp` sinh ngày 02/10 cũng dính và đã sửa.
 
+## Bốn chỗ lệch so với scope thiết bị — sửa 02/10
+
+Từ một bản rà soát đối chiếu scope. Bốn ý đều kiểm lại trên code và **đều đúng**.
+
+### 1. Đăng ký thiết bị bắt buộc dòng xe cho mọi loại
+
+`Create` chặn khi `Model` rỗng, không nhìn `Loai`, nên **ECU rời không đăng ký
+nổi**.
+
+Nay dòng xe **chỉ bắt buộc khi `HoTroRemote` bật**. Lý do không phải là loại
+thiết bị mà là kỹ thuật: dòng xe nằm trong topic MQTT
+(`bench/{model}/{mã}/...`). Thiết bị không có agent thì không ai publish gì,
+nên không cần.
+
+Kèm hai chốt chặn:
+
+- **Bật `HoTroRemote` cho thiết bị không có dòng xe thì từ chối**, cả lúc tạo
+  lẫn lúc sửa. Thiếu chỗ này là prefix thiếu khúc giữa, lệnh rơi vào topic
+  không ai nghe, Console báo "bench không phản hồi" — sai nguyên nhân hoàn toàn.
+- `TopicPrefix` để **rỗng** khi không có dòng xe, chứ không ghép một prefix
+  thiếu khúc.
+
+**Bẫy đã dính khi sửa:** đổi luật trong controller là chưa đủ. `Model` khai
+kiểu `string` không nullable trong `CreateBenchRequest` nên **ASP.NET tự coi là
+bắt buộc và trả 400 trước khi controller chạy**. Phải đổi thành `string?`.
+Phép kiểm bắt được ngay, nhưng đọc code thì không thấy.
+
+### 2. Chưa có tên hiển thị
+
+Thêm `Bench.Ten`, **không bắt buộc** — mọi thiết bị đã đăng ký từ trước đều
+chưa có tên, bắt buộc thì chúng thành dữ liệu sai. Để trống thì giao diện dùng
+mã.
+
+### 3. API không trả danh sách thiết bị con
+
+`ChuaNhung` có trong entity nhưng chỉ dùng nội bộ lúc xoá; `BenchDto` chỉ có
+chiều con → cha. Nay có `chuaNhung` trong DTO, kèm `Include` ở cả danh sách lẫn
+chi tiết.
+
+Dùng `ThietBiConDto` rút gọn (mã, tên, loại) chứ **không lồng `BenchDto`**: con
+của con lại kéo theo con của nó, một cây sâu là phản hồi phình không kiểm soát.
+
+### 4. Quan hệ chứa không giới hạn loại
+
+Trước đó chỉ chặn vòng, nên **lắp kiểu gì cũng được miễn không thành vòng** —
+bench nằm trong bench, ECU chứa ECU đều lọt.
+
+Luật nay nằm ở Core (`MaLoaiThietBi.LyDoKhongChuaDuoc`) nên kiểm thử được mà
+không cần database: **ECU là thứ nằm trong; bench và xe là thứ chứa.**
+
+**Chỗ dễ sót nhất không phải lúc gán, mà là lúc ĐỔI LOẠI sau đó:**
+
+```
+Tạo ECU-01 trong BENCH-01            hợp lệ
+PATCH ECU-01 { loai: "bench" }       → bench nằm trong bench
+PATCH BENCH-01 { loai: "ecu" }       → ECU đang chứa thiết bị khác
+```
+
+Nên `Update` nay **dựng trạng thái sau rồi mới kiểm cả cụm**, chưa gán gì vào
+entity cho tới khi qua hết. Kiểm từng trường một là thủng: mỗi trường nhìn
+riêng đều hợp lệ, chỉ tổ hợp mới sai.
+
+### Hai chỗ bản rà soát nói chưa đúng
+
+- **"Trường `Workshop` có thể lưu phòng"** — thật ra đã có **cả hai** trường
+  riêng `Workshop` và `Tang` từ 30/09. Không phải thiếu dữ liệu, chỉ là nhãn:
+  giao diện gọi "Xưởng" còn scope gọi "Phòng".
+- **"ZIP chỉ chứa Excel bị từ chối"** — đây là **cố ý**, không phải sót. Gói
+  `testcase` bung thẳng vào `AutoTests/` trên máy bench, mà verdict Qauto vốn
+  không phản ánh kết quả thật, nên rải một gói không có bài vào đó thì **không
+  có gì báo động**. Trước khi nới luật phải trả lời: file Excel đó là gì —
+  đặc tả cho người đọc (thuộc `du-lieu-chung`), đầu vào để sinh `.tc` (cần một
+  `Loai` gói mới), hay thứ Qauto đọc được thật.
+
+### Còn một chỗ chưa ai soi
+
+`Code` duy nhất **trên toàn hệ thống**, không phải trong phạm vi bench cha. Nếu
+scope muốn mã ECU chỉ cần duy nhất trong bench chứa nó thì đây là chỗ lệch.
+
+### Đã kiểm chứng
+
+- SmokeTest **210/210**, Api.Tests **184/184** (tăng từ 199 và 170).
+- Phép kiểm tầng Api phủ: ECU rời đăng ký được không cần dòng xe; thiết bị có
+  agent mà thiếu dòng xe bị chặn cả lúc tạo lẫn lúc bật; bench trong bench và
+  ECU trong ECU đều bị chặn; **đổi loại sau khi đã gán** bị chặn ở cả hai
+  chiều; thao con ra rồi thì đổi loại được (chứng minh không chặn oan); API trả
+  đúng danh sách con kèm tên và loại.
+- Giao diện: chạy thật trong trình duyệt — tên hiển thị ra dòng phụ, dòng phụ
+  có "chứa MHU-01", ô Dòng xe không còn `required`.
+
+### Chưa kiểm chứng
+
+- Chưa chạy trên SQL Server thật. Migration `TenThietBi` chỉ thêm **một cột
+  nullable**, không có bẫy `defaultValue`.
+
 ## Bắt buộc xác thực hai lớp từ lần đăng nhập đầu — làm 02/10
 
 Lỗi người dùng báo: **đăng nhập lần đầu không hiện mã QR để quét.** Hai lớp
@@ -1653,7 +1748,16 @@ Hai chi tiết dễ làm sai, đã xử lý:
 5. Định dạng và tần suất **file log CAN**. **Với Qauto đã trả lời** — xem
    `CAN1.txt` và `.blf` ở mục khảo sát 23/09. Còn thiếu: VDSA ghi ra sao.
 6. Tài khoản xử lý lỗi `HTTP 401` để máy bench chạy không người trực.
-7. Đến giờ hẹn mà thiết bị đang bận thì bỏ qua, xếp hàng chờ, hay báo lỗi.
+7. ~~Đến giờ hẹn mà thiết bị đang bận thì bỏ qua, xếp hàng chờ, hay báo lỗi~~
+   — **ĐÃ TRẢ LỜI 02/10: báo cáo lại cho người đặt request.**
+
+   Chốt điều quan trọng nhất: **không bỏ qua im lặng.** Người đặt phải biết
+   lượt của mình không chạy được và vì sao — đúng kiểu hỏng im lặng mà dự án
+   này đã dính nhiều lần.
+
+   Còn hai chi tiết chưa chốt, hỏi khi làm: sau khi báo thì request **nằm lại
+   hàng đợi để thử lại**, hay **đóng luôn** để người ta tự đặt lại; và nếu nằm
+   lại thì thử lại sau bao lâu, bao nhiêu lần.
 
 Câu 1 đến 4 phải hỏi đội phát triển VDSA/Qauto. Câu 5 chỉ cần một lần chạy thật
 trên bench có adapter CAN.

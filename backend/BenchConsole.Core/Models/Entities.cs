@@ -87,6 +87,18 @@ public class Bench
     /// <summary>Robot di chuyển tới kiểm thử được không. Để dành cho sau này.</summary>
     public bool HoTroRobot { get; set; }
 
+    /// <summary>
+    /// Tên hiển thị do người dùng đặt, khác <see cref="Code"/>.
+    ///
+    /// Để trống thì giao diện hiện mã. Không bắt buộc vì mọi thiết bị đã đăng
+    /// ký từ trước đều chưa có tên, mà bắt buộc thì chúng thành dữ liệu sai.
+    /// </summary>
+    public string? Ten { get; set; }
+
+    /// <summary>
+    /// Dòng xe. **Chỉ bắt buộc khi <see cref="HoTroRemote"/> bật**, vì nó nằm
+    /// trong topic MQTT. ECU rời không chạy từ xa thì không gắn dòng xe nào.
+    /// </summary>
     public string Model { get; set; } = "";          // vf6 / vf9
     public string? Workshop { get; set; }            // phòng, ví dụ "Xưởng 2"
     public string? Tang { get; set; }                // tầng

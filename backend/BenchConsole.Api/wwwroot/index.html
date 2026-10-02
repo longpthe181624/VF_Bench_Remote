@@ -175,7 +175,10 @@
 
     <form class="addbench" id="add-form">
       <div class="field"><label>Mã thiết bị *</label><input name="code" required placeholder="HIL-A05"></div>
-      <div class="field"><label>Dòng xe *</label><input name="model" required placeholder="vf6"></div>
+      <div class="field"><label>Tên</label><input name="ten" placeholder="Bench tầng 2" style="width:160px"></div>
+      <!-- Dòng xe KHÔNG còn bắt buộc: ECU rời không gắn dòng xe nào. Máy chủ
+           vẫn đòi khi thiết bị có agent, vì dòng xe nằm trong topic MQTT. -->
+      <div class="field"><label>Dòng xe</label><input name="model" placeholder="vf6"></div>
       <div class="field"><label>Loại</label>
         <select name="loai">
           <option value="bench">Bench</option>
@@ -538,7 +541,11 @@ function benchRow(b){
   const stateClass = "st-" + (b.state || "unknown");
   const stateLabel = STATE_LABEL[b.state] || b.state;
   const sub = [
+    b.ten,
     b.thuocVeCode ? "trong " + b.thuocVeCode : null,
+    // Chiều ngược: thiết bị này đang chứa những gì.
+    (b.chuaNhung && b.chuaNhung.length)
+      ? "chứa " + b.chuaNhung.map(c => c.code).join(", ") : null,
     b.workshop, b.tang, b.rack,
     b.firmware ? "FW " + b.firmware : null,
     (b.duAns && b.duAns.length) ? b.duAns.join(", ") : null,

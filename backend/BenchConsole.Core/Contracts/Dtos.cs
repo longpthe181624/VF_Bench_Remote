@@ -35,7 +35,16 @@ public record BenchDto(
     bool HoTroRemote = true,
     bool HoTroRobot = false,
     string? Tang = null,
-    List<string>? DuAns = null)
+    List<string>? DuAns = null,
+
+    /// <summary>Tên hiển thị. Để trống thì giao diện dùng <c>Code</c>.</summary>
+    string? Ten = null,
+
+    /// <summary>
+    /// Thiết bị đang nằm bên trong thiết bị này — chiều ngược của
+    /// <c>ThuocVeCode</c>. Chỉ có khi bên gọi Include; không thì mảng rỗng.
+    /// </summary>
+    List<ThietBiConDto>? ChuaNhung = null)
 {
     public static BenchDto From(Bench b)
     {
@@ -58,8 +67,21 @@ public record BenchDto(
             b.DuAns.Where(x => x.DuAn != null)
                    .Select(x => x.DuAn!.Ma)
                    .OrderBy(x => x)
-                   .ToList());
+                   .ToList(),
+            b.Ten,
+            b.ChuaNhung.OrderBy(c => c.Code).Select(ThietBiConDto.From).ToList());
     }
+}
+
+/// <summary>
+/// Thiết bị con, rút gọn. Cố ý KHÔNG dùng lại <see cref="BenchDto"/>: con của
+/// con lại kéo theo con của nó nữa, và một cây sâu là một phản hồi phình ra
+/// không kiểm soát được.
+/// </summary>
+public record ThietBiConDto(string Code, string? Ten, string Loai)
+{
+    public static ThietBiConDto From(Bench b) =>
+        new(b.Code, b.Ten, MaLoaiThietBi.Ghi(b.Loai));
 }
 
 public record RunDto(
@@ -97,7 +119,15 @@ public record TelemetrySeriesDto(string Channel, string? Unit, List<TelemetryPoi
 /// <summary>Đăng ký một bench mới. TopicPrefix suy ra từ Model + Code.</summary>
 public record CreateBenchRequest(
     string Code,
-    string Model,
+
+    /// <summary>
+    /// Dòng xe. **Nullable có chủ ý**: ECU rời không gắn dòng xe nào.
+    ///
+    /// Để kiểu `string` không nullable thì ASP.NET tự coi là bắt buộc và trả
+    /// 400 trước khi controller chạy — luật "chỉ bắt buộc khi có agent" trong
+    /// controller sẽ không bao giờ tới lượt.
+    /// </summary>
+    string? Model,
     string? Workshop,
     string? Rack,
     string? Firmware,
@@ -115,7 +145,9 @@ public record CreateBenchRequest(
     bool? HoTroRobot = null,
     string? Tang = null,
     /// <summary>Ma cac du an dung thiet bi nay.</summary>
-    List<string>? DuAns = null);
+    List<string>? DuAns = null,
+    /// <summary>Tên hiển thị. Để trống thì giao diện dùng mã.</summary>
+    string? Ten = null);
 
 public record UpdateBenchRequest(
     /// <summary>Đổi được: thay MHU trong bench là đổi dòng xe, id giữ nguyên.</summary>
@@ -134,7 +166,8 @@ public record UpdateBenchRequest(
     bool? HoTroRobot = null,
     string? Tang = null,
     /// <summary>Gui len la THAY CA DANH SACH, khong phai them vao. Null = khong doi.</summary>
-    List<string>? DuAns = null);
+    List<string>? DuAns = null,
+    string? Ten = null);
 
 /// <summary>Một file trong kho dữ liệu dùng chung.</summary>
 public record TepDuLieuChungDto(

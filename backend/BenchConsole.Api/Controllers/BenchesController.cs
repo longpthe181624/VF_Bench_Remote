@@ -41,6 +41,7 @@ public class BenchesController(
         // do khong nhan lai ket qua cua .Where() ben duoi.
         IQueryable<Bench> query = db.Benches.AsNoTracking()
             .Include(b => b.ThuocVe)
+            .Include(b => b.ChuaNhung)
             .Include(b => b.DuAns).ThenInclude(x => x.DuAn);
 
         if (!string.IsNullOrWhiteSpace(loai))
@@ -94,6 +95,7 @@ public class BenchesController(
     {
         var bench = await db.Benches.AsNoTracking()
             .Include(b => b.ThuocVe)
+            .Include(b => b.ChuaNhung)
             .Include(b => b.DuAns).ThenInclude(x => x.DuAn)
             .FirstOrDefaultAsync(b => b.Code == code, ct);
         return bench is null ? NotFound(new { error = $"Không có thiết bị {code}" }) : BenchDto.From(bench);
@@ -103,13 +105,13 @@ public class BenchesController(
     [HasPermission(MaQuyen.BenchCreate)]
     public async Task<ActionResult<BenchDto>> Create(CreateBenchRequest req, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(req.Code) || string.IsNullOrWhiteSpace(req.Model))
-            return BadRequest(new { error = "Thiếu mã thiết bị hoặc dòng xe" });
+        if (string.IsNullOrWhiteSpace(req.Code))
+            return BadRequest(new { error = "Thiếu mã thiết bị" });
 
         var code = req.Code.Trim().ToUpperInvariant();
         // Giữ nguyên tên người gõ ("VF8New ME") để hiển thị; topic dùng mã đã
         // chuẩn hoá. Xem MaModel.
-        var model = req.Model.Trim();
+        var model = req.Model?.Trim() ?? "";
 
         if (await db.Benches.AnyAsync(b => b.Code == code, ct))
             return Conflict(new { error = $"Thiết bị {code} đã tồn tại" });
@@ -123,12 +125,22 @@ public class BenchesController(
             loai = doc.Value;
         }
 
+        // Dòng xe chỉ bắt buộc với thiết bị có agent, vì nó nằm trong topic
+        // MQTT. ECU rời thì không gắn dòng xe nào — đó là lý do bỏ ràng buộc cũ.
+        var hoTroRemote = req.HoTroRemote ?? true;
+        var loiModel = LoiThieuModel(hoTroRemote, model);
+        if (loiModel is not null) return BadRequest(new { error = loiModel });
+
         int? thuocVeId = null;
         if (!string.IsNullOrWhiteSpace(req.ThuocVe))
         {
             var cha = await db.Benches.FirstOrDefaultAsync(b => b.Code == req.ThuocVe.Trim().ToUpperInvariant(), ct);
             if (cha is null)
                 return BadRequest(new { error = $"Khong co thiet bi {req.ThuocVe} de gan vao" });
+
+            var loiLoai = MaLoaiThietBi.LyDoKhongChuaDuoc(cha.Loai, loai);
+            if (loiLoai is not null) return BadRequest(new { error = loiLoai });
+
             thuocVeId = cha.Id;
         }
 
@@ -142,9 +154,10 @@ public class BenchesController(
             Tang = req.Tang,
             // Mac dinh CO agent: da dang ky bench thi gan nhu luon la de chay
             // tu xa. Thiet bi don khong agent la ngoai le, phai khai ro.
-            HoTroRemote = req.HoTroRemote ?? true,
+            HoTroRemote = hoTroRemote,
             HoTroRobot = req.HoTroRobot ?? false,
             Code = code,
+            Ten = req.Ten?.Trim(),
             Model = model,
             Workshop = req.Workshop,
             Rack = req.Rack,
@@ -154,7 +167,11 @@ public class BenchesController(
             PrimaryUnit = req.PrimaryUnit,
             // Phải khớp prefix agent dùng để publish. Dựng qua MaModel để
             // Console và agent không bao giờ ghép lệch nhau.
-            TopicPrefix = MaModel.TopicPrefix(model, code),
+            //
+            // Không có dòng xe thì để rỗng chứ không ghép một prefix thiếu khúc
+            // giữa. Thiết bị đó chắc chắn không có agent (đã chặn ở trên), nên
+            // không ai publish vào đây cả.
+            TopicPrefix = model.Length == 0 ? "" : MaModel.TopicPrefix(model, code),
             State = BenchState.Unknown,
         };
 
@@ -173,9 +190,77 @@ public class BenchesController(
     {
         var bench = await db.Benches
             .Include(b => b.ThuocVe)
+            .Include(b => b.ChuaNhung)
             .Include(b => b.DuAns).ThenInclude(x => x.DuAn)
             .FirstOrDefaultAsync(b => b.Code == code, ct);
         if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
+
+        // ---- dựng TRẠNG THÁI SAU rồi mới kiểm, chưa gán gì vào bench
+        //
+        // Kiểm từng trường một là thủng: đổi `loai` thành ecu trong khi thiết bị
+        // đang chứa ECU khác thì mỗi trường nhìn riêng đều hợp lệ, chỉ tổ hợp
+        // mới sai. Phải nhìn cả trạng thái cuối.
+        var loaiMoi = bench.Loai;
+        if (req.Loai is not null)
+        {
+            var doc = MaLoaiThietBi.Doc(req.Loai);
+            if (doc is null)
+                return BadRequest(new { error = $"Loai thiet bi khong hop le: {req.Loai}. Chi co {MaLoaiThietBi.DanhSachHopLe}." });
+            loaiMoi = doc.Value;
+        }
+
+        var modelMoi = req.Model?.Trim() ?? bench.Model;
+        var remoteMoi = req.HoTroRemote ?? bench.HoTroRemote;
+
+        Bench? chaMoi = bench.ThuocVe;
+        var doiCha = req.ThuocVe is not null;
+        if (doiCha)
+        {
+            // Chuoi rong = thao thiet bi ra, khong con nam trong gi ca. Phai
+            // phan biet voi null (khong gui truong nay = khong doi), nen dung
+            // `is not null` chu khong dung IsNullOrWhiteSpace o vong ngoai.
+            if (req.ThuocVe!.Trim().Length == 0)
+            {
+                chaMoi = null;
+            }
+            else
+            {
+                var maCha = req.ThuocVe.Trim().ToUpperInvariant();
+                chaMoi = await db.Benches.FirstOrDefaultAsync(b => b.Code == maCha, ct);
+                if (chaMoi is null)
+                    return BadRequest(new { error = $"Khong co thiet bi {req.ThuocVe} de gan vao" });
+
+                var vong = await CoVongChuaAsync(bench.Id, chaMoi.Id, ct);
+                if (vong is not null) return BadRequest(new { error = vong });
+            }
+        }
+
+        // ---- kiểm trạng thái cuối
+        var loiModelSua = LoiThieuModel(remoteMoi, modelMoi);
+        if (loiModelSua is not null) return BadRequest(new { error = loiModelSua });
+
+        if (chaMoi is not null)
+        {
+            var loiLoai = MaLoaiThietBi.LyDoKhongChuaDuoc(chaMoi.Loai, loaiMoi);
+            if (loiLoai is not null) return BadRequest(new { error = loiLoai });
+        }
+
+        // Đổi thành ECU trong khi đang chứa thiết bị khác thì phải chặn, nếu
+        // không sẽ có một ECU chứa ECU mà chẳng ai kiểm.
+        if (bench.ChuaNhung.Count > 0)
+        {
+            var loiChua = MaLoaiThietBi.LyDoKhongChuaDuoc(loaiMoi, LoaiThietBi.Ecu);
+            if (loiChua is not null)
+                return BadRequest(new
+                {
+                    error = $"{code} đang chứa {bench.ChuaNhung.Count} thiết bị. {loiChua}",
+                });
+        }
+
+        // ---- tới đây mới gán
+        bench.Loai = loaiMoi;
+        bench.HoTroRemote = remoteMoi;
+        if (doiCha) bench.ThuocVeId = chaMoi?.Id;
 
         // Code thì KHÔNG cho đổi — nó là danh tính bench, đổi là mồ côi toàn bộ
         // lịch sử chạy.
@@ -183,11 +268,13 @@ public class BenchesController(
         // Model thì CHO đổi: thay MHU trong bench là đổi dòng xe, mà bench vẫn
         // giữ nguyên id. Đổi model phải dựng lại TopicPrefix theo, nếu không
         // chiều gửi lệnh xuống sẽ trỏ vào topic cũ.
-        if (req.Model is not null && req.Model.Trim() != bench.Model)
+        if (modelMoi != bench.Model)
         {
-            bench.Model = req.Model.Trim();
-            bench.TopicPrefix = MaModel.TopicPrefix(bench.Model, bench.Code);
+            bench.Model = modelMoi;
+            bench.TopicPrefix = modelMoi.Length == 0
+                ? "" : MaModel.TopicPrefix(modelMoi, bench.Code);
         }
+        if (req.Ten is not null) bench.Ten = req.Ten.Trim().Length == 0 ? null : req.Ten.Trim();
         if (req.Workshop is not null) bench.Workshop = req.Workshop;
         if (req.Rack is not null) bench.Rack = req.Rack;
         if (req.Firmware is not null) bench.Firmware = req.Firmware;
@@ -195,39 +282,7 @@ public class BenchesController(
         if (req.PrimaryChannel is not null) bench.PrimaryChannel = req.PrimaryChannel;
         if (req.PrimaryUnit is not null) bench.PrimaryUnit = req.PrimaryUnit;
         if (req.Tang is not null) bench.Tang = req.Tang;
-        if (req.HoTroRemote is not null) bench.HoTroRemote = req.HoTroRemote.Value;
         if (req.HoTroRobot is not null) bench.HoTroRobot = req.HoTroRobot.Value;
-
-        if (req.Loai is not null)
-        {
-            var doc = MaLoaiThietBi.Doc(req.Loai);
-            if (doc is null)
-                return BadRequest(new { error = $"Loai thiet bi khong hop le: {req.Loai}. Chi co {MaLoaiThietBi.DanhSachHopLe}." });
-            bench.Loai = doc.Value;
-        }
-
-        if (req.ThuocVe is not null)
-        {
-            // Chuoi rong = thao thiet bi ra, khong con nam trong gi ca. Phai
-            // phan biet voi null (khong gui truong nay = khong doi), nen dung
-            // `is not null` chu khong dung IsNullOrWhiteSpace o vong ngoai.
-            if (req.ThuocVe.Trim().Length == 0)
-            {
-                bench.ThuocVeId = null;
-            }
-            else
-            {
-                var maCha = req.ThuocVe.Trim().ToUpperInvariant();
-                var cha = await db.Benches.FirstOrDefaultAsync(b => b.Code == maCha, ct);
-                if (cha is null)
-                    return BadRequest(new { error = $"Khong co thiet bi {req.ThuocVe} de gan vao" });
-
-                var vong = await CoVongChuaAsync(bench.Id, cha.Id, ct);
-                if (vong is not null) return BadRequest(new { error = vong });
-
-                bench.ThuocVeId = cha.Id;
-            }
-        }
 
         if (req.DuAns is not null)
         {
@@ -276,6 +331,20 @@ public class BenchesController(
     }
 
     // ------------------------------------------------------------ dung chung
+
+    /// <summary>
+    /// Dòng xe chỉ bắt buộc khi thiết bị có agent, vì nó nằm trong topic MQTT
+    /// (`bench/{model}/{mã}/...`). ECU rời thì không gắn dòng xe nào.
+    ///
+    /// Thiếu chốt này thì bật `HoTroRemote` cho một thiết bị không có dòng xe
+    /// sẽ dựng ra prefix thiếu khúc giữa, lệnh rơi vào topic không ai nghe, và
+    /// Console báo "bench không phản hồi" — sai nguyên nhân hoàn toàn.
+    /// </summary>
+    private static string? LoiThieuModel(bool hoTroRemote, string model)
+        => hoTroRemote && string.IsNullOrWhiteSpace(model)
+            ? "Thiết bị chạy từ xa phải khai dòng xe, vì dòng xe nằm trong topic MQTT. "
+              + "Thiết bị không có agent thì bỏ trống được."
+            : null;
 
     /// <summary>
     /// Doi ma du an ra ban ghi. KHONG tu tao du an moi: go sai mot ky tu la

@@ -523,6 +523,46 @@ Check(dtoCon.ThuocVeCode == "BENCH-01" && dtoCon.ThuocVeId == 1,
 Check(!dtoCon.HoTroRemote && dtoCon.Tang == "T2", "cờ remote và tầng phải đi ra DTO");
 Check(dtoCon.DuAns is not null && dtoCon.DuAns.SequenceEqual(new[] { "VF8-ME", "VF8-VN" }),
       "danh sách dự án phải xếp theo mã để giao diện không nhảy thứ tự mỗi lần tải");
+Check(dtoCon.ChuaNhung is not null && dtoCon.ChuaNhung.Count == 0,
+      "không nạp thiết bị con thì trả mảng rỗng, không trả null");
+
+var chaCoCon = new Bench
+{
+    Id = 1, Code = "BENCH-01", Model = "VF8", Ten = "Bench tầng 2",
+    ChuaNhung = [new Bench { Code = "MHU-01", Ten = "MHU VF8", Loai = LoaiThietBi.Ecu }],
+};
+var dtoCha = BenchDto.From(chaCoCon);
+Check(dtoCha.Ten == "Bench tầng 2", "tên hiển thị phải đi ra DTO");
+Check(dtoCha.ChuaNhung is not null && dtoCha.ChuaNhung.Count == 1
+      && dtoCha.ChuaNhung[0].Code == "MHU-01" && dtoCha.ChuaNhung[0].Loai == "ecu",
+      "phải trả danh sách thiết bị con — chiều ngược của ThuocVeCode");
+
+Console.WriteLine();
+Console.WriteLine("── Luật quan hệ chứa thiết bị");
+
+// ECU là thứ nằm trong; bench và xe là thứ chứa. Trước đây chỉ chặn vòng, nên
+// lắp kiểu gì cũng được miễn không thành vòng.
+Check(MaLoaiThietBi.LyDoKhongChuaDuoc(LoaiThietBi.Bench, LoaiThietBi.Ecu) is null,
+      "ECU nằm trong bench thì được");
+Check(MaLoaiThietBi.LyDoKhongChuaDuoc(LoaiThietBi.Vehicle, LoaiThietBi.Ecu) is null,
+      "ECU nằm trong xe thì được");
+
+Check(MaLoaiThietBi.LyDoKhongChuaDuoc(LoaiThietBi.Bench, LoaiThietBi.Bench) is not null,
+      "bench KHÔNG nằm trong bench được");
+Check(MaLoaiThietBi.LyDoKhongChuaDuoc(LoaiThietBi.Bench, LoaiThietBi.Vehicle) is not null,
+      "xe KHÔNG nằm trong bench được");
+Check(MaLoaiThietBi.LyDoKhongChuaDuoc(LoaiThietBi.Ecu, LoaiThietBi.Ecu) is not null,
+      "ECU KHÔNG chứa được ECU khác");
+Check(MaLoaiThietBi.LyDoKhongChuaDuoc(LoaiThietBi.Vehicle, LoaiThietBi.Bench) is not null,
+      "bench KHÔNG nằm trong xe được");
+
+// Thông báo phải nói rõ loại nào sai, không thì người dùng đoán mò.
+Check(MaLoaiThietBi.LyDoKhongChuaDuoc(LoaiThietBi.Bench, LoaiThietBi.Vehicle)!.Contains("Xe"),
+      "lý do từ chối phải nêu tên loại bị từ chối");
+Check(MaLoaiThietBi.Ten(LoaiThietBi.Ecu) == "ECU"
+      && MaLoaiThietBi.Ten(LoaiThietBi.Vehicle) == "Xe"
+      && MaLoaiThietBi.Ten(LoaiThietBi.Bench) == "Bench",
+      "tên tiếng Việt của ba loại");
 
 Console.WriteLine();
 Console.WriteLine("── TOTP đối chiếu vector RFC 6238");
