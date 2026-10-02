@@ -114,6 +114,9 @@ builder.Services.AddSingleton<IAuthorizationHandler, PermissionHandler>();
 
 // ---------------------------------------------------------------- web
 builder.Services.AddControllers();
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+    o.MultipartBodyLengthLimit = KiemTraTep.TranYeuCau);
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = KiemTraTep.TranYeuCau);
 builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>
@@ -196,8 +199,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Giao diện tạm: trang tĩnh trong wwwroot gọi thẳng API cùng origin, khỏi cần
-// cấu hình CORS hay chạy thêm dev server riêng. Xoá khi có giao diện web thật.
+// React dùng cùng origin với API. Giữ index.html cũ để kiểm tra tương thích.
+var reactDaBuild = File.Exists(Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "app", "index.html"));
+app.Use(async (context, next) =>
+{
+    if (reactDaBuild && context.Request.Path == "/")
+    {
+        context.Response.Redirect("/app/");
+        return;
+    }
+    await next();
+});
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -208,6 +220,8 @@ app.UseCors(CorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+if (reactDaBuild)
+    app.MapFallbackToFile("/app/{*path:nonfile}", "app/index.html");
 app.MapHub<BenchHub>("/hub/benches");
 
 // Để dựng docker-compose healthcheck và để biết backend còn sống mà không cần

@@ -303,6 +303,9 @@ public class GoiTestCase
     /// </summary>
     public string Loai { get; set; } = Messaging.LoaiGoi.TestCase;
 
+    /// <summary>auto (.tc/.mtc) hoặc manual (Excel); config luôn dùng auto.</summary>
+    public string KieuTest { get; set; } = "auto";
+
     /// <summary>Tên thư mục sẽ bung ra trên máy bench.</summary>
     public string Ten { get; set; } = "";
 

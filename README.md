@@ -2,8 +2,9 @@
 
 Công cụ nội bộ để chạy test bench ô tô từ xa qua MQTT.
 
-Hiện có **bench giả lập** và **backend** — đủ để chạy toàn bộ luồng trên một
-máy mà chưa cần cắm vào bench thật.
+Hiện có **frontend React**, **backend** và **bench giả lập**.
+FE kết nối API thật, với đăng nhập Microsoft Authenticator và lưu trữ file.
+Hướng dẫn chạy/build và phạm vi từng tính năng: [docs/frontend.md](docs/frontend.md).
 
 ## Bắt đầu
 
@@ -38,9 +39,9 @@ sẵn sàng rồi mới lên — SQL mất tới ~90 giây, đừng tưởng nó
 
 Xem log: `docker compose logs -f api`
 
-Backend **cố ý chỉ mở cho localhost** (`127.0.0.1:5000`), vì hiện chưa có xác
-thực — `issuedBy` là tham số tự khai. Muốn máy khác gọi được thì phải làm xác
-thực trước, rồi đổi dòng `ports` của service `api` trong `docker-compose.yml`.
+Backend mặc định mở ở `127.0.0.1:5000`, đã có JWT và phân quyền.
+Sau khi build bằng compose, mở `http://127.0.0.1:5000/app/` để dùng FE React.
+Đặt `API_BIND` trong `.env` nếu cần bind vào địa chỉ khác.
 
 ## Thử xem nó chạy đúng chưa
 

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '../backend/BenchConsole.Api/wwwroot/index.html'), 'utf8');
-const source = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const source = html.match(/<script>([\s\S]*?)<\/script>/)[1] + '\n' + fs.readFileSync(path.join(__dirname, '../backend/BenchConsole.Api/wwwroot/file-storage.js'), 'utf8');
 
 class Element {
   constructor(tag = 'div') {

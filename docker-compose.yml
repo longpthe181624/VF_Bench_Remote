@@ -36,7 +36,8 @@ services:
 
   api:
     build:
-      context: ./backend
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: bench-api
     # Chờ SQL thật sự nhận kết nối rồi mới bật backend. Không có cái này thì
     # backend lên trước, EnsureCreatedAsync() gọi vào một SQL chưa sẵn sàng và

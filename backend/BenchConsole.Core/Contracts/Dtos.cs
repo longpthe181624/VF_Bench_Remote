@@ -240,11 +240,12 @@ public record GoiTestCaseDto(
     long KichThuoc,
     int SoTestCase,
     string? NguoiTaiLen,
-    DateTimeOffset TaiLenLuc)
+    DateTimeOffset TaiLenLuc,
+    string KieuTest)
 {
     public static GoiTestCaseDto From(GoiTestCase g) => new(
         g.Id, g.Loai, g.Ten, g.TenFileGoc, g.Sha256, g.KichThuoc, g.SoTestCase,
-        g.NguoiTaiLen, g.TaiLenLuc);
+        g.NguoiTaiLen, g.TaiLenLuc, g.KieuTest);
 }
 
 /// <summary>

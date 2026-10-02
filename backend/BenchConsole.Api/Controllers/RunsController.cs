@@ -112,12 +112,15 @@ public class RunsController(
     // chính Qauto lo. Đừng gắn [Authorize] vào đây, gắn là gãy luồng kết quả.
     [AllowAnonymous]
     [HttpPost("{cmdId}/report")]
-    [RequestSizeLimit(KhoBaoCao.KichThuocToiDa)]
+    [RequestSizeLimit(KiemTraTep.TranYeuCau)]
+    [RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranYeuCau)]
     public async Task<ActionResult<List<BaoCaoChayDto>>> NhanBaoCao(
         string cmdId, [FromForm] NopBaoCaoForm form, CancellationToken ct)
     {
-        if (form.File is null || form.File.Count == 0)
-            return BadRequest(new { error = "Không có file nào." });
+        if (KiemTraTep.Loi(form.File) is { } loi) return BadRequest(new { error = loi });
+        if (cmdId.Length > 64 || form.BenchCode?.Length > 64 || form.TestCase?.Length > 256)
+            return BadRequest(new { error = "Mã lệnh / bench tối đa 64 ký tự, tên testcase tối đa 256 ký tự." });
+        using var khoa = await kho.Khoa.LayAsync(ct);
 
         var lenh = await db.Commands.AsNoTracking()
             .Include(c => c.Bench)
@@ -137,12 +140,13 @@ public class RunsController(
             await using var s = f.OpenReadStream();
             var luu = await kho.LuuAsync(s, ct);
 
-            var tenFile = Path.GetFileName(f.FileName);
+            var tenFile = KiemTraTep.TenGoc(f.FileName);
 
             // Chống trùng theo (lệnh, tên file, nội dung). Gửi lại y hệt thì
             // trả về bản ghi cũ chứ không đẻ thêm dòng.
             var da = await db.BaoCaoChays.FirstOrDefaultAsync(
                 b => b.CmdId == cmdId && b.TenFile == tenFile && b.Sha256 == luu.Sha256, ct);
+            da ??= rows.FirstOrDefault(b => b.TenFile == tenFile && b.Sha256 == luu.Sha256);
             if (da is not null) { rows.Add(da); continue; }
 
             var bc = new BaoCaoChay
@@ -192,7 +196,7 @@ public class RunsController(
             return NotFound(new { error = "Bản ghi còn nhưng file đã mất trên đĩa." });
 
         // Kiểu chung chung: kho này cố ý không biết file là gì.
-        return PhysicalFile(duongDan, "application/octet-stream", bc.TenFile);
+        return PhysicalFile(duongDan, "application/octet-stream", bc.TenFile, enableRangeProcessing: true);
     }
 
     /// <summary>Báo cáo mới nhận gần đây, cho giao diện hiện lên.</summary>

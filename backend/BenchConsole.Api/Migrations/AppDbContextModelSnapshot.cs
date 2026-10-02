@@ -316,6 +316,13 @@ namespace BenchConsole.Api.Migrations
                     b.Property<long>("KichThuoc")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("KieuTest")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)")
+                        .HasDefaultValue("auto");
+
                     b.Property<string>("Loai")
                         .IsRequired()
                         .HasMaxLength(16)

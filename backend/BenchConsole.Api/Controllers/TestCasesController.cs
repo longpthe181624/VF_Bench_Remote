@@ -27,6 +27,7 @@ public sealed class TaiLenGoiForm
 
     /// <summary>`testcase` (mặc định) hoặc `config`.</summary>
     public string? Loai { get; set; }
+    public string? KieuTest { get; set; }
 }
 
 /// <summary>
@@ -69,7 +70,8 @@ public class TestCasesController(
     /// `AutoTests/` trên máy bench, nên nó phải sạch và không trùng.
     /// </summary>
     [HttpPost]
-    [RequestSizeLimit(KhoGoiTestCase.KichThuocToiDa)]
+    [RequestSizeLimit(KiemTraTep.TranGoi)]
+    [RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranGoi)]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<GoiTestCaseDto>> TaiLen(
         [FromForm] TaiLenGoiForm form,
@@ -81,6 +83,8 @@ public class TestCasesController(
 
         if (file is null || file.Length == 0)
             return BadRequest(new { error = "Chưa chọn file." });
+        if (KiemTraTep.Loi([file], KhoGoiTestCase.KichThuocToiDa) is { } loi)
+            return BadRequest(new { error = loi });
 
         var lyDoTen = TenGoi.LyDoTuChoi(ten);
         if (lyDoTen is not null)
@@ -91,6 +95,9 @@ public class TestCasesController(
             return BadRequest(new { error = lyDoLoai });
 
         var loai = LoaiGoi.ChuanHoa(form.Loai);
+        var kieu = form.KieuTest?.Trim().ToLowerInvariant() ?? "auto";
+        if (kieu is not ("auto" or "manual")) return BadRequest(new { error = "Loại kiểm thử phải là auto hoặc manual." });
+        if (loai == LoaiGoi.Config) kieu = "auto";
 
         // Quyền ở đây phụ thuộc DỮ LIỆU chứ không phụ thuộc endpoint, nên
         // không gắn [HasPermission] được: chỉ biết cần quyền nào sau khi đọc
@@ -100,6 +107,7 @@ public class TestCasesController(
             return Forbid();
 
         ten = ten.Trim();
+        using var khoa = await kho.Khoa.LayAsync(ct);
 
         // Chặn trùng trước khi tốn công đọc hết file lên đĩa. Trùng theo cặp
         // (loại, tên) — gói testcase và gói config cùng tên là hai thứ khác nhau.
@@ -111,7 +119,7 @@ public class TestCasesController(
         {
             await using var s = file.OpenReadStream();
             // Gói config không chứa file .tc nào, nên không bắt buộc ở đó.
-            luu = await kho.LuuAsync(s, ct, batBuocCoTestCase: loai == LoaiGoi.TestCase);
+            luu = await kho.LuuAsync(s, ct, batBuocCoTestCase: loai == LoaiGoi.TestCase, kieuTest: kieu);
         }
         catch (GoiKhongHopLe ex)
         {
@@ -121,8 +129,9 @@ public class TestCasesController(
         var goi = new GoiTestCase
         {
             Loai = loai,
+            KieuTest = kieu,
             Ten = ten,
-            TenFileGoc = Path.GetFileName(file.FileName),
+            TenFileGoc = KiemTraTep.TenGoc(file.FileName),
             Sha256 = luu.Sha256,
             KichThuoc = luu.KichThuoc,
             SoTestCase = luu.SoTestCase,
@@ -173,13 +182,14 @@ public class TestCasesController(
             return NotFound(new { error = "Bản ghi còn nhưng file gói đã mất trên đĩa." });
         }
 
-        return PhysicalFile(duongDan, "application/zip", goi.Ten + ".zip");
+        return PhysicalFile(duongDan, "application/zip", goi.Ten + ".zip", enableRangeProcessing: true);
     }
 
     [HttpDelete("{id:int}")]
     [HasPermission(MaQuyen.TestCaseDelete)]
     public async Task<IActionResult> Xoa(int id, CancellationToken ct)
     {
+        using var khoa = await kho.Khoa.LayAsync(ct);
         var goi = await db.GoiTestCases.FirstOrDefaultAsync(g => g.Id == id, ct);
         if (goi is null) return NotFound();
 

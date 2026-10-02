@@ -83,12 +83,16 @@ public class DuLieuChungController(
 
     [HttpPost]
     [HasPermission(MaQuyen.DuLieuUpload)]
-    [RequestSizeLimit(KhoFile.KichThuocToiDa)]
+    [RequestSizeLimit(KiemTraTep.TranYeuCau)]
+    [RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranYeuCau)]
     public async Task<ActionResult<TepDuLieuChungDto>> TaiLen(
         [FromForm] TaiLenDuLieuForm form, CancellationToken ct)
     {
         if (form.File is null || form.File.Length == 0)
             return BadRequest(new { error = "Chưa chọn file." });
+        if (KiemTraTep.Loi([form.File]) is { } loi) return BadRequest(new { error = loi });
+        if (form.MoTa?.Length > 512) return BadRequest(new { error = "Mô tả tối đa 512 ký tự." });
+        using var khoa = await kho.Khoa.LayAsync(ct);
 
         // Không chọn mục thì rơi vào "Khác" chứ không từ chối — thiếu chỗ chứa
         // tạm thì người ta nhét bừa vào mục gần đúng nhất, còn khó dọn hơn.
@@ -100,8 +104,9 @@ public class DuLieuChungController(
         if (muc is null) return BadRequest(new { error = await LoiMucLaAsync(form.Loai, ct) });
         // Không khai tên thì lấy tên file, để không ai phải gõ hai lần cùng một thứ.
         var ten = string.IsNullOrWhiteSpace(form.Ten)
-            ? Path.GetFileNameWithoutExtension(form.File.FileName)
+            ? Path.GetFileNameWithoutExtension(KiemTraTep.TenGoc(form.File.FileName))
             : form.Ten.Trim();
+        if (ten.Length == 0 || ten.Length > 128) return BadRequest(new { error = "Tên cần có từ 1 đến 128 ký tự." });
 
         if (await db.TepDuLieuChungs.AnyAsync(t => t.Loai == loai && t.Ten == ten, ct))
             return Conflict(new { error = $"Mục này đã có '{ten}'. Xoá bản cũ hoặc dùng tên khác." });
@@ -113,7 +118,7 @@ public class DuLieuChungController(
         {
             Loai = loai,
             Ten = ten,
-            TenFile = Path.GetFileName(form.File.FileName),
+            TenFile = KiemTraTep.TenGoc(form.File.FileName),
             Sha256 = luu.Sha256,
             KichThuoc = luu.KichThuoc,
             MoTa = form.MoTa,
@@ -145,13 +150,36 @@ public class DuLieuChungController(
         if (!System.IO.File.Exists(duongDan))
             return NotFound(new { error = "Bản ghi còn nhưng file đã mất trên đĩa." });
 
-        return PhysicalFile(duongDan, "application/octet-stream", tep.TenFile);
+        return PhysicalFile(duongDan, "application/octet-stream", tep.TenFile, enableRangeProcessing: true);
+    }
+
+    [HttpPatch("{id:int}")]
+    [HasPermission(MaQuyen.DuLieuUpload)]
+    public async Task<ActionResult<TepDuLieuChungDto>> Sua(int id, SuaDuLieuRequest req, CancellationToken ct)
+    {
+        using var khoa = await kho.Khoa.LayAsync(ct);
+        var tep = await db.TepDuLieuChungs.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (tep is null) return NotFound();
+        var loai = req.Loai is null ? tep.Loai : LoaiDuLieuChung.ChuanHoaMa(req.Loai);
+        var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == loai, ct);
+        if (muc is null) return BadRequest(new { error = await LoiMucLaAsync(req.Loai, ct) });
+        var ten = req.Ten?.Trim() ?? tep.Ten;
+        if (ten.Length == 0 || ten.Length > 128) return BadRequest(new { error = "Tên cần có từ 1 đến 128 ký tự." });
+        if (req.MoTa?.Length > 512) return BadRequest(new { error = "Mô tả tối đa 512 ký tự." });
+        if (await db.TepDuLieuChungs.AnyAsync(t => t.Id != id && t.Loai == loai && t.Ten == ten, ct))
+            return Conflict(new { error = "Mục đích đã có file cùng tên. Hãy dùng tên khác." });
+        tep.Loai = loai;
+        tep.Ten = ten;
+        if (req.MoTa is not null) tep.MoTa = req.MoTa.Trim();
+        await db.SaveChangesAsync(ct);
+        return TepDuLieuChungDto.From(tep, muc.Ten);
     }
 
     [HttpDelete("{id:int}")]
     [HasPermission(MaQuyen.DuLieuDelete)]
     public async Task<IActionResult> Xoa(int id, CancellationToken ct)
     {
+        using var khoa = await kho.Khoa.LayAsync(ct);
         var tep = await db.TepDuLieuChungs.FirstOrDefaultAsync(t => t.Id == id, ct);
         if (tep is null) return NotFound();
 
@@ -230,6 +258,7 @@ public class DuLieuChungController(
     [HasPermission(MaQuyen.DuLieuMuc)]
     public async Task<IActionResult> XoaMuc(string ma, CancellationToken ct)
     {
+        using var khoa = await kho.Khoa.LayAsync(ct);
         var can = LoaiDuLieuChung.ChuanHoaMa(ma);
         var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == can, ct);
         if (muc is null) return NotFound(new { error = $"Không có mục {ma}" });
@@ -303,3 +332,5 @@ public class TaiLenDuLieuForm
     public string? Ten { get; set; }
     public string? MoTa { get; set; }
 }
+
+public record SuaDuLieuRequest(string? Ten, string? Loai, string? MoTa);

@@ -442,6 +442,8 @@ public class BenchesController(
         // Quyền tuỳ loại gói, chỉ biết sau khi tra database nên phải kiểm ở đây.
         var quyenCan = goi.Loai == LoaiGoi.Config ? MaQuyen.ConfigDeploy : MaQuyen.TestCaseDeploy;
         if (!User.CoQuyen(quyenCan)) return Forbid();
+        if (goi.KieuTest == "manual")
+            return BadRequest(new { error = "Gói Excel manual chỉ dùng cho kiểm thử thủ công, không triển khai tới agent tự động." });
 
         // Agent nằm ở máy khác nên URL phải là địa chỉ nó với tới được. Cấu hình
         // tường minh, vì Request.Host ở đây thường là 'localhost' — agent tải

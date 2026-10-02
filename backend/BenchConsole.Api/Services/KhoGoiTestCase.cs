@@ -18,6 +18,7 @@ public record KetQuaLuuGoi(string Sha256, long KichThuoc, int SoTestCase);
 /// </summary>
 public class KhoGoiTestCase
 {
+    public KhoaKho Khoa { get; } = new();
     /// <summary>
     /// Trần kích thước. Đo thật trên máy bench 24/09: cả thư mục AutoTests của
     /// Qauto là 31 MB cho 3138 bài, file .tc lớn nhất 21 KB. Một gói người ta
@@ -54,7 +55,7 @@ public class KhoGoiTestCase
     /// chứa `.tc` nào cả — bắt buộc ở đó là từ chối oan.
     /// </param>
     public async Task<KetQuaLuuGoi> LuuAsync(
-        Stream nguon, CancellationToken ct, bool batBuocCoTestCase = true)
+        Stream nguon, CancellationToken ct, bool batBuocCoTestCase = true, string kieuTest = "auto")
     {
         // Ghi ra file tạm trước: phải đọc lại toàn bộ để tính sha và đếm số bài,
         // mà luồng HTTP thì không tua lại được.
@@ -64,8 +65,15 @@ public class KhoGoiTestCase
             long kichThuoc;
             await using (var ra = File.Create(tam))
             {
-                await nguon.CopyToAsync(ra, ct);
-                kichThuoc = ra.Length;
+                kichThuoc = 0;
+                var buffer = new byte[81920];
+                int n;
+                while ((n = await nguon.ReadAsync(buffer, ct)) > 0)
+                {
+                    kichThuoc += n;
+                    if (kichThuoc > KichThuocToiDa) throw new GoiKhongHopLe("Gói vượt giới hạn 64 MB.");
+                    await ra.WriteAsync(buffer.AsMemory(0, n), ct);
+                }
             }
 
             if (kichThuoc == 0)
@@ -85,10 +93,11 @@ public class KhoGoiTestCase
 
             // Vẫn đếm dù không bắt buộc: đây đồng thời là phép thử "ZIP này có
             // mở được không". Chữ ký PK đúng mà cấu trúc hỏng thì phải chặn ở máy A.
-            var soTc = DemTestCase(tam);
+            var soTc = DemTestCase(tam, kieuTest);
             if (batBuocCoTestCase && soTc == 0)
                 throw new GoiKhongHopLe(
-                    "Gói không chứa file .tc hoặc .mtc. Kiểm tra lại thư mục đã nén.");
+                    kieuTest == "manual" ? "Gói manual cần chứa file Excel .xlsx hoặc .xls."
+                    : "Gói không chứa file .tc hoặc .mtc. Kiểm tra lại thư mục đã nén.");
 
             var sha = await TinhShaAsync(tam, ct);
             var dich = DuongDan(sha);
@@ -101,7 +110,8 @@ public class KhoGoiTestCase
             }
             else
             {
-                File.Move(tam, dich);
+                try { File.Move(tam, dich); }
+                catch (IOException) when (File.Exists(dich)) { File.Delete(tam); }
             }
 
             return new KetQuaLuuGoi(sha, kichThuoc, soTc);
@@ -117,14 +127,26 @@ public class KhoGoiTestCase
     /// Đếm số bài trong gói, đồng thời là phép thử "ZIP này có mở được không".
     /// Chữ ký PK đúng mà cấu trúc hỏng thì vẫn phải chặn ở máy A.
     /// </summary>
-    private static int DemTestCase(string duongDan)
+    private static int DemTestCase(string duongDan, string kieuTest)
     {
         try
         {
             using var z = ZipFile.OpenRead(duongDan);
+            if (z.Entries.Count > 10000) throw new GoiKhongHopLe("Gói có quá 10.000 mục.");
+            long tong = 0;
+            foreach (var entry in z.Entries)
+            {
+                var name = entry.FullName.Replace('\\', '/');
+                if (name.StartsWith('/') || name.Contains(':') || name.Split('/').Any(p => p is ".." or "."))
+                    throw new GoiKhongHopLe("ZIP chứa đường dẫn không hợp lệ.");
+                if (entry.Length > KhoFile.KichThuocToiDa - tong)
+                    throw new GoiKhongHopLe("Nội dung ZIP sau giải nén vượt 256 MB.");
+                tong += entry.Length;
+            }
             return z.Entries.Count(e =>
-                e.Name.EndsWith(".tc", StringComparison.OrdinalIgnoreCase) ||
-                e.Name.EndsWith(".mtc", StringComparison.OrdinalIgnoreCase));
+                e.Length > 0 && (kieuTest == "manual"
+                    ? e.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) || e.Name.EndsWith(".xls", StringComparison.OrdinalIgnoreCase)
+                    : e.Name.EndsWith(".tc", StringComparison.OrdinalIgnoreCase) || e.Name.EndsWith(".mtc", StringComparison.OrdinalIgnoreCase)));
         }
         catch (InvalidDataException ex)
         {

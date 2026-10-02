@@ -77,6 +77,7 @@ public class DonBaoCaoService(
 
     private async Task DonMotLuotAsync(CancellationToken ct)
     {
+        using var khoa = await kho.Khoa.LayAsync(ct);
         using var scope = sp.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 

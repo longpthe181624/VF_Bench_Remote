@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace BenchConsole.Api.Tests;
 
@@ -35,10 +37,20 @@ namespace BenchConsole.Api.Tests;
 public class MayChuThu : WebApplicationFactory<DiemVaoApi>
 {
     private readonly string _tenDb = "kiem-" + Guid.NewGuid().ToString("N");
+    private readonly string _tepThu = Path.Combine(Path.GetTempPath(), "benchconsole-tests-" + Guid.NewGuid().ToString("N"));
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.ConfigureLogging(o => o.ClearProviders());
+        builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(new Dictionary<string,string?>
+        {
+            ["Auth:AdminPassword"] = "Admin@12345",
+            ["KhoNguoiDung:ThuMuc"] = Path.Combine(_tepThu, "private"),
+            ["DuLieuChung:ThuMuc"] = Path.Combine(_tepThu, "shared"),
+            ["BaoCao:ThuMuc"] = Path.Combine(_tepThu, "reports"),
+            ["GoiTestCase:ThuMuc"] = Path.Combine(_tepThu, "packages"),
+        }));
 
         builder.ConfigureServices(services =>
         {
@@ -70,5 +82,16 @@ public class MayChuThu : WebApplicationFactory<DiemVaoApi>
     {
         foreach (var d in services.Where(d => d.ServiceType == typeof(T)).ToList())
             services.Remove(d);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        // Chỉ dọn thư mục tạm riêng của factory này.
+        var root = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var path = Path.GetFullPath(_tepThu);
+        if (disposing && path.StartsWith(root, StringComparison.OrdinalIgnoreCase)
+            && Path.GetFileName(path).StartsWith("benchconsole-tests-", StringComparison.Ordinal)
+            && Directory.Exists(path)) Directory.Delete(path, recursive: true);
     }
 }

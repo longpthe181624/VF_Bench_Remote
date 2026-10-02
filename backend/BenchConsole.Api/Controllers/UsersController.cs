@@ -199,6 +199,7 @@ public class UsersController(
         // Chưa thêm khoá ngoại vì kho CHƯA CHỐT sẽ chứa gì; đổi schema trước
         // khi biết nó giữ thứ gì là làm sớm. Khi chốt xong thì thay bằng khoá
         // ngoại cascade và bỏ đoạn này.
+        using var khoaKho = await kho.Khoa.LayAsync(ct);
         var tepCuaHo = await db.TepNguoiDungs
             .Where(t => t.NguoiDung == user.Email).ToListAsync(ct);
         db.TepNguoiDungs.RemoveRange(tepCuaHo);

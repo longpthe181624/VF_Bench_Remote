@@ -9,6 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
+if (args.Contains("--serve-ui")) return await StorageUiServer.Run();
+
 // Không dùng framework test nào, giống BenchConsole.Core.SmokeTest — chạy bằng
 // `dotnet run` là xong, không phải cài thêm gì.
 //
@@ -1048,6 +1050,9 @@ Check(!thanHealth.GetProperty("mqtt").GetBoolean(), "health phải báo MQTT đa
 // ---------------------------------------------------------------- kết quả
 Console.WriteLine();
 Console.WriteLine(new string('=', 51));
+Nhom("Lưu trữ file: dữ liệu thật, sửa / chuyển mục, manual và phân quyền");
+await FileStorageChecks.Run(http, tokenAdmin, tokenViewer, tokenKySu, Check);
+
 if (loi.Count == 0)
 {
     Console.WriteLine($"TẤT CẢ {soPhep} phép kiểm tra ĐẠT");

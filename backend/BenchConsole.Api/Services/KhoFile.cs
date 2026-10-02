@@ -20,6 +20,7 @@ public record KetQuaLuuFile(string Sha256, long KichThuoc);
 /// </summary>
 public class KhoFile
 {
+    public KhoaKho Khoa { get; } = new();
     /// <summary>
     /// Trần cho MỘT file. Trace CAN một lượt 40 giây đã 2 MB, lượt 20 phút
     /// (828.726 frame) thì hàng chục MB. Để 256 MB là rộng rãi mà vẫn chặn
@@ -31,7 +32,9 @@ public class KhoFile
 
     protected KhoFile(IConfiguration cfg, IHostEnvironment env, string khoaCauHinh, string thuMucMacDinh)
     {
-        _thuMuc = cfg[khoaCauHinh] ?? Path.Combine(env.ContentRootPath, "App_Data", thuMucMacDinh);
+        var duong = cfg[khoaCauHinh];
+        _thuMuc = string.IsNullOrWhiteSpace(duong)
+            ? Path.Combine(env.ContentRootPath, "App_Data", thuMucMacDinh) : duong;
         Directory.CreateDirectory(_thuMuc);
     }
 
@@ -47,8 +50,17 @@ public class KhoFile
             long kichThuoc;
             await using (var ra = File.Create(tam))
             {
-                await nguon.CopyToAsync(ra, ct);
-                kichThuoc = ra.Length;
+                kichThuoc = 0;
+                var buffer = new byte[81920];
+                int n;
+                while ((n = await nguon.ReadAsync(buffer, ct)) > 0)
+                {
+                    kichThuoc += n;
+                    if (kichThuoc > KichThuocToiDa)
+                        throw new TepKhongHopLe("File vượt giới hạn 256 MB.");
+                    await ra.WriteAsync(buffer.AsMemory(0, n), ct);
+                }
+                if (kichThuoc == 0) throw new TepKhongHopLe("File rỗng.");
             }
 
             string sha;
@@ -59,7 +71,11 @@ public class KhoFile
             // Cùng nội dung thì file cũ đã đúng, không ghi đè. Hai người tải lên
             // cùng một file cũng chỉ tốn một chỗ.
             if (File.Exists(dich)) File.Delete(tam);
-            else File.Move(tam, dich);
+            else
+            {
+                try { File.Move(tam, dich); }
+                catch (IOException) when (File.Exists(dich)) { File.Delete(tam); }
+            }
 
             return new KetQuaLuuFile(sha, kichThuoc);
         }

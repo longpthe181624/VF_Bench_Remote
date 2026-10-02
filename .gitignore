@@ -65,3 +65,4 @@ obj/
 
 # Kho gói test case người dùng tải lên — dữ liệu chạy, không phải mã nguồn
 backend/BenchConsole.Api/App_Data/
+backend/BenchConsole.Api/wwwroot/app/

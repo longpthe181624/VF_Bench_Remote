@@ -160,6 +160,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // nhau, bung vào hai thư mục khác nhau, không đè nhau.
             e.HasIndex(x => new { x.Loai, x.Ten }).IsUnique();
             e.Property(x => x.Loai).HasMaxLength(16).IsRequired();
+            e.Property(x => x.KieuTest).HasMaxLength(16).HasDefaultValue("auto").IsRequired();
             e.Property(x => x.Ten).HasMaxLength(TenGoi.DaiToiDa).IsRequired();
             e.Property(x => x.TenFileGoc).HasMaxLength(260).IsRequired();
             e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();

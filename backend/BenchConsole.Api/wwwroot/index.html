@@ -85,6 +85,14 @@
   .alert-msg{color:#b91c1c;}
   .toast{position:fixed; bottom:16px; right:16px; background:#0a0a0a; color:#fff; padding:8px 13px; border-radius:7px; font-size:12.5px; opacity:0; transform:translateY(6px); transition:opacity .15s, transform .15s; pointer-events:none;}
   .toast.show{opacity:1; transform:translateY(0);}
+  .file-dialog{width:min(760px,calc(100% - 32px));max-height:85vh;border:1px solid #ddd;border-radius:10px;padding:20px;}
+  .file-dialog::backdrop{background:#0005;}
+  .file-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:45vh;overflow:auto;background:#fafafa;padding:12px;}
+  .file-dialog img{max-width:100%;max-height:45vh;object-fit:contain;}
+  .file-dialog label{display:block;margin:12px 0 4px;}
+  .file-dialog input,.file-dialog textarea,.file-dialog select{width:100%;box-sizing:border-box;}
+  .file-pages,.file-upload{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;}
+  .file-upload{width:100%;} .file-upload progress{width:180px;}
 </style>
 </head>
 <body>
@@ -231,6 +239,7 @@
     <div class="sec-head">
       <h2>Gói test case</h2>
       <span class="count" id="goi-count"></span>
+      <input id="goi-q" placeholder="Tìm tên gói / file" aria-label="Tìm gói">
       <span style="flex:1"></span>
       <button id="toggle-goi">Tải lên</button>
     </div>
@@ -240,12 +249,12 @@
         <option value="testcase">Gói test case</option>
         <option value="config">Gói cấu hình Qauto</option>
       </select>
+      <select id="goi-kieu" aria-label="Loại kiểm thử"><option value="auto">Tự động (.tc / .mtc)</option><option value="manual">Manual (Excel)</option></select>
       <input id="goi-ten" placeholder="Tên thư mục trên máy bench" style="width:240px" required>
       <input id="goi-file" type="file" accept=".zip,application/zip" required>
-      <input id="goi-by" placeholder="Người tải lên" style="width:140px">
       <button type="submit">Tải lên</button>
       <button type="button" id="goi-cancel">Huỷ</button>
-      <div class="meta">Định dạng ZIP. Tên gói là tên thư mục bung ra trên máy bench. Gói test case cần ít nhất một file .tc; gói cấu hình không bắt buộc.</div>
+      <div class="meta">ZIP tối đa 64 MB. Gói tự động chứa .tc / .mtc; manual chứa .xlsx / .xls. Gói cấu hình không bắt buộc testcase.</div>
     </form>
 
     <div id="goi-area"></div>
@@ -274,9 +283,9 @@
 
     <form class="addbench" id="dlc-form" enctype="multipart/form-data">
       <div class="field"><label>Tải vào mục</label><span id="dlc-dich" class="code"></span></div>
-      <div class="field"><label>Tên</label><input name="ten" placeholder="Để trống thì lấy tên file" style="width:200px"></div>
+      <div class="field"><label>Tên</label><input name="ten" maxlength="128" placeholder="Để trống thì lấy tên file" style="width:200px"></div>
       <div class="field"><label>File *</label><input name="file" type="file" required></div>
-      <div class="field"><label>Mô tả</label><input name="moTa" style="width:200px"></div>
+      <div class="field"><label>Mô tả</label><input name="moTa" maxlength="512" style="width:200px"></div>
       <button type="submit" class="primary">Lưu</button>
       <button type="button" id="dlc-huy">Huỷ</button>
     </form>
@@ -288,13 +297,14 @@
     <div class="sec-head">
       <h2>Kho cá nhân</h2>
       <span class="count" id="kho-count"></span>
+      <span class="grow"></span><input id="kho-q" placeholder="Tìm tên file / ghi chú" aria-label="Tìm trong kho cá nhân">
     </div>
 
     <form class="addbench show" id="kho-form" enctype="multipart/form-data">
       <input id="kho-file" type="file" multiple required>
-      <input id="kho-mota" placeholder="Ghi chú" style="width:200px">
+      <input id="kho-mota" placeholder="Ghi chú" maxlength="512" style="width:200px">
       <button type="submit">Tải lên</button>
-      <div class="meta">Nhận mọi định dạng file. File tải lên thuộc về tài khoản đang đăng nhập.</div>
+      <div class="meta">Nhận mọi định dạng; tối đa 100 file và tổng 256 MB mỗi lần. Chỉ tài khoản sở hữu mới truy cập được.</div>
     </form>
 
     <div id="kho-area"></div>
@@ -304,6 +314,7 @@
     <div class="sec-head">
       <h2>Báo cáo</h2>
       <span class="count" id="bc-count"></span>
+      <span class="grow"></span><input id="bc-q" placeholder="Tìm file / thiết bị / testcase" aria-label="Tìm báo cáo">
     </div>
     <div id="bc-area"></div>
   </section>
@@ -350,6 +361,7 @@
 
 <div class="toast" id="toast"></div>
 
+<dialog id="file-dialog" class="file-dialog" aria-label="Thông tin file"></dialog>
 <script>
 const API = "";
 
@@ -520,10 +532,13 @@ async function taiFile(duong, tenFile, daThuLamMoi){
 
 /// Nút "Tải về" dùng chung cho kho và báo cáo.
 function nutTai(duong, tenFile){
-  return el("button", {class:"ghost", onclick: async () => {
+  const button = el("button", {type:"button",class:"ghost", onclick: async () => {
+    button.disabled=true;button.textContent="Đang tải…";
     try { await taiFile(duong, tenFile); showErr(null); }
     catch(e){ showErr(e.message); }
+    finally{button.disabled=false;button.textContent="Tải về";}
   }}, "Tải về");
+  return button;
 }
 
 function fmtAgo(seconds){
@@ -866,7 +881,7 @@ function renderBangMuc(){
     el("tbody", {}, ...dsMucDuLieu.map(dong))));
 }
 
-function renderDuLieuChung(rows){
+function drawDuLieuChung(rows){
   if (document.activeElement?.closest?.("#dlc-form")) return;
 
   const area = document.getElementById("dlc-area");
@@ -891,7 +906,7 @@ function renderDuLieuChung(rows){
       el("td", {}, t.nguoiTaiLen || "—"),
       el("td", {}, new Date(t.taiLenLuc).toLocaleString("vi-VN")),
       el("td", {}, el("div", {class:"actions"},
-        nutTai(`/api/du-lieu-chung/${t.id}/download`, t.tenFile), xoa)),
+        nutTai(`/api/du-lieu-chung/${t.id}/download`, t.tenFile), el("button", {type:"button",class:"ghost",onclick:()=>fileDetails(t,"shared")},coQuyen("DULIEU.UPLOAD")?"Thông tin / sửa":"Thông tin"), xoa)),
     );
   };
 
@@ -920,7 +935,7 @@ function goiRow(g){
   }
 
   const quyenDay = g.loai === "config" ? "CONFIG.DEPLOY" : "TESTCASE.DEPLOY";
-  const dayBtn = !coQuyen(quyenDay) ? null : el("button", {onclick: async () => {
+  const dayBtn = g.kieuTest === "manual" || !coQuyen(quyenDay) ? null : el("button", {onclick: async () => {
     if (!chon.value){ showErr("Chưa chọn thiết bị."); return; }
     try {
       const r = await api(`/api/devices/${chon.value}/deploy`, {
@@ -938,7 +953,7 @@ function goiRow(g){
   //
   // Gói cấu hình KHÔNG có nút này: chạy một gói cấu hình là vô nghĩa, để nút ở
   // đó chỉ dẫn người dùng bấm rồi nhận lỗi.
-  const chayBtn = (g.loai === "config" || !coQuyen("BENCH.RUN")) ? null : el("button", {onclick: async () => {
+  const chayBtn = (g.loai === "config" || g.kieuTest === "manual" || !coQuyen("BENCH.RUN")) ? null : el("button", {onclick: async () => {
     if (!chon.value){ showErr("Chưa chọn thiết bị."); return; }
     try {
       const r = await api(`/api/devices/${chon.value}/start`, {
@@ -959,16 +974,16 @@ function goiRow(g){
 
   return el("tr", {},
     el("td", {}, el("div", {class:"code"}, g.ten), el("div", {class:"sub"}, g.tenFileGoc)),
-    el("td", {}, g.loai === "config" ? "cấu hình" : "test case"),
-    el("td", {}, g.loai === "config" ? "—" : g.soTestCase + " bài"),
+    el("td", {}, g.loai === "config" ? "Cấu hình" : g.kieuTest === "manual" ? "Manual · Excel" : "Tự động"),
+    el("td", {}, g.loai === "config" ? "—" : g.soTestCase + (g.kieuTest === "manual" ? " file Excel" : " bài")),
     el("td", {}, kbGon(g.kichThuoc)),
     el("td", {}, el("span", {class:"meta"}, g.sha256.slice(0,12))),
     el("td", {}, new Date(g.taiLenLuc).toLocaleString("vi-VN")),
-    el("td", {}, el("div", {class:"actions"}, chon, dayBtn, chayBtn, xoaBtn)),
+    el("td", {}, el("div", {class:"actions"}, g.kieuTest === "manual" ? null : chon, nutTai(`/api/test-cases/${g.id}/download`, g.ten+".zip"), el("button", {type:"button",class:"ghost",onclick:()=>fileDetails(g,"package")},"Thông tin"), dayBtn, chayBtn, xoaBtn)),
   );
 }
 
-function renderGoi(rows){
+function drawGoi(rows){
   if (document.activeElement?.closest?.("#goi-form")) return;
 
   const area = document.getElementById("goi-area");
@@ -987,7 +1002,7 @@ function renderGoi(rows){
   area.appendChild(table);
 }
 
-function renderKho(rows){
+function drawKho(rows){
   // Đang gõ dở trong form thì bỏ qua lượt vẽ lại này, nếu không mỗi 5 giây
   // người dùng lại mất chữ đang gõ.
   if (document.activeElement?.closest?.("#kho-form")) return;
@@ -1011,6 +1026,7 @@ function renderKho(rows){
       el("td", {}, new Date(t.taiLenLuc).toLocaleString("vi-VN")),
       el("td", {}, el("div", {class:"actions"},
         nutTai(`/api/storage/files/${t.id}/download`, t.tenFile),
+        el("button", {type:"button",class:"ghost",onclick:()=>fileDetails(t,"private")},coQuyen("KHO.UPLOAD")?"Thông tin / sửa":"Thông tin"),
         !coQuyen("KHO.DELETE") ? null : el("button", {class:"ghost", onclick: async () => {
           if (!confirm(`Xoá ${t.tenFile}?`)) return;
           try { await api(`/api/storage/files/${t.id}`, {method:"DELETE"}); showToast(`Đã xoá ${t.tenFile}.`); load(); }
@@ -1158,7 +1174,7 @@ function veBangQuyen(role){
       el("button", {class:"ghost", onclick: () => { vaiTroDangSua = null; khung.innerHTML = ""; }}, "Đóng"))));
 }
 
-function renderBaoCao(rows){
+function drawBaoCao(rows){
   const area = document.getElementById("bc-area");
   document.getElementById("bc-count").textContent = rows.length + " file";
   area.innerHTML = "";
@@ -1177,7 +1193,7 @@ function renderBaoCao(rows){
       el("td", {}, b.tenFile),
       el("td", {}, kbGon(b.kichThuoc)),
       el("td", {}, new Date(b.nhanLuc).toLocaleString("vi-VN")),
-      el("td", {}, nutTai(`/api/runs/reports/${b.id}/download`, b.tenFile))))));
+      el("td", {}, nutTai(`/api/runs/reports/${b.id}/download`, b.tenFile),el("button", {type:"button",class:"ghost",onclick:()=>fileDetails(b,"report")},"Thông tin"))))));
   area.appendChild(table);
 }
 
@@ -1290,11 +1306,8 @@ dlcForm.addEventListener("submit", async (ev) => {
   try {
     // Không dùng api(): thân là multipart, gắn Content-Type: application/json
     // vào là server đọc hỏng.
-    const res = await fetch(API + "/api/du-lieu-chung", {
-      method: "POST", headers: headerAuth(), body: fd,
-    });
-    const body = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(body?.error || (res.status + " " + res.statusText));
+    const body = await uploadFiles("/api/du-lieu-chung", fd, dlcForm, 256*1024*1024);
+    document.activeElement?.blur?.();
     showToast(`Đã tải lên ${body.ten}.`);
     ev.target.reset();
     ev.target.classList.remove("show");
@@ -1333,6 +1346,7 @@ document.getElementById("toggle-goi").addEventListener("click", () => {
 document.getElementById("goi-cancel").addEventListener("click", () => {
   goiForm.classList.remove("show");
   goiForm.reset();
+    syncPackageMode();
 });
 
 goiForm.addEventListener("submit", async (ev) => {
@@ -1346,22 +1360,17 @@ goiForm.addEventListener("submit", async (ev) => {
   fd.append("file", f);
   fd.append("ten", document.getElementById("goi-ten").value.trim());
   fd.append("loai", document.getElementById("goi-loai").value);
-  const by = document.getElementById("goi-by").value.trim();
-  if (by) fd.append("nguoiTaiLen", by);
+  fd.append("kieuTest", document.getElementById("goi-kieu").value);
 
   try {
-    const res = await fetch(API + "/api/test-cases", {method:"POST", body: fd, headers: headerAuth()});
-    if (!res.ok){
-      let msg = res.status + " " + res.statusText;
-      try { const b = await res.json(); if (b?.error) msg = b.error; } catch {}
-      throw new Error(msg);
-    }
-    const g = await res.json();
+    const g = await uploadFiles("/api/test-cases", fd, goiForm, 64*1024*1024);
+    document.activeElement?.blur?.();
     showToast(g.loai === "config"
       ? `Đã tải lên gói cấu hình ${g.ten}.`
       : `Đã tải lên gói ${g.ten}. ${g.soTestCase} test case.`);
     showErr(null);
     goiForm.reset();
+    syncPackageMode();
     goiForm.classList.remove("show");
     load();
   } catch(e){ showErr(e.message); }
@@ -1383,13 +1392,8 @@ khoForm.addEventListener("submit", async (ev) => {
   try {
     // Luôn vào kho của chính mình. Không có đường nào đẩy file vào kho
     // người khác — đó là mạo danh, khác hẳn việc đọc.
-    const res = await fetch(API + "/api/storage", {method:"POST", body: fd, headers: headerAuth()});
-    if (!res.ok){
-      let msg = res.status + " " + res.statusText;
-      try { const b = await res.json(); if (b?.error) msg = b.error; } catch {}
-      throw new Error(msg);
-    }
-    const ds = await res.json();
+    const ds = await uploadFiles("/api/storage", fd, khoForm, 256*1024*1024);
+    document.activeElement?.blur?.();
     showToast(`Đã tải lên ${ds.length} file.`);
     showErr(null);
     document.getElementById("kho-file").value = "";
@@ -1406,6 +1410,8 @@ function chuyenMan(id){
 }
 
 function veManDangNhap(){
+  closeFileDialog();for(const cancel of uploadJobs)cancel();
+  for(const key of Object.keys(fileRows))delete fileRows[key];
   chuyenMan("man-dang-nhap");
   document.getElementById("dang-xuat").style.display = "none";
   document.getElementById("doi-mk").style.display = "none";
@@ -1753,10 +1759,10 @@ async function khoiDong(){
     load();
   } catch(e){ showErr(e.message); }
 }
-khoiDong();
 
 // Vòng làm mới tự bỏ qua khi chưa đăng nhập, xem đầu hàm load().
 setInterval(load, 5000);
 </script>
+<script src="file-storage.js"></script>
 </body>
 </html>
