@@ -17,6 +17,10 @@
     </PackageReference>
     <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.10" />
+    <!-- Sinh ảnh QR cho màn ghi danh xác thực hai lớp. Dùng PngByteQRCode
+         chứ không phải QRCode: bản kia cần System.Drawing, mà ảnh chạy
+         thật là Linux. -->
+    <PackageReference Include="QRCoder" Version="1.7.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 

@@ -20,4 +20,20 @@ public static class AuthConstants
     public const string TokenUseClaimType = "token_use";
 
     public const string TokenUseAccess = "access";
+
+    /// <summary>
+    /// Token tạm, CHỈ dùng được cho hai endpoint ghi danh xác thực hai lớp.
+    ///
+    /// Đăng nhập đúng mật khẩu mà tài khoản bắt buộc hai lớp và chưa ghi danh
+    /// thì nhận token này thay cho token thật. Nếu phát token `access` ở đó thì
+    /// chỉ cần KHÔNG ghi danh là bỏ qua được cả lớp thứ hai — bắt buộc thành ra
+    /// trang trí.
+    ///
+    /// Policy mặc định đòi `token_use = access`, nên token này tự động bị mọi
+    /// endpoint khác từ chối, không phải nhớ chặn từng chỗ.
+    /// </summary>
+    public const string TokenUseGhiDanhTotp = "totp-setup";
+
+    /// <summary>Policy cho hai endpoint ghi danh: nhận cả token thật lẫn token tạm.</summary>
+    public const string PolicyGhiDanhTotp = "GHI_DANH_TOTP";
 }

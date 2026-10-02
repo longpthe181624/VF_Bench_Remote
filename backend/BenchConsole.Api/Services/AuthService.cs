@@ -7,6 +7,7 @@ using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
 using BenchConsole.Core.Models;
 using Microsoft.IdentityModel.Tokens;
+using QRCoder;
 
 namespace BenchConsole.Api.Services;
 
@@ -33,6 +34,12 @@ public class JwtOptions
     public int AccessTokenPhut { get; set; } = 30;
 
     public int RefreshTokenNgay { get; set; } = 7;
+
+    /// <summary>
+    /// Token tạm cho màn ghi danh hai lớp. Ngắn vì nó được cấp khi mới qua MỘT
+    /// lớp xác thực — đủ để quét mã và gõ một mã sáu số, không hơn.
+    /// </summary>
+    public int TokenGhiDanhPhut { get; set; } = 10;
 }
 
 public class AuthService(
@@ -73,6 +80,18 @@ public class AuthService(
             }
             await repo.LuuAsync(ct);
             throw new DangNhapThatBai("Email hoặc mật khẩu không đúng.");
+        }
+
+        // ---- tài khoản bắt buộc hai lớp mà chưa ghi danh: chưa cho vào
+        //
+        // Cấp token TẠM chứ không phải token thật. Phát token thật ở đây thì chỉ
+        // cần không bấm tiếp là bỏ qua được cả lớp thứ hai.
+        if (user.TotpBatLuc is null && user.TotpBatBuoc)
+        {
+            user.SoLanSai = 0;
+            user.KhoaDenLuc = null;
+            await repo.LuuAsync(ct);
+            return DangNhapResponse.DoiGhiDanhTotp(TaoTokenGhiDanh(user));
         }
 
         // ---- bước hai: mã trên điện thoại
@@ -159,6 +178,31 @@ public class AuthService(
     // ---------------------------------------------------------- ghi danh TOTP
 
     /// <summary>
+    /// Token tạm mang đúng mã người dùng, không mang vai trò và quyền.
+    ///
+    /// Policy mặc định đòi `token_use = access` nên token này tự bị mọi endpoint
+    /// khác từ chối; chỉ policy <see cref="AuthConstants.PolicyGhiDanhTotp"/>
+    /// nhận nó.
+    /// </summary>
+    private string TaoTokenGhiDanh(User user)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Email, user.Email),
+            new(AuthConstants.TokenUseClaimType, AuthConstants.TokenUseGhiDanhTotp),
+        };
+
+        var khoa = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key!));
+        return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
+            issuer: jwt.Issuer,
+            audience: jwt.Audience,
+            claims: claims,
+            expires: DateTimeOffset.UtcNow.AddMinutes(jwt.TokenGhiDanhPhut).UtcDateTime,
+            signingCredentials: new SigningCredentials(khoa, SecurityAlgorithms.HmacSha256)));
+    }
+
+    /// <summary>
     /// Cấp bí mật mới nhưng CHƯA bật. Bật ngay là tự khoá mình ra ngoài nếu
     /// điện thoại quét hỏng — phải gõ đúng một mã mới coi là xong.
     /// </summary>
@@ -169,18 +213,27 @@ public class AuthService(
         if (user.TotpBatLuc is not null)
             throw new DangNhapThatBai("Tài khoản đã bật xác thực hai lớp. Tắt trước khi ghi danh lại.");
 
-        var biMat = Totp.SinhBiMat();
-        user.TotpBiMat = biMat;
-        user.TotpNhipCuoi = null;
-        await repo.LuuAsync(ct);
+        // Đang ghi danh dở thì DÙNG LẠI bí mật cũ, đừng sinh mới.
+        //
+        // Người dùng quét mã xong, lỡ tải lại trang hoặc mở tab khác, mà máy chủ
+        // sinh bí mật mới thì mã trên điện thoại thành vô dụng và họ không hiểu
+        // vì sao gõ mãi không đúng. Học từ AQC.
+        var biMat = string.IsNullOrWhiteSpace(user.TotpBiMat) ? Totp.SinhBiMat() : user.TotpBiMat;
+        if (user.TotpBiMat != biMat)
+        {
+            user.TotpBiMat = biMat;
+            user.TotpNhipCuoi = null;
+            await repo.LuuAsync(ct);
+        }
 
-        return new GhiDanhTotpResponse(biMat, Totp.ChiaNhom(biMat), Totp.UriGhiDanh(user.Email, biMat));
+        var uri = Totp.UriGhiDanh(user.Email, biMat);
+        return new GhiDanhTotpResponse(biMat, Totp.ChiaNhom(biMat), uri, AnhQr(uri));
     }
 
     /// <summary>
     /// Gõ đúng một mã thì bật, và trả về mã khôi phục ĐÚNG MỘT LẦN.
     /// </summary>
-    public async Task<List<string>> XacNhanGhiDanhAsync(int userId, string? ma, CancellationToken ct)
+    public async Task<XacNhanTotpResponse> XacNhanGhiDanhAsync(int userId, string? ma, CancellationToken ct)
     {
         var user = await repo.TheoIdAsync(userId, ct)
                    ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
@@ -216,7 +269,10 @@ public class AuthService(
         await repo.LuuAsync(ct);
 
         log.LogInformation("{Email} đã bật xác thực hai lớp", user.Email);
-        return tho;
+
+        // Cấp luôn phiên thật. Người vừa bị bắt ghi danh ở màn đăng nhập mà
+        // phải đăng nhập lại từ đầu thì vừa thừa vừa dễ tưởng là hỏng.
+        return new XacNhanTotpResponse(tho, await CapTokenAsync(user, ct));
     }
 
     /// <summary>Tắt TOTP. Bắt nhập lại mật khẩu — không thì ai mượn được máy
@@ -227,6 +283,12 @@ public class AuthService(
                    ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
         if (string.IsNullOrWhiteSpace(matKhau) || !BCrypt.Net.BCrypt.Verify(matKhau, user.MatKhauHash))
             throw new DangNhapThatBai("Mật khẩu không đúng.");
+
+        // Không có chốt này thì bắt buộc thành vô nghĩa: ghi danh xong tắt ngay
+        // là vào được mãi mãi mà chỉ còn một lớp.
+        if (user.TotpBatBuoc)
+            throw new DangNhapThatBai(
+                "Tài khoản này bắt buộc xác thực hai lớp. Liên hệ quản trị nếu cần gỡ.");
 
         user.TotpBiMat = null;
         user.TotpBatLuc = null;
@@ -258,6 +320,20 @@ public class AuthService(
                    ?? throw new DangNhapThatBai("Tài khoản không còn tồn tại.");
         var con = user.TotpBatLuc is null ? 0 : await repo.SoMaKhoiPhucConLaiAsync(userId, ct);
         return new TinhTrangTotpDto(user.TotpBatLuc is not null, user.TotpBatLuc, con);
+    }
+
+    /// <summary>
+    /// Ảnh QR dạng `data:image/png;base64,...`, nhúng thẳng vào thẻ img.
+    ///
+    /// Dùng <c>PngByteQRCode</c> chứ không phải <c>QRCode</c>: bản kia cần
+    /// System.Drawing, mà ảnh chạy thật là Linux.
+    /// </summary>
+    private static string AnhQr(string noiDung)
+    {
+        using var bo = new QRCodeGenerator();
+        var du = bo.CreateQrCode(noiDung, QRCodeGenerator.ECCLevel.Q);
+        var png = new PngByteQRCode(du).GetGraphic(8);
+        return "data:image/png;base64," + Convert.ToBase64String(png);
     }
 
     private const int SoMaKhoiPhuc = 8;

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using BenchConsole.Api.Services;
+using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -111,7 +112,7 @@ public class AuthController(AuthService auth) : ControllerBase
     public async Task<ActionResult<TinhTrangTotpDto>> TinhTrangTotp(CancellationToken ct)
         => await ChayAsync(id => auth.TinhTrangAsync(id, ct));
 
-    [Authorize]
+    [Authorize(AuthConstants.PolicyGhiDanhTotp)]
     [HttpPost("totp/ghi-danh")]
     public async Task<ActionResult<GhiDanhTotpResponse>> GhiDanhTotp(CancellationToken ct)
         => await ChayAsync(id => auth.BatDauGhiDanhAsync(id, ct));
@@ -120,12 +121,11 @@ public class AuthController(AuthService auth) : ControllerBase
     /// Gõ đúng một mã thì bật. Trả về mã khôi phục — **chỉ lần này**, máy chủ
     /// chỉ giữ bản băm nên không in lại được.
     /// </summary>
-    [Authorize]
+    [Authorize(AuthConstants.PolicyGhiDanhTotp)]
     [HttpPost("totp/xac-nhan")]
-    public async Task<ActionResult<MaKhoiPhucResponse>> XacNhanTotp(
+    public async Task<ActionResult<XacNhanTotpResponse>> XacNhanTotp(
         XacNhanTotpRequest req, CancellationToken ct)
-        => await ChayAsync(async id => new MaKhoiPhucResponse(
-            await auth.XacNhanGhiDanhAsync(id, req.Ma, ct)));
+        => await ChayAsync(id => auth.XacNhanGhiDanhAsync(id, req.Ma, ct));
 
     [Authorize]
     [HttpDelete("totp")]

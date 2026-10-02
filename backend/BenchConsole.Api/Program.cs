@@ -98,6 +98,14 @@ builder.Services.AddAuthorization(o =>
         .RequireAuthenticatedUser()
         .RequireClaim(AuthConstants.TokenUseClaimType, AuthConstants.TokenUseAccess)
         .Build();
+
+    // Hai endpoint ghi danh hai lớp nhận CẢ HAI loại token: token thật (người
+    // đang dùng ứng dụng tự vào bật) và token tạm (bị bắt ghi danh ngay ở màn
+    // đăng nhập, lúc đó chưa có token thật nào).
+    o.AddPolicy(AuthConstants.PolicyGhiDanhTotp, p => p
+        .RequireAuthenticatedUser()
+        .RequireClaim(AuthConstants.TokenUseClaimType,
+                      AuthConstants.TokenUseAccess, AuthConstants.TokenUseGhiDanhTotp));
 });
 
 // Dựng policy theo yêu cầu thay vì khai sẵn 24 cái trong file này.

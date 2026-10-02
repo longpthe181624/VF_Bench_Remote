@@ -1008,6 +1008,105 @@ không bị ảnh hưởng gì**, ai muốn bật thì tự vào bật.
   ai thử. Đây là việc đầu tiên nên làm trên máy A.
 - Chưa chạy trên SQL Server thật.
 
+## Bắt buộc xác thực hai lớp từ lần đăng nhập đầu — làm 02/10
+
+Lỗi người dùng báo: **đăng nhập lần đầu không hiện mã QR để quét.** Hai lớp
+trước đó là tuỳ chọn, phải tự vào bật, và màn bật chỉ đưa khoá chữ cho gõ tay.
+
+Nay tài khoản tạo mới **bắt buộc ghi danh ngay lần đăng nhập đầu**, và có mã QR.
+Học cấu trúc từ **AQC** (`D:/AQC`, `AuthService.Setup2FAAsync`).
+
+### Chốt chặn quan trọng nhất: token tạm
+
+Đúng mật khẩu mà chưa ghi danh thì máy chủ trả **token tạm**, không phải token
+thật:
+
+```
+POST /api/auth/login  -> { canGhiDanhTotp: true, tokenGhiDanh: "...", accessToken: "" }
+POST /api/auth/totp/ghi-danh   (Bearer token tạm)  -> { anhQr, biMat, biMatChiaNhom, uri }
+POST /api/auth/totp/xac-nhan   (Bearer token tạm)  -> { maKhoiPhuc[8], phien{accessToken...} }
+```
+
+**Phát token thật ở bước đầu là hỏng toàn bộ ý nghĩa của "bắt buộc"** — chỉ cần
+không bấm tiếp là vào được với một lớp. Đây là chỗ dễ làm sai nhất.
+
+Token tạm mang `token_use = totp-setup`. Policy mặc định đã đòi
+`token_use = access` từ trước (xem `Program.cs`), nên token tạm **tự động bị
+mọi endpoint khác từ chối**, không phải nhớ chặn từng chỗ. Chỉ policy
+`PolicyGhiDanhTotp` nhận cả hai loại, và chỉ hai endpoint ghi danh dùng nó.
+
+Đã có phép kiểm gọi token tạm vào `/api/devices`, `/api/auth/me`,
+`/api/storage`, `/api/users` — đều bị chặn.
+
+### Ba chốt chặn nữa
+
+- **Ghi danh dở thì dùng lại bí mật cũ, không sinh mới.** Người dùng quét xong,
+  lỡ tải lại trang, mà máy chủ sinh bí mật khác thì mã trên điện thoại thành vô
+  dụng và họ không hiểu vì sao gõ mãi không đúng. **Học từ AQC.**
+- **Bắt buộc thì không tự tắt được.** Thiếu chốt này thì ghi danh xong tắt ngay
+  là vào được mãi mãi với một lớp. Trả 401 kèm lý do; muốn gỡ thì nhờ quản trị.
+- **Xác nhận xong cấp luôn phiên thật**, khỏi bắt đăng nhập lại từ đầu — vừa
+  thừa vừa dễ tưởng là hỏng.
+
+### Mã QR sinh ở máy chủ
+
+Gói `QRCoder`, dùng `PngByteQRCode` chứ không phải `QRCode` (bản kia cần
+`System.Drawing`, mà ảnh chạy thật là Linux). Trả về
+`data:image/png;base64,...`, nhúng thẳng vào thẻ `img`.
+
+Sinh ở máy chủ thay vì vẽ bằng JS để không kéo thêm thư viện vào trang, và để
+máy trong xưởng không cần ra Internet. Vẫn giữ khoá chữ chia nhóm 4 ký tự làm
+đường dự phòng khi camera không quét được.
+
+### Ai bị bắt, ai không
+
+| Tài khoản | Bắt buộc | Vì sao |
+| --- | --- | --- |
+| Tạo mới từ 02/10 | **có** | mặc định của cột `TotpBatBuoc` |
+| Đã có trên máy A | không | cột mới mặc định `false` cho hàng cũ |
+| Quản trị đầu tiên do seed tạo | **không**, cố ý | xem dưới |
+
+**Tài khoản quản trị đầu tiên cố ý được miễn.** Lúc máy mới dựng nó là tài
+khoản duy nhất, nên **không có ai gỡ hộ** nếu ghi danh hỏng giữa chừng — mất
+điện thoại hay quét lỗi là khoá chết cả hệ thống. Mọi tài khoản khác đều có
+đường thoát `DELETE /api/users/{id}/totp`. Seed có log nhắc người này tự bật.
+
+`defaultValue: false` trong migration `BatBuocTotp` **là đúng ý**, không phải
+cái bẫy như lần `HoTroRemote`: bật đồng loạt là khoá luôn người đang trực máy A
+nếu lúc đó họ không cầm điện thoại. Muốn bật cho tất cả thì chạy một lần:
+
+```sql
+UPDATE Users SET TotpBatBuoc = 1;
+```
+
+### Thứ AQC có mà mình CHƯA có
+
+**AQC mã hoá bí mật TOTP trước khi lưu** (`_secretProtector.Protect`, khoá theo
+từng user). Mình đang lưu Base32 thô trong cột `TotpBiMat`. Hệ quả: ai đọc được
+database là tự sinh mã của bất kỳ ai, lớp thứ hai mất tác dụng mà không ai biết.
+
+Chưa làm vì cần chốt khoá mã hoá lấy từ đâu và xử lý ra sao khi đổi khoá. **Nên
+làm trước khi phát tool rộng hơn.**
+
+### Đã kiểm chứng
+
+- SmokeTest **190/190**, Api.Tests **145/145** (tăng từ 124).
+- **Ảnh QR thật**: xuất PNG từ chính backend, mở ra xem — đúng hình QR, có đủ
+  ba ô định vị, 1006 byte, chữ ký `\x89PNG`. Chuỗi `otpauth://` mang đúng bí
+  mật, `digits=6`, `period=30`.
+- Giao diện: chạy thật trong trình duyệt — form đăng nhập ẩn đi, màn ghi danh
+  hiện QR 200px kèm khoá gõ tay, và **không lưu phiên nào** trước khi xác nhận.
+- Phép kiểm `DangNhap` trong bộ kiểm nay **kêu to khi không có token**. Trước
+  đó nó trả chuỗi rỗng im lặng, nên lỗi lộ ra ở tận chỗ khác với thông báo
+  chẳng liên quan — mất mấy lượt mới lần ra.
+
+### Chưa kiểm chứng
+
+- **Chưa quét bằng điện thoại thật.** Thuật toán khớp vector RFC 6238 và ảnh QR
+  đúng hình, nhưng chưa ai đưa Microsoft Authenticator thật vào quét. Việc đầu
+  tiên nên làm trên máy A.
+- Chưa chạy trên SQL Server thật.
+
 ## Dữ liệu dùng chung, chia theo mục — làm 01/10
 
 Học cấu trúc từ **VDSA**: mục "Quản lý dữ liệu App" của họ không phải một kho

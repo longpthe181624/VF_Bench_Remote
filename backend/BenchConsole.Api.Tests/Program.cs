@@ -76,7 +76,31 @@ async Task<string> DangNhap(string email, string matKhau)
         new { email, matKhau });
     if (ma != HttpStatusCode.OK)
         throw new Exception($"đăng nhập {email} hỏng: {ma} {than}");
-    return than.GetProperty("accessToken").GetString()!;
+
+    // Đăng nhập trả 200 mà KHÔNG kèm token là chuyện có thật: tài khoản bắt
+    // buộc hai lớp thì bước này chỉ trả token tạm. Không kêu ở đây thì phép
+    // kiểm chạy tiếp với chuỗi rỗng rồi hỏng ở tận đâu, với một thông báo
+    // chẳng liên quan gì.
+    var token = than.GetProperty("accessToken").GetString()!;
+    if (token.Length == 0)
+        throw new Exception($"đăng nhập {email} không trả token: {than}");
+    return token;
+}
+
+/// <summary>
+/// Tắt cờ bắt buộc hai lớp cho một tài khoản thử.
+///
+/// Mọi tài khoản tạo qua API đều mặc định bắt buộc, nên không tắt thì mục nào
+/// cũng phải quét mã QR trước khi kiểm được thứ nó định kiểm. Luồng bắt buộc
+/// có mục riêng lo, ở đó mới là chỗ kiểm nó.
+/// </summary>
+void BoBatBuocTotp(string email)
+{
+    using var scope = may.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var u = db.Users.First(x => x.Email == email);
+    u.TotpBatBuoc = false;
+    db.SaveChanges();
 }
 
 Console.WriteLine("Phép kiểm tầng Api — dựng backend thật trong bộ nhớ");
@@ -161,6 +185,7 @@ var (maTaoUser, thanUser) = await Goi(HttpMethod.Post, "/api/users", new
 }, tokenAdmin);
 Check(maTaoUser == HttpStatusCode.OK, $"admin tạo user phải được, nhận {maTaoUser}");
 
+BoBatBuocTotp("viewer@thu.local");
 var tokenViewer = await DangNhap("viewer@thu.local", "Viewer@12345");
 
 var (maXem, _) = await Goi(HttpMethod.Get, "/api/devices", token: tokenViewer);
@@ -206,6 +231,7 @@ var (maTaoKs, _) = await Goi(HttpMethod.Post, "/api/users", new
 }, tokenAdmin);
 Check(maTaoKs == HttpStatusCode.OK, $"tạo tài khoản kỹ sư phải được, nhận {maTaoKs}");
 
+BoBatBuocTotp("kysu@thu.local");
 var tokenKySu = await DangNhap("kysu@thu.local", "Kysu@12345");
 
 var mpKho = new MultipartFormDataContent
@@ -456,6 +482,7 @@ await Goi(HttpMethod.Post, "/api/users", new
     email = "haibuoc@thu.local", hoTen = "Người thử hai lớp",
     matKhau = "Haibuoc@12345", vaiTro = new[] { "Viewer" },
 }, tokenAdmin);
+BoBatBuocTotp("haibuoc@thu.local");
 var tokenHai = await DangNhap("haibuoc@thu.local", "Haibuoc@12345");
 
 // Mã đúng tại thời điểm này, tính bằng chính thuật toán đã đối chiếu RFC 6238.
@@ -490,7 +517,7 @@ Check(maSaiXn == HttpStatusCode.Unauthorized, $"xác nhận bằng mã sai phả
 var (maXn, thanXn) = await Goi(HttpMethod.Post, "/api/auth/totp/xac-nhan",
     new { ma = MaBayGio(biMatThu) }, tokenHai);
 Check(maXn == HttpStatusCode.OK, $"xác nhận bằng mã đúng, nhận {maXn}");
-var maKhoiPhuc = thanXn.GetProperty("ma").EnumerateArray().Select(x => x.GetString()!).ToList();
+var maKhoiPhuc = thanXn.GetProperty("maKhoiPhuc").EnumerateArray().Select(x => x.GetString()!).ToList();
 Check(maKhoiPhuc.Count == 8, $"phải cấp 8 mã khôi phục, nhận {maKhoiPhuc.Count}");
 // Mất điện thoại mà không có mã khôi phục là khoá chết tài khoản.
 Check(maKhoiPhuc.Distinct().Count() == 8, "8 mã khôi phục phải khác nhau");
@@ -720,6 +747,87 @@ using (var scope = may.Services.CreateScope())
     Check(db.RolePermissions.Any(rp => rp.RoleId == rieng.Id && rp.PermissionId == userView.Id),
           "vai trò tự tạo KHÔNG bị đồng bộ ghi đè");
 }
+
+// ---------------------------------------------------------------- bắt buộc 2FA
+Nhom("Tài khoản mới bắt buộc ghi danh hai lớp");
+
+await Goi(HttpMethod.Post, "/api/users", new
+{
+    email = "moi@thu.local", hoTen = "Người mới",
+    matKhau = "Nguoimoi@123", vaiTro = new[] { "Viewer" },
+}, tokenAdmin);
+
+var (maVaoDau, thanLanDau) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "moi@thu.local", matKhau = "Nguoimoi@123" });
+Check(maVaoDau == HttpStatusCode.OK, $"đăng nhập lần đầu, nhận {maVaoDau}");
+Check(thanLanDau.GetProperty("canGhiDanhTotp").GetBoolean(),
+      "tài khoản mới phải bị bắt ghi danh ngay lần đăng nhập đầu");
+
+// Đây là chốt quan trọng nhất của mục này. Phát token thật ở bước này thì chỉ
+// cần KHÔNG bấm tiếp là bỏ qua được cả lớp thứ hai.
+Check(thanLanDau.GetProperty("accessToken").GetString() == "",
+      "bước ghi danh TUYỆT ĐỐI không được kèm token thật");
+var tokenTam = thanLanDau.GetProperty("tokenGhiDanh").GetString()!;
+Check(tokenTam.Length > 50, "phải cấp token tạm để gọi hai endpoint ghi danh");
+
+// Token tạm KHÔNG được mở bất kỳ endpoint nào khác.
+foreach (var duong in new[]{ "/api/devices", "/api/auth/me", "/api/storage", "/api/users" })
+{
+    var (ma, _) = await Goi(HttpMethod.Get, duong, token: tokenTam);
+    Check(ma == HttpStatusCode.Forbidden || ma == HttpStatusCode.Unauthorized,
+          $"token tạm không được mở {duong}, nhận {ma}");
+}
+
+// ---- ghi danh: phải có ảnh QR, đây là thứ người dùng báo thiếu
+var (maGd2, thanGd2) = await Goi(HttpMethod.Post, "/api/auth/totp/ghi-danh", null, tokenTam);
+Check(maGd2 == HttpStatusCode.OK, $"token tạm phải mở được endpoint ghi danh, nhận {maGd2}");
+var anhQr = thanGd2.GetProperty("anhQr").GetString()!;
+Check(anhQr.StartsWith("data:image/png;base64,"),
+      "phải trả ảnh QR nhúng thẳng được vào thẻ img");
+Check(anhQr.Length > 500, $"ảnh QR phải có nội dung thật, dài {anhQr.Length}");
+var biMat2 = thanGd2.GetProperty("biMat").GetString()!;
+Check(thanGd2.GetProperty("uri").GetString()!.Contains(biMat2),
+      "chuỗi otpauth phải mang đúng bí mật vừa cấp");
+
+// Gọi lại lần hai phải trả ĐÚNG bí mật cũ. Sinh mới là mã QR người dùng vừa
+// quét thành vô dụng mà họ không hiểu vì sao gõ mãi không đúng. Học từ AQC.
+var (_, thanGdLai) = await Goi(HttpMethod.Post, "/api/auth/totp/ghi-danh", null, tokenTam);
+Check(thanGdLai.GetProperty("biMat").GetString() == biMat2,
+      "ghi danh dở mà tải lại trang thì phải giữ nguyên bí mật cũ");
+
+// ---- xác nhận: vừa trả mã khôi phục vừa cấp phiên thật
+var (maXn2, thanXn2) = await Goi(HttpMethod.Post, "/api/auth/totp/xac-nhan",
+    new { ma = MaBayGio(biMat2) }, tokenTam);
+Check(maXn2 == HttpStatusCode.OK, $"xác nhận bằng mã đúng, nhận {maXn2}");
+Check(thanXn2.GetProperty("maKhoiPhuc").GetArrayLength() == 8, "phải cấp 8 mã khôi phục");
+var tokenThat = thanXn2.GetProperty("phien").GetProperty("accessToken").GetString()!;
+Check(tokenThat.Length > 50,
+      "xác nhận xong phải cấp luôn phiên thật, khỏi bắt đăng nhập lại");
+
+var (maDungThat, _) = await Goi(HttpMethod.Get, "/api/auth/me", token: tokenThat);
+Check(maDungThat == HttpStatusCode.OK, $"token sau khi ghi danh phải dùng được, nhận {maDungThat}");
+
+// ---- lần sau đăng nhập thì đòi mã, không đòi ghi danh nữa
+var (_, thanLanSau) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "moi@thu.local", matKhau = "Nguoimoi@123" });
+Check(!thanLanSau.GetProperty("canGhiDanhTotp").GetBoolean()
+      && thanLanSau.GetProperty("canMaTotp").GetBoolean(),
+      "ghi danh xong thì lần sau chỉ đòi mã, không bắt ghi danh lại");
+
+// ---- bắt buộc thì KHÔNG tự tắt được, nếu không bắt buộc thành trang trí
+var (maTatBb, thanTatBb) = await Goi(HttpMethod.Delete, "/api/auth/totp",
+    new { matKhau = "Nguoimoi@123" }, tokenThat);
+Check(maTatBb == HttpStatusCode.Unauthorized,
+      $"tài khoản bắt buộc hai lớp thì không tự tắt được, nhận {maTatBb}");
+Check(thanTatBb.GetProperty("error").GetString()!.Contains("bắt buộc"),
+      "phải nói rõ lý do từ chối");
+
+// ---- tài khoản CŨ không bị ép, để bản nâng cấp không khoá người đang trực
+var (_, thanAdminCu) = await Goi(HttpMethod.Post, "/api/auth/login",
+    new { email = "admin@benchconsole.local", matKhau = MatKhauAdmin });
+Check(!thanAdminCu.GetProperty("canGhiDanhTotp").GetBoolean()
+      && thanAdminCu.GetProperty("accessToken").GetString()!.Length > 50,
+      "tài khoản có từ trước vẫn đăng nhập bình thường, không bị ép ghi danh");
 
 // ---------------------------------------------------------------- /health
 Nhom("/health phải kiểm thật");

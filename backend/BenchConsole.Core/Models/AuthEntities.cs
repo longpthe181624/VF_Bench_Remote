@@ -52,6 +52,20 @@ public class User
     public DateTimeOffset? TotpBatLuc { get; set; }
 
     /// <summary>
+    /// Tài khoản này BẮT BUỘC dùng xác thực hai lớp.
+    ///
+    /// Mặc định `true`, nên mọi tài khoản tạo từ 02/10 đều phải ghi danh ngay
+    /// lần đăng nhập đầu: đúng mật khẩu thì nhận token tạm và màn quét mã QR,
+    /// chưa quét xong thì chưa vào được.
+    ///
+    /// Tài khoản có từ TRƯỚC giữ `false` — EF ghi mặc định của kiểu `bool` cho
+    /// hàng cũ, và ở đây đúng là thứ mình muốn. Bật đồng loạt là khoá luôn
+    /// người đang trực máy A nếu lúc đó họ không cầm điện thoại. Muốn bật cho
+    /// tất cả thì chạy một câu UPDATE, xem CLAUDE.md.
+    /// </summary>
+    public bool TotpBatBuoc { get; set; } = true;
+
+    /// <summary>
     /// Nhịp 30 giây của lần dùng mã thành công gần nhất.
     ///
     /// Chặn dùng lại: cửa sổ chấp nhận rộng 90 giây, nên thiếu cột này thì một

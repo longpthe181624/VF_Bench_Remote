@@ -160,6 +160,17 @@ public static class AuthSeed
             HoTen = "Quản trị hệ thống",
             MatKhauHash = BCrypt.Net.BCrypt.HashPassword(matKhau),
             TaoLuc = DateTimeOffset.UtcNow,
+
+            // Tài khoản quản trị ĐẦU TIÊN cố ý KHÔNG bị ép ghi danh hai lớp,
+            // khác mọi tài khoản tạo sau.
+            //
+            // Nó là tài khoản duy nhất lúc máy mới dựng, nên không có ai khác
+            // gỡ hộ nếu ghi danh hỏng giữa chừng — mất điện thoại hay quét lỗi
+            // là khoá chết cả hệ thống, không còn đường vào. Mọi tài khoản khác
+            // đều có đường thoát: DELETE /api/users/{id}/totp do admin gọi.
+            //
+            // Người này nên tự bật ngay sau khi đăng nhập lần đầu.
+            TotpBatBuoc = false,
         };
         db.Users.Add(user);
         await db.SaveChangesAsync(ct);
@@ -178,6 +189,11 @@ public static class AuthSeed
                 email, matKhau);
         else
             log.LogInformation("Đã tạo tài khoản quản trị đầu tiên: {Email}", email);
+
+        log.LogWarning(
+            "Tài khoản {Email} KHÔNG bị bắt xác thực hai lớp vì nó là tài khoản "
+            + "duy nhất lúc này, hỏng giữa chừng là không ai gỡ hộ được. "
+            + "Hãy tự bật trong mục Xác thực hai lớp sau khi đăng nhập.", email);
     }
 
     /// <summary>Mật khẩu ngẫu nhiên đủ mạnh, dùng bộ sinh số an toàn mật mã.</summary>

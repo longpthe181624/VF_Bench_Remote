@@ -280,14 +280,40 @@ public record DangNhapResponse(
     /// <summary>Lần đăng nhập này tiêu một mã khôi phục, còn lại bấy nhiêu.</summary>
     public int? MaKhoiPhucConLai { get; init; }
 
+    /// <summary>
+    /// True nghĩa là mật khẩu đúng nhưng tài khoản bắt buộc xác thực hai lớp mà
+    /// chưa ghi danh. Ba trường token ở trên đều rỗng; dùng
+    /// <see cref="TokenGhiDanh"/> để gọi hai endpoint ghi danh.
+    /// </summary>
+    public bool CanGhiDanhTotp { get; init; }
+
+    /// <summary>Token tạm, sống ngắn, chỉ mở được hai endpoint ghi danh.</summary>
+    public string? TokenGhiDanh { get; init; }
+
+    public static DangNhapResponse DoiGhiDanhTotp(string tokenGhiDanh) =>
+        new("", "", default, new NguoiDungDto(0, "", "", [], []))
+        { CanGhiDanhTotp = true, TokenGhiDanh = tokenGhiDanh };
+
     public static DangNhapResponse DoiMaTotp() =>
         new("", "", default, new NguoiDungDto(0, "", "", [], [])) { CanMaTotp = true };
 }
 
-/// <summary>Kết quả bắt đầu ghi danh TOTP. Bí mật chỉ hiện đúng lần này.</summary>
-public record GhiDanhTotpResponse(string BiMat, string BiMatChiaNhom, string Uri);
+/// <summary>
+/// Kết quả bắt đầu ghi danh TOTP. Bí mật chỉ hiện đúng lần này.
+///
+/// <paramref name="AnhQr"/> là `data:image/png;base64,...` — nhúng thẳng vào
+/// `&lt;img src&gt;` được. Sinh ở máy chủ thay vì vẽ bằng JS để không phải kéo
+/// thêm thư viện vào trang, và để máy bench trong xưởng không cần ra Internet.
+/// </summary>
+public record GhiDanhTotpResponse(string BiMat, string BiMatChiaNhom, string Uri, string AnhQr);
 
 public record XacNhanTotpRequest(string Ma);
+
+/// <summary>
+/// Xác nhận ghi danh xong thì vừa trả mã khôi phục vừa cấp token thật, để người
+/// dùng vào thẳng ứng dụng chứ không phải đăng nhập lại ngay sau khi quét.
+/// </summary>
+public record XacNhanTotpResponse(List<string> MaKhoiPhuc, DangNhapResponse Phien);
 
 /// <summary>Mã khôi phục trả về đúng MỘT lần, máy chủ chỉ giữ bản băm.</summary>
 public record MaKhoiPhucResponse(List<string> Ma);
