@@ -1008,6 +1008,30 @@ không bị ảnh hưởng gì**, ai muốn bật thì tự vào bật.
   ai thử. Đây là việc đầu tiên nên làm trên máy A.
 - Chưa chạy trên SQL Server thật.
 
+## Khoá ngoại tự tham chiếu: ClientSetNull, không phải SetNull — vá 01/10
+
+`Benches.ThuocVeId` trỏ về chính `Benches`. SQL Server **từ chối**
+`ON DELETE SET NULL` trên quan hệ tự tham chiếu (lỗi 1785, "may cause cycles or
+multiple cascade paths"), nên migration `ThietBiChung` không áp được: `Migrate()`
+ném ngay lúc khởi động, backend chết lặp **16 lần** trước khi tìm ra.
+
+**Máy đã áp migration từ trước thì không thấy gì** — EF bỏ qua migration đã ghi
+trong lịch sử. Chỉ database dựng mới mới dính. Đây là lý do bộ kiểm trên EF
+InMemory không bắt được: InMemory không có khái niệm khoá ngoại.
+
+Nay dùng `ClientSetNull`. Ý đồ giữ nguyên — xoá thiết bị chứa thì con đứng
+riêng — nhưng **việc gỡ liên kết chuyển sang EF làm phía ứng dụng**, database
+chỉ khai `NO ACTION`.
+
+**Hệ quả phải nhớ:** mọi chỗ xoá thiết bị **phải `Include(b => b.ChuaNhung)`**
+và tự gán `ThuocVeId = null` cho con. Quên là database chặn bằng lỗi khoá ngoại.
+`BenchesController.Delete` đã sửa, kèm phép kiểm.
+
+**Và nhớ sửa cả Designer của migration mới.** Snapshot với các file `.Designer.cs`
+chụp lại cấu hình này; migration nào sinh ra trước lúc vá đều kế thừa cấu hình
+cũ, nên để nguyên thì mỗi migration mới lại nhân bản thêm một lần. Migration
+`BatBuocTotp` sinh ngày 02/10 cũng dính và đã sửa.
+
 ## Bắt buộc xác thực hai lớp từ lần đăng nhập đầu — làm 02/10
 
 Lỗi người dùng báo: **đăng nhập lần đầu không hiện mã QR để quét.** Hai lớp

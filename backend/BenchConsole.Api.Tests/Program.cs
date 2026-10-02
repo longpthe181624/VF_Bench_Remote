@@ -459,6 +459,25 @@ using (var scope = may.Services.CreateScope())
           "thiết bị không agent phải giữ cờ hoTroRemote = false trong database");
 }
 
+// ---- xoá thiết bị CHỨA thì con phải đứng riêng, không xoá theo và không chặn
+//
+// Khoá ngoại tự tham chiếu dùng ClientSetNull, nghĩa là EF phải tự gỡ liên kết.
+// Quên nạp thiết bị con thì SQL Server chặn lệnh xoá bằng lỗi khoá ngoại —
+// mà InMemory không ép khoá ngoại nên phép kiểm này chỉ canh được phần hành vi:
+// con còn sống và đã rời khỏi thiết bị cha.
+await Goi(HttpMethod.Post, "/api/devices",
+    new { code = "BENCH-XOA", model = "VF8" }, tokenAdmin);
+await Goi(HttpMethod.Post, "/api/devices",
+    new { code = "MHU-XOA", model = "VF8", loai = "ecu", thuocVe = "BENCH-XOA" }, tokenAdmin);
+
+var (maXoaCha, _) = await Goi(HttpMethod.Delete, "/api/devices/BENCH-XOA", token: tokenAdmin);
+Check(maXoaCha == HttpStatusCode.NoContent, $"xoá được thiết bị đang chứa thiết bị khác, nhận {maXoaCha}");
+
+var (maConConSong, thanCon) = await Goi(HttpMethod.Get, "/api/devices/MHU-XOA", token: tokenAdmin);
+Check(maConConSong == HttpStatusCode.OK, "thiết bị con KHÔNG được xoá theo");
+Check(thanCon.GetProperty("thuocVeId").ValueKind == JsonValueKind.Null,
+      "thiết bị con phải đứng riêng sau khi xoá thiết bị chứa nó");
+
 // ---------------------------------------------------------------- đường dẫn cũ
 Nhom("Đường dẫn cũ phải chết hẳn");
 

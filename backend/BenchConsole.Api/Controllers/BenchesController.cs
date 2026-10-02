@@ -253,11 +253,22 @@ public class BenchesController(
     [HasPermission(MaQuyen.BenchDelete)]
     public async Task<IActionResult> Delete(string code, CancellationToken ct)
     {
-        var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
+        // Nạp kèm thiết bị con. Khoá ngoại tự tham chiếu dùng ClientSetNull
+        // (SQL Server từ chối ON DELETE SET NULL trên quan hệ tự tham chiếu —
+        // lỗi 1785), nghĩa là việc gỡ liên kết do EF làm chứ không do database.
+        // Không nạp thì EF không biết có con nào để gỡ, và database chặn lệnh
+        // xoá bằng lỗi khoá ngoại.
+        var bench = await db.Benches
+            .Include(b => b.ChuaNhung)
+            .FirstOrDefaultAsync(b => b.Code == code, ct);
         if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
 
         if (bench.State == BenchState.Running)
             return Conflict(new { error = "Thiết bị đang chạy test. Dừng test trước khi xoá." });
+
+        // Thiết bị con ĐỨNG RIÊNG chứ không xoá theo: tháo bench đi thì con MHU
+        // vẫn còn ngoài đời, và lịch sử chạy của nó phải giữ nguyên.
+        foreach (var con in bench.ChuaNhung) con.ThuocVeId = null;
 
         db.Benches.Remove(bench);
         await db.SaveChangesAsync(ct);
