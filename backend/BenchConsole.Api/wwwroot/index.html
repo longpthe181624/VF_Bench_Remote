@@ -13,6 +13,7 @@
     font-size:13px; line-height:1.5;
   }
   .wrap{max-width:1080px; margin:0 auto; padding:20px 20px 60px;}
+  [hidden]{display:none !important;}
 
   header{display:flex; align-items:baseline; gap:10px; margin-bottom:4px;}
   h1{font-size:17px; font-weight:700; margin:0; letter-spacing:-.01em;}
@@ -99,7 +100,9 @@
     <span class="meta" id="clock"></span>
   </header>
 
-  <section id="man-dang-nhap" style="display:none">
+  <div class="err" id="err" role="alert"></div>
+
+  <section id="man-dang-nhap">
     <div class="sec-head"><h2>Đăng nhập</h2></div>
     <form class="addbench show" id="dn-form">
       <input id="dn-email" type="email" placeholder="email" style="width:240px" required>
@@ -114,10 +117,15 @@
     <div class="meta" id="dn-nhac" style="display:none">
       Nhập mã xác thực trong Microsoft Authenticator.
     </div>
-    <div id="dn-ghidanh"></div>
   </section>
 
-  <div id="man-chinh">
+  <section id="man-ghi-danh" hidden>
+    <div class="sec-head"><h2>Thiết lập xác thực hai lớp</h2></div>
+    <div id="dn-ghidanh"></div>
+    <button type="button" id="dn-quay-lai" class="ghost">Quay lại đăng nhập</button>
+  </section>
+
+  <div id="man-chinh" hidden>
 
     <form class="addbench" id="mk-form">
       <input id="mk-cu" type="password" placeholder="mật khẩu hiện tại" style="width:180px" required>
@@ -138,8 +146,6 @@
     </section>
 
   <div class="meta">Giao diện tạm. Dữ liệu tự làm mới mỗi 5 giây.</div>
-
-  <div class="err" id="err"></div>
 
   <section>
     <div class="sec-head">
@@ -349,6 +355,7 @@ const API = "";
 // được bằng JavaScript nên kịch bản XSS lấy được token.
 const KHOA_PHIEN = "benchconsole.phien";
 let phien = null;
+let manHienTai = "man-dang-nhap";
 try { phien = JSON.parse(localStorage.getItem(KHOA_PHIEN) || "null"); } catch {}
 
 function luuPhien(p){
@@ -601,7 +608,7 @@ function benchRow(b){
 async function load(){
   // Chưa đăng nhập thì đừng gọi gì cả — gọi là nhận một loạt 401 rồi màn hình
   // đầy chữ đỏ trong khi lý do thật chỉ là chưa đăng nhập.
-  if (!phien?.accessToken) return;
+  if (!phien?.accessToken || manHienTai !== "man-chinh") return;
 
   const q = document.getElementById("q").value.trim();
   const state = document.getElementById("filter-state").value;
@@ -660,7 +667,7 @@ async function load(){
 
     // Token hết hạn thì api() đã đưa về màn đăng nhập rồi. Vẽ tiếp là rải chín
     // dòng lỗi lên trên màn hình đó.
-    if (!phien?.accessToken) return;
+    if (!phien?.accessToken || manHienTai !== "man-chinh") return;
 
     showErr(loiTai.length
       ? "Không tải được: " + loiTai.join(", ") + "."
@@ -1384,18 +1391,31 @@ khoForm.addEventListener("submit", async (ev) => {
   } catch(e){ showErr(e.message); }
 });
 
+function chuyenMan(id){
+  manHienTai = id;
+  for (const ten of ["man-dang-nhap", "man-ghi-danh", "man-chinh"]){
+    document.getElementById(ten).hidden = ten !== id;
+  }
+}
+
 function veManDangNhap(){
-  document.getElementById("man-dang-nhap").style.display = "";
-  document.getElementById("man-chinh").style.display = "none";
+  chuyenMan("man-dang-nhap");
   document.getElementById("dang-xuat").style.display = "none";
   document.getElementById("doi-mk").style.display = "none";
   document.getElementById("mk-form").classList.remove("show");
   document.getElementById("ai-day").textContent = "";
+  document.getElementById("dn-ghidanh").replaceChildren();
+  document.getElementById("dn-form").reset();
+  hienBuoc2(false);
+  document.getElementById("dn-ma").style.display = "";
+  document.getElementById("dn-kp").style.display = "none";
+  document.getElementById("dn-doi-cach").textContent = "Dùng mã khôi phục";
+  document.getElementById("dn-nhac").textContent = "Nhập mã xác thực trong Microsoft Authenticator.";
 }
 
 function veManChinh(){
-  document.getElementById("man-dang-nhap").style.display = "none";
-  document.getElementById("man-chinh").style.display = "";
+  if (!phien?.accessToken || !phien?.nguoiDung) return;
+  chuyenMan("man-chinh");
   document.getElementById("dang-xuat").style.display = "";
   document.getElementById("doi-mk").style.display = "";
   const nd = phien?.nguoiDung;
@@ -1464,10 +1484,13 @@ userForm.addEventListener("submit", async (ev) => {
 ///
 /// Dùng token TẠM chứ không phải token thật — lúc này người dùng mới qua một
 /// lớp, chưa được vào ứng dụng. Token tạm chỉ mở được đúng hai endpoint này.
-async function moManGhiDanh(tokenTam){
+async function moManGhiDanh(tokenTam, batBuoc = true){
+  luuPhien(null);
+  veManDangNhap();
+  chuyenMan("man-ghi-danh");
+  showErr(null);
   const khung = document.getElementById("dn-ghidanh");
-  document.getElementById("dn-form").style.display = "none";
-  document.getElementById("dn-nhac").style.display = "none";
+  khung.textContent = "Đang tải mã QR…";
 
   const goi = (duong, than) => fetch(API + duong, {
     method: "POST",
@@ -1480,7 +1503,8 @@ async function moManGhiDanh(tokenTam){
     const res = await goi("/api/auth/totp/ghi-danh");
     g = await res.json();
     if (!res.ok) throw new Error(g?.error || res.status);
-  } catch(e){ showErr(e.message); return; }
+  } catch(e){ khung.textContent = "Không tải được mã QR. Quay lại đăng nhập để thử lại."; showErr(e.message); return; }
+  if (manHienTai !== "man-ghi-danh") return;
 
   const oMa = el("input", {placeholder:"Mã xác thực", style:"width:120px", inputmode:"numeric"});
   const nut = el("button", {class:"primary"}, "Xác nhận");
@@ -1490,7 +1514,8 @@ async function moManGhiDanh(tokenTam){
     el("div", {},
       el("div", {style:"font-weight:600; margin-bottom:6px"}, "Thiết lập xác thực hai lớp"),
       el("div", {class:"meta"},
-        "Tài khoản này bắt buộc xác thực hai lớp. Quét mã bằng Microsoft Authenticator."),
+        (batBuoc ? "Tài khoản này bắt buộc xác thực hai lớp. " : "") +
+        "Quét mã bằng Microsoft Authenticator, rồi nhập mã xác thực để tiếp tục."),
       el("img", {src: g.anhQr, alt:"Mã QR", width:"200", height:"200",
                  style:"display:block; margin:10px 0; border:1px solid #e9e9e9; border-radius:7px"}),
       el("div", {class:"meta"}, "Không quét được thì nhập khoá bằng tay:"),
@@ -1499,25 +1524,36 @@ async function moManGhiDanh(tokenTam){
       el("div", {style:"display:flex; gap:6px; align-items:center"}, oMa, nut))));
 
   nut.addEventListener("click", async () => {
+    nut.disabled = true;
+    showErr(null);
     try {
       const res = await goi("/api/auth/totp/xac-nhan", {ma: oMa.value.trim()});
       const r = await res.json();
       if (!res.ok) throw new Error(r?.error || res.status);
+      if (manHienTai !== "man-ghi-danh") return;
+      if (!r.phien?.accessToken || !r.phien?.nguoiDung)
+        throw new Error("Máy chủ chưa cấp phiên đăng nhập hợp lệ.");
 
       // Máy chủ cấp luôn phiên thật, khỏi bắt đăng nhập lại từ đầu.
       luuPhien(r.phien);
       khung.innerHTML = "";
-      document.getElementById("dn-form").style.display = "";
       document.getElementById("dn-mk").value = "";
       showErr(null);
       veManChinh();
       load();
       hienMaKhoiPhuc(r.maKhoiPhuc);
       showToast("Đã bật xác thực hai lớp.");
-    } catch(e){ showErr(e.message); }
+    } catch(e){ if (manHienTai === "man-ghi-danh") showErr(e.message); }
+    finally { nut.disabled = false; }
   });
   oMa.focus();
 }
+
+document.getElementById("dn-quay-lai").addEventListener("click", () => {
+  luuPhien(null);
+  veManDangNhap();
+  showErr(null);
+});
 
 /// Hiện phần nhập mã khi máy chủ báo tài khoản có bật hai lớp.
 function hienBuoc2(co){
@@ -1558,18 +1594,21 @@ document.getElementById("dn-form").addEventListener("submit", async (ev) => {
     // mở được hai endpoint ghi danh. Hiện mã QR để quét rồi dừng ở đây.
     if (body?.canGhiDanhTotp){
       await moManGhiDanh(body.tokenGhiDanh);
-      showErr(null);
       return;
     }
 
     // Mật khẩu đúng nhưng còn thiếu mã: máy chủ cố ý trả 200 mà KHÔNG kèm
     // token. Hiện ô nhập mã rồi dừng ở đây.
     if (body?.canMaTotp){
+      luuPhien(null);
+      chuyenMan("man-dang-nhap");
       hienBuoc2(true);
       showErr(null);
       return;
     }
 
+    if (!body?.accessToken || !body?.nguoiDung)
+      throw new Error("Máy chủ chưa cấp phiên đăng nhập hợp lệ.");
     hienBuoc2(false);
     document.getElementById("dn-ma").value = "";
     document.getElementById("dn-kp").value = "";
@@ -1591,11 +1630,8 @@ document.getElementById("dn-form").addEventListener("submit", async (ev) => {
 // ---------------------------------------------------------------- hai lớp
 //
 // Mã sinh theo RFC 6238 nên Microsoft Authenticator, Google Authenticator hay
-// app nào cùng chuẩn đều dùng được. Trang này KHÔNG vẽ mã QR: vẽ QR phải kéo
-// thêm thư viện, mà Microsoft Authenticator có sẵn đường "Add account → Other
-// → Enter key manually". Gõ tay 32 ký tự một lần đổi lấy không thêm phụ thuộc.
-
-let totpBiMatDangGhiDanh = null;
+// app nào cùng chuẩn đều dùng được. Ảnh QR do máy chủ sinh; khoá chữ là cách
+// nhập dự phòng khi điện thoại không quét được.
 
 async function napTinhTrangTotp(){
   if (!phien?.accessToken) return;
@@ -1618,39 +1654,8 @@ async function napTinhTrangTotp(){
 }
 
 document.getElementById("totp-bat").addEventListener("click", async () => {
-  const khung = document.getElementById("totp-khung");
-  try {
-    const g = await api("/api/auth/totp/ghi-danh", {method:"POST"});
-    totpBiMatDangGhiDanh = g.biMat;
-
-    const oMa = el("input", {placeholder:"Mã xác thực", style:"width:110px", inputmode:"numeric"});
-    khung.innerHTML = "";
-    khung.appendChild(el("div", {class:"addbench show"},
-      el("div", {},
-        el("div", {}, "Quét mã bằng Microsoft Authenticator."),
-      el("img", {src: g.anhQr, alt:"Mã QR", width:"180", height:"180",
-                 style:"display:block; margin:8px 0; border:1px solid #e9e9e9; border-radius:7px"}),
-      el("div", {class:"meta"}, "Không quét được thì nhập khoá bằng tay:"),
-        el("div", {class:"meta", style:"margin-top:8px"}, "Khoá bí mật"),
-        el("div", {class:"code", style:"font-size:16px; letter-spacing:1px; margin:6px 0"}, g.biMatChiaNhom),
-        el("div", {class:"meta"}, "Mã xác thực"),
-        el("div", {style:"margin-top:6px"}, oMa,
-          el("button", {class:"primary", style:"margin-left:6px", onclick: async () => {
-            try {
-              const r = await api("/api/auth/totp/xac-nhan", {
-                method:"POST", body: JSON.stringify({ma: oMa.value.trim()}),
-              });
-              // Endpoint cấp luôn cặp token mới; không lưu lại thì phiên cũ
-              // vẫn chạy nhưng hết hạn sớm hơn mong đợi.
-              if (r.phien?.accessToken) luuPhien(r.phien);
-              hienMaKhoiPhuc(r.maKhoiPhuc);
-              napTinhTrangTotp();
-              showErr(null);
-            } catch(e){ showErr(e.message); }
-          }}, "Xác nhận")),
-      )));
-    showErr(null);
-  } catch(e){ showErr(e.message); }
+  if (!phien?.accessToken) return;
+  await moManGhiDanh(phien.accessToken, false);
 });
 
 /// Mã khôi phục chỉ hiện ĐÚNG MỘT LẦN — máy chủ chỉ giữ bản băm nên không in
@@ -1728,9 +1733,20 @@ function tickClock(){
 tickClock();
 setInterval(tickClock, 1000);
 
-// Có token cũ thì vào thẳng. Token hỏng hay hết hạn thì lần gọi API đầu tiên
-// trả 401 và api() tự đá về màn đăng nhập, nên không cần kiểm trước ở đây.
-if (phien?.accessToken){ veManChinh(); load(); } else { veManDangNhap(); }
+// Kiểm tra phiên lưu trước khi hiện ứng dụng để tránh lộ màn chính trong lúc
+// token cũ đang bị máy chủ từ chối.
+async function khoiDong(){
+  veManDangNhap();
+  if (!phien?.accessToken) return;
+  try {
+    const nguoiDung = await api("/api/auth/me");
+    if (!phien?.accessToken || manHienTai !== "man-dang-nhap") return;
+    luuPhien({...phien, nguoiDung});
+    veManChinh();
+    load();
+  } catch(e){ showErr(e.message); }
+}
+khoiDong();
 
 // Vòng làm mới tự bỏ qua khi chưa đăng nhập, xem đầu hàm load().
 setInterval(load, 5000);
