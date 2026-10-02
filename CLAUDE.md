@@ -87,6 +87,12 @@ Windows 11 + Docker Desktop + PowerShell, và Git Bash cho tool Bash.
 - **Không có** LibreOffice và pandoc, nên không render được `.docx` ra ảnh để
   soi bố cục. **Có** `python-docx` để đọc ngược file kiểm tra nội dung.
 - Gói npm `docx` chưa cài sẵn, phải `npm install docx` trong scratchpad.
+- **Máy B ĐÃ CÓ SQL Server thật** (`MSSQL$SQLEXPRESS`, chạy sẵn) từ 02/10. Mọi
+  chỗ trong file này nói "chưa chạy trên SQL Server thật" là ghi trước mốc đó.
+  Nay kiểm được bằng `scripts\kiem-db.ps1`.
+- **File `.ps1` có chữ tiếng Việt PHẢI có BOM UTF-8.** PowerShell 5.1 không có
+  BOM thì đọc theo bảng mã ANSI, chữ vỡ và cú pháp hỏng ngay — đã dính với
+  `kiem-db.ps1`.
 
 ## Tình trạng
 
@@ -1767,6 +1773,29 @@ trên bench có adapter CAN.
 - **Kiểm chứng bằng cách chạy thật, đừng đoán.** Trước khi nói "xong", phải
   build được, chạy được, hoặc có output chứng minh. Nếu không kiểm chứng được
   thì nói thẳng phần nào chưa kiểm chứng và vì sao.
+- **Có migration mới thì chạy `scripts\kiem-db.ps1` TRƯỚC KHI ĐẨY.**
+
+  Bộ kiểm tầng Api chạy trên EF InMemory, mà InMemory **không có khoá ngoại,
+  không ép unique, không hiểu cascade** — đúng ba thứ đã gãy ngoài thực tế. Giá
+  đã trả: `ThietBiChung` dùng `ON DELETE SET NULL` trên khoá ngoại tự tham
+  chiếu, InMemory không thấy gì, tới máy A thì `Migrate()` ném ngay lúc khởi
+  động và backend chết lặp 16 lần.
+
+  Script dựng toàn bộ chuỗi migration lên một database **trắng** trên SQL Server
+  thật rồi xoá đi, và kiểm `has-pending-model-changes`. Hai thứ InMemory không
+  bao giờ kiểm được.
+
+- **Gộp thay đổi schema, đừng đẻ migration theo từng ý nhỏ.** Bốn ngày 8
+  migration, trong đó **3 cái phải sửa tay sau khi sinh**, và thư mục
+  `Migrations/` nay **8.171 dòng — nhiều hơn cả code tự viết (7.426)**. Mỗi
+  migration kéo theo một bản chụp toàn bộ model trong `.Designer.cs`, nên một
+  cấu hình sai được nhân bản sang mọi migration sinh sau nó. Đã dính đúng thế
+  với `DeleteBehavior.SetNull`.
+
+- **Chú thích đang quá dày: 25% số dòng code.** Quy ước "giải thích tại sao" là
+  đúng, nhưng cứ bốn dòng một dòng chú thích thì phần lớn trong đó đang mô tả
+  lại thứ code đã nói rõ. Chỉ giữ chú thích cho chỗ mà **đọc code không suy ra
+  được lý do**: bẫy đã dính, quyết định đánh đổi, ràng buộc từ bên ngoài.
 - Comment giải thích **tại sao**, không mô tả lại code. Ví dụ tốt: "Ghi lệnh
   vào DB trước khi publish, vì nếu publish trước mà ghi DB lỗi thì bench đã
   chạy test nhưng Console không biết mình vừa ra lệnh gì."
