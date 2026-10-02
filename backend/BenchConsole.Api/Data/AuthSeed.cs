@@ -72,7 +72,8 @@ public static class AuthSeed
         await VaiTroAsync(db, RoleEngineer, "Kỹ sư test",
             "Chạy test, quản lý gói và xem báo cáo. Không quản trị người dùng.",
             quyen.Select(p => p.Ma).Where(m =>
-                !m.StartsWith("USER.") && !m.StartsWith("ROLE.")), ct);
+                !m.StartsWith("USER.") && !m.StartsWith("ROLE.")
+                && m != MaQuyen.DuLieuMuc), ct);
 
         // Chỉ xem phần CHUYÊN MÔN, không phải xem mọi thứ.
         //

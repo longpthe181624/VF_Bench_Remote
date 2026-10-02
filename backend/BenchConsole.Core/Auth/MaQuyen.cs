@@ -46,6 +46,14 @@ public static class MaQuyen
     public const string DuLieuUpload = "DULIEU.UPLOAD";
     public const string DuLieuDelete = "DULIEU.DELETE";
 
+    /// <summary>
+    /// Thêm, sửa, xoá MỤC trong kho dữ liệu chung — khác với thêm file vào mục.
+    ///
+    /// Cố ý KHÔNG cấp cho Engineer: đổi danh mục là đổi cách cả nhóm sắp xếp
+    /// tài liệu, không phải việc thường ngày. Vai trò tự tạo vẫn tích được.
+    /// </summary>
+    public const string DuLieuMuc = "DULIEU.MUC";
+
     public const string KhoView = "KHO.VIEW";
     public const string KhoUpload = "KHO.UPLOAD";
     public const string KhoDelete = "KHO.DELETE";
@@ -88,6 +96,7 @@ public static class MaQuyen
         new(DuLieuView,   "DULIEU", "VIEW",   "Xem dữ liệu dùng chung"),
         new(DuLieuUpload, "DULIEU", "UPLOAD", "Tải dữ liệu dùng chung lên"),
         new(DuLieuDelete, "DULIEU", "DELETE", "Xoá dữ liệu dùng chung"),
+        new(DuLieuMuc,    "DULIEU", "MUC",    "Thêm, sửa, xoá mục dữ liệu chung"),
 
         new(KhoView,    "KHO", "VIEW",     "Xem kho file của mình"),
         new(KhoUpload,  "KHO", "UPLOAD",   "Tải file lên kho của mình"),

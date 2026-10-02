@@ -143,6 +143,38 @@ public class DuAn
 }
 
 /// <summary>
+/// Một ngăn trong kho dữ liệu dùng chung. Quản trị tự thêm được.
+///
+/// Tách thành bảng riêng thay vì hằng số trong code (đổi 02/10): các mục chỉ
+/// khác nhau cái tên, nên bắt sửa code để thêm một ngăn là chặn người dùng ở
+/// chỗ không đáng chặn.
+/// </summary>
+public class MucDuLieuChung
+{
+    public int Id { get; set; }
+
+    /// <summary>Mã ngắn, duy nhất, đi vào URL. Chuẩn hoá qua <see cref="LoaiDuLieuChung.ChuanHoaMa"/>.</summary>
+    public string Ma { get; set; } = "";
+
+    public string Ten { get; set; } = "";
+    public string? MoTa { get; set; }
+
+    /// <summary>Thứ tự hiện trên giao diện. Nhỏ hơn thì đứng trước.</summary>
+    public int ThuTu { get; set; }
+
+    /// <summary>
+    /// Mục dựng sẵn. **Không xoá được.**
+    ///
+    /// Riêng `khac` là chỗ file rơi vào khi tải lên không chọn mục; xoá nó là
+    /// để lại những file trỏ vào một mã không tồn tại. Ba mục còn lại giữ cờ
+    /// này vì chúng là thứ hệ thống hứa có sẵn — vẫn đổi được tên hiển thị.
+    /// </summary>
+    public bool MacDinh { get; set; }
+
+    public DateTimeOffset TaoLuc { get; set; }
+}
+
+/// <summary>
 /// Một file trong kho dữ liệu dùng chung.
 ///
 /// Khác <see cref="TepNguoiDung"/> ở chỗ ai có quyền cũng xem được — đây là

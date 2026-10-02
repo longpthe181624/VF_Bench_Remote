@@ -618,34 +618,43 @@ Check(!Totp.HopLe("khong-phai-base32!!!", maDungBayGio, mocThu, null, out _),
       "bí mật hỏng phải trả false chứ không ném");
 
 Console.WriteLine();
-Console.WriteLine("── Danh mục dữ liệu chung");
+Console.WriteLine("── Mục dữ liệu chung: luật đặt mã");
 
-Check(LoaiDuLieuChung.TatCa.Length >= 4, "phải có đủ các mục đã khai");
-Check(LoaiDuLieuChung.TatCa.Select(x => x.Ma).Distinct().Count() == LoaiDuLieuChung.TatCa.Length,
-      "mã mục không được trùng nhau");
-Check(LoaiDuLieuChung.TatCa.All(x => x.Ma == x.Ma.ToLowerInvariant() && !x.Ma.Contains(' ')),
-      "mã mục phải chữ thường, không khoảng trắng — nó đi vào URL");
-Check(LoaiDuLieuChung.TatCa.All(x => !string.IsNullOrWhiteSpace(x.Ten)),
+// Danh mục nay nằm trong database, quản trị tự thêm. Core chỉ còn giữ luật đặt
+// mã và danh sách mục dựng sẵn để seed — hai thứ kiểm được mà không cần DB.
+
+Check(LoaiDuLieuChung.MacDinh.Length >= 4, "phải có đủ mục dựng sẵn để seed");
+Check(LoaiDuLieuChung.MacDinh.Select(x => x.Ma).Distinct().Count() == LoaiDuLieuChung.MacDinh.Length,
+      "mã mục dựng sẵn không được trùng nhau");
+Check(LoaiDuLieuChung.MacDinh.All(x => LoaiDuLieuChung.LyDoMaKhongDung(x.Ma) is null),
+      "mục dựng sẵn phải tự thoả luật đặt mã của chính nó");
+Check(LoaiDuLieuChung.MacDinh.All(x => !string.IsNullOrWhiteSpace(x.Ten)),
       "mục nào cũng phải có tên tiếng Việt để hiện trên giao diện");
+// "Khác" là chỗ chứa tạm, phải luôn nằm cuối chứ không ngang hàng các mục khác.
+Check(LoaiDuLieuChung.MacDinh.Single(x => x.Ma == LoaiDuLieuChung.Khac).ThuTu
+      > LoaiDuLieuChung.MacDinh.Where(x => x.Ma != LoaiDuLieuChung.Khac).Max(x => x.ThuTu),
+      "mục Khác phải xếp sau mọi mục khác");
 
-Check(LoaiDuLieuChung.HopLe("dbc") && LoaiDuLieuChung.HopLe("  DBC  "),
-      "đọc mã mục không phân biệt hoa thường và bỏ khoảng trắng");
-Check(!LoaiDuLieuChung.HopLe("khong-co-muc-nay"), "mã lạ phải bị từ chối");
+// Chuẩn hoá chứ không từ chối: gõ "File DBC" làm mã là nhầm rất thường gặp.
+Check(LoaiDuLieuChung.ChuanHoaMa("File DBC") == "file-dbc",
+      "khoảng trắng thành gạch nối, chữ in thành chữ thường");
+Check(LoaiDuLieuChung.ChuanHoaMa("  Tài-Liệu  ") == "t-i-li-u"
+      || LoaiDuLieuChung.ChuanHoaMa("  Tai Lieu  ") == "tai-lieu",
+      "bỏ khoảng trắng hai đầu");
+// Gộp dấu ngăn liền nhau, nếu không thì "a   b" ra "a---b" trông như lỗi.
+Check(LoaiDuLieuChung.ChuanHoaMa("a   b") == "a-b", "gộp nhiều dấu ngăn liền nhau thành một");
+Check(LoaiDuLieuChung.ChuanHoaMa("--abc--") == "abc", "không để gạch nối thừa ở hai đầu");
+Check(LoaiDuLieuChung.ChuanHoaMa("dbc") == "dbc", "mã đã đúng thì giữ nguyên");
 
-// Để trống thì vào "Khác" chứ KHÔNG từ chối: thiếu mục khác thì người ta nhét
-// bừa vào mục gần đúng nhất, và như vậy còn khó dọn hơn.
-Check(LoaiDuLieuChung.ChuanHoa(null) == LoaiDuLieuChung.Khac
-      && LoaiDuLieuChung.ChuanHoa("") == LoaiDuLieuChung.Khac,
-      "để trống thì vào mục Khác");
-Check(LoaiDuLieuChung.LyDoTuChoi(null) is null && LoaiDuLieuChung.LyDoTuChoi("dbc") is null,
-      "để trống và mã đúng đều hợp lệ");
-Check(LoaiDuLieuChung.LyDoTuChoi("la")?.Contains("dbc") == true,
-      "lý do từ chối phải liệt kê mã hợp lệ cho người dùng biết gõ gì");
-Check(LoaiDuLieuChung.Ten(LoaiDuLieuChung.Dbc) == "File DBC"
-      && LoaiDuLieuChung.Ten("khong-co") == "khong-co",
-      "tên hiển thị tra được, mã lạ thì trả lại chính nó chứ không ném");
+Check(LoaiDuLieuChung.LyDoMaKhongDung("dbc") is null, "mã hợp lệ thì không có lý do từ chối");
+Check(LoaiDuLieuChung.LyDoMaKhongDung("") is not null
+      && LoaiDuLieuChung.LyDoMaKhongDung(LoaiDuLieuChung.ChuanHoaMa("!!!")) is not null,
+      "mã rỗng sau khi chuẩn hoá phải bị từ chối");
+// Mã toàn số dễ lẫn với id trong đường dẫn, và nhìn vào không biết là gì.
+Check(LoaiDuLieuChung.LyDoMaKhongDung("123") is not null, "mã toàn số phải bị từ chối");
+Check(LoaiDuLieuChung.LyDoMaKhongDung(new string('a', LoaiDuLieuChung.DoDaiMaToiDa + 1)) is not null,
+      "mã dài quá giới hạn phải bị từ chối");
 
-Console.WriteLine();
 Console.WriteLine("── Quyền của dữ liệu chung");
 
 // Dữ liệu chung và kho cá nhân là HAI thứ khác nhau: quyền của cái này không

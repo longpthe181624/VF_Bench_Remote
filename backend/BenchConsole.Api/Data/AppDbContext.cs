@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Bench> Benches => Set<Bench>();
     public DbSet<DuAn> DuAns => Set<DuAn>();
     public DbSet<TepDuLieuChung> TepDuLieuChungs => Set<TepDuLieuChung>();
+    public DbSet<MucDuLieuChung> MucDuLieuChungs => Set<MucDuLieuChung>();
     public DbSet<ThietBiDuAn> ThietBiDuAns => Set<ThietBiDuAn>();
     public DbSet<BenchCommand> Commands => Set<BenchCommand>();
     public DbSet<Run> Runs => Set<Run>();
@@ -91,6 +92,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // nắm hash trỏ vào tài khoản không còn tồn tại.
             e.HasOne(x => x.User).WithMany(x => x.MaKhoiPhucs)
                 .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<MucDuLieuChung>(e =>
+        {
+            e.HasIndex(x => x.Ma).IsUnique();
+            e.Property(x => x.Ma).HasMaxLength(LoaiDuLieuChung.DoDaiMaToiDa).IsRequired();
+            e.Property(x => x.Ten).HasMaxLength(128).IsRequired();
+            e.Property(x => x.MoTa).HasMaxLength(512);
         });
 
         b.Entity<TepDuLieuChung>(e =>

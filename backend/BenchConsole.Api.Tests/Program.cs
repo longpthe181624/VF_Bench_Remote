@@ -718,6 +718,82 @@ Check(maViewerXem == HttpStatusCode.OK, $"Viewer vẫn xem được, nhận {maV
 var (maXoaDlc, _) = await Goi(HttpMethod.Delete, $"/api/du-lieu-chung/{idDlc}", token: tokenAdmin);
 Check(maXoaDlc == HttpStatusCode.NoContent, $"xoá được, nhận {maXoaDlc}");
 
+// ---------------------------------------------------------------- mục tự thêm
+Nhom("Quản trị tự thêm mục dữ liệu chung");
+
+var (_, thanMucSeed) = await Goi(HttpMethod.Get, "/api/du-lieu-chung/muc", token: tokenAdmin);
+Check(thanMucSeed.EnumerateArray().All(x => x.GetProperty("macDinh").GetBoolean()),
+      "bốn mục ban đầu đều phải đánh dấu là mục dựng sẵn");
+
+// Chuẩn hoá chứ không từ chối: gõ "File DBC" làm mã là nhầm rất thường gặp.
+var (maTaoMuc, thanTaoMuc) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
+    new { ma = "Sơ Đồ Mạch", ten = "Sơ đồ mạch", moTa = "bản vẽ" }, tokenAdmin);
+Check(maTaoMuc == HttpStatusCode.OK, $"admin tạo mục mới, nhận {maTaoMuc}");
+var maMucMoi = thanTaoMuc.GetProperty("ma").GetString()!;
+Check(maMucMoi == maMucMoi.ToLowerInvariant() && !maMucMoi.Contains(' '),
+      $"mã phải được chuẩn hoá cho hợp URL, nhận '{maMucMoi}'");
+Check(!thanTaoMuc.GetProperty("macDinh").GetBoolean(), "mục tự tạo không phải mục dựng sẵn");
+
+var (maTrungMuc, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
+    new { ma = maMucMoi, ten = "Trùng" }, tokenAdmin);
+Check(maTrungMuc == HttpStatusCode.Conflict, $"mã mục trùng phải bị chặn, nhận {maTrungMuc}");
+
+var (maMaSo, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
+    new { ma = "123", ten = "Toàn số" }, tokenAdmin);
+Check(maMaSo == HttpStatusCode.BadRequest, $"mã toàn số phải bị từ chối, nhận {maMaSo}");
+
+var (maMaRong, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
+    new { ma = "!!!", ten = "Rỗng sau chuẩn hoá" }, tokenAdmin);
+Check(maMaRong == HttpStatusCode.BadRequest, $"mã rỗng sau chuẩn hoá phải bị từ chối, nhận {maMaRong}");
+
+// Mục mới dùng được ngay, không phải khởi động lại hay sửa code.
+var (maTaiMucMoi, _) = await TaiLenDuLieu(maMucMoi, "Sơ đồ VF8", "so-do.pdf", "noi dung", tokenAdmin);
+Check(maTaiMucMoi == HttpStatusCode.OK, $"tải file vào mục vừa tạo, nhận {maTaiMucMoi}");
+
+var (_, thanLocMucMoi) = await Goi(HttpMethod.Get,
+    $"/api/du-lieu-chung?loai={maMucMoi}", token: tokenAdmin);
+Check(thanLocMucMoi.GetArrayLength() == 1
+      && thanLocMucMoi[0].GetProperty("tenLoai").GetString() == "Sơ đồ mạch",
+      "lọc theo mục mới phải chạy, và tên mục lấy từ database");
+
+// Xoá mục còn file thì chặn: để file lại là chúng trỏ vào một mã không tồn
+// tại, không hiện ở mục nào mà cũng không ai biết để dọn.
+var (maXoaConFile, _) = await Goi(HttpMethod.Delete,
+    $"/api/du-lieu-chung/muc/{maMucMoi}", token: tokenAdmin);
+Check(maXoaConFile == HttpStatusCode.Conflict,
+      $"mục còn file thì không xoá được, nhận {maXoaConFile}");
+
+var (maXoaMacDinh, _) = await Goi(HttpMethod.Delete,
+    "/api/du-lieu-chung/muc/khac", token: tokenAdmin);
+Check(maXoaMacDinh == HttpStatusCode.Conflict,
+      $"mục dựng sẵn không xoá được, nhận {maXoaMacDinh}");
+
+// Đổi tên hiển thị được, nhưng MÃ thì không: mã nằm trong cột Loai của mọi
+// file thuộc mục đó, đổi là mồ côi hết.
+var (maSuaMuc, thanSuaMuc) = await Goi(HttpMethod.Patch,
+    $"/api/du-lieu-chung/muc/{maMucMoi}", new { ten = "Sơ đồ mạch điện" }, tokenAdmin);
+Check(maSuaMuc == HttpStatusCode.OK && thanSuaMuc.GetProperty("ten").GetString() == "Sơ đồ mạch điện",
+      $"đổi được tên hiển thị, nhận {maSuaMuc}");
+Check(thanSuaMuc.GetProperty("ma").GetString() == maMucMoi, "mã KHÔNG được đổi theo");
+
+// Kỹ sư thêm được file nhưng không được đụng vào danh mục.
+var (maKySuTaoMuc, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
+    new { ma = "lau", ten = "Lậu" }, tokenKySu);
+Check(maKySuTaoMuc == HttpStatusCode.Forbidden,
+      $"Engineer không được thêm mục, nhận {maKySuTaoMuc}");
+
+// Dọn sạch rồi xoá: lúc này mới được phép.
+var (_, thanDeXoa) = await Goi(HttpMethod.Get, $"/api/du-lieu-chung?loai={maMucMoi}", token: tokenAdmin);
+await Goi(HttpMethod.Delete,
+    $"/api/du-lieu-chung/{thanDeXoa[0].GetProperty("id").GetInt32()}", token: tokenAdmin);
+var (maXoaSach, _) = await Goi(HttpMethod.Delete,
+    $"/api/du-lieu-chung/muc/{maMucMoi}", token: tokenAdmin);
+Check(maXoaSach == HttpStatusCode.NoContent, $"mục rỗng thì xoá được, nhận {maXoaSach}");
+
+var (maTaiMucDaXoa, _) = await TaiLenDuLieu(maMucMoi, "x", "x.txt", "x", tokenAdmin);
+Check(maTaiMucDaXoa == HttpStatusCode.BadRequest,
+      $"mục đã xoá thì không tải vào được nữa, nhận {maTaiMucDaXoa}");
+
 // ---------------------------------------------------------------- seed vai trò
 Nhom("Vai trò dựng sẵn tự đồng bộ lại");
 

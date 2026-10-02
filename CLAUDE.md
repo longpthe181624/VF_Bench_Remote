@@ -1150,15 +1150,44 @@ Cố ý **không gộp** dù hai bên đều là file cất theo băm sha256. G�
 muộn có ngày một file riêng tư lọt sang danh sách chung — mà hỏng kiểu đó thì
 không ai báo, người ta chỉ phát hiện khi đã muộn.
 
-### Danh mục nằm trong code, không nằm trong database
+### Danh mục nằm trong database, quản trị tự thêm — đổi 02/10
 
-`LoaiDuLieuChung` trong Core, giống cách `MaQuyen` làm: thêm một mục là thêm
-một dòng rồi chạy lại, **không cần migration**.
+> **Bản trước để danh mục là hằng số trong code**, lý do ghi là "mỗi mục còn
+> kéo theo cách hiển thị riêng nên thêm mục là việc của người viết code". Lý do
+> đó **sai trên thực tế**: các mục chỉ khác nhau cái tên, nên bắt sửa code để
+> thêm một ngăn là chặn người dùng ở chỗ không đáng chặn.
 
-Không làm bảng danh mục cho người dùng tự thêm, vì mỗi mục còn kéo theo cách
-hiển thị riêng — thêm mục là việc của người viết code, không phải việc nhập liệu.
+Bảng `MucDuLieuChungs`, CRUD ở `/api/du-lieu-chung/muc`, quyền **`DULIEU.MUC`**.
 
-Bốn mục đầu, chọn theo thứ dự án đang thật sự cần:
+`LoaiDuLieuChung` trong Core **vẫn còn**, nhưng chỉ giữ hai việc không cần
+database — nhờ vậy kiểm thử được mà không dựng hạ tầng:
+
+- **Luật đặt mã**: `ChuanHoaMa` và `LyDoMaKhongDung`.
+- **Danh sách mục dựng sẵn** để `MucDuLieuSeed` seed lúc khởi động.
+
+**Chuẩn hoá mã chứ không từ chối.** Gõ `"File DBC"` làm mã là nhầm lẫn rất
+thường gặp; biến thành `file-dbc` vừa đúng ý vừa khỏi bắt gõ lại. Từ chối hai
+thứ: mã rỗng sau khi chuẩn hoá, và mã toàn số (dễ lẫn với id trong đường dẫn).
+
+**Mã KHÔNG đổi được sau khi tạo**, kể cả mục tự tạo — mã nằm trong cột `Loai`
+của mọi file thuộc mục đó, đổi là mồ côi hết. Tên hiển thị thì đổi thoải mái.
+
+**Mục dựng sẵn không xoá được** (`MacDinh = true`). Riêng `khac` là chỗ file rơi
+vào khi tải lên không chọn mục; xoá nó là để lại file trỏ vào một mã không tồn
+tại — không hiện ở mục nào mà cũng không ai biết để dọn. Ba mục kia giữ cờ này
+vì chúng là thứ hệ thống hứa có sẵn.
+
+**Xoá mục còn file thì chặn**, cùng lý do như xoá dự án còn thiết bị.
+
+**`MucDuLieuSeed` chỉ THÊM mục còn thiếu, không bao giờ sửa hay xoá.** Khác hẳn
+`AuthSeed`: danh mục quyền thì code là nguồn sự thật nên đồng bộ hai chiều
+được, còn ở đây quản trị tự thêm và tự đổi tên, ghi đè là xoá mất việc họ vừa
+làm.
+
+**`DULIEU.MUC` cố ý không cấp cho Engineer.** Đổi danh mục là đổi cách cả nhóm
+sắp xếp tài liệu, không phải việc thường ngày. Vai trò tự tạo vẫn tích được.
+
+Bốn mục dựng sẵn, chọn theo thứ dự án đang thật sự cần:
 
 | Mã | Để làm gì |
 | --- | --- |
@@ -1168,7 +1197,9 @@ Bốn mục đầu, chọn theo thứ dự án đang thật sự cần:
 | `khac` | Chưa phân loại — **cố ý có sẵn**, thiếu nó thì người ta nhét bừa vào mục gần đúng nhất, còn khó dọn hơn |
 
 Giao diện **lấy danh mục từ server** (`GET /api/du-lieu-chung/muc`, kèm số file
-từng mục) chứ không chép cứng, nên thêm mục trong Core là nó tự hiện ra.
+từng mục) chứ không chép cứng, nên thêm mục là nó tự hiện ra ngay — cả dãy tab
+lẫn ô chọn trong form tải lên. Nút "Quản lý mục" chỉ hiện với ai có
+`DULIEU.MUC`.
 
 Trùng tên **trong cùng một mục** thì chặn: hai file "NP 11.6.4" trong mục DBC
 thì không ai biết bản nào đang dùng. Khác mục trùng tên thì không sao.

@@ -20,6 +20,8 @@
   .grow{flex:1;}
   .meta{font-size:11.5px; color:#a1a1a1;}
 
+  #dlc-muc-bang{display:none; margin-bottom:12px;}
+  #dlc-muc-bang.show{display:block;}
   .tab{background:#fff; border:1px solid #e9e9e9; border-radius:7px; padding:5px 11px; cursor:pointer; font-size:12.5px;}
   .tab.chon{border-color:#111; font-weight:600;}
   .err{display:none; margin:10px 0; padding:8px 11px; border:1px solid #fecaca; background:#fef2f2; color:#b91c1c; border-radius:7px; font-size:12.5px;}
@@ -246,8 +248,20 @@
       <span class="count" id="dlc-count"></span>
       <span class="grow"></span>
       <input id="dlc-q" placeholder="Tìm kiếm" style="width:180px">
+      <button id="dlc-muc-toggle">Quản lý mục</button>
       <button id="dlc-toggle">Tải lên</button>
     </div>
+
+    <form class="addbench" id="dlc-muc-form">
+      <div class="field"><label>Mã *</label><input name="ma" required placeholder="so-do-mach" style="width:140px"></div>
+      <div class="field"><label>Tên *</label><input name="ten" required placeholder="Sơ đồ mạch" style="width:180px"></div>
+      <div class="field"><label>Mô tả</label><input name="moTa" style="width:180px"></div>
+      <div class="field"><label>Thứ tự</label><input name="thuTu" type="number" style="width:80px"></div>
+      <button type="submit" class="primary">Lưu</button>
+      <button type="button" id="dlc-muc-huy">Huỷ</button>
+    </form>
+
+    <div id="dlc-muc-bang"></div>
 
     <div id="dlc-muc" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px"></div>
 
@@ -661,6 +675,7 @@ async function load(){
     dungOChonThuocVe(benches);
     renderDuAn(duAns);
     renderMucDuLieu(mucDuLieu);
+    renderBangMuc();
     renderDuLieuChung(duLieuChung);
     renderBenches(benches);
     renderAlerts(alerts);
@@ -791,6 +806,48 @@ function renderMucDuLieu(muc){
   o.innerHTML = "";
   for (const m of muc) o.appendChild(el("option", {value:m.ma}, m.ten));
   o.value = muc.some(m => m.ma === dang) ? dang : (mucDangXem || muc[0]?.ma || "");
+}
+
+/// Bảng quản lý mục, chỉ hiện khi bấm "Quản lý mục" và có quyền DULIEU.MUC.
+function renderBangMuc(){
+  const khung = document.getElementById("dlc-muc-bang");
+  if (!khung.classList.contains("show")){ khung.innerHTML = ""; return; }
+  if (document.activeElement?.closest?.("#dlc-muc-bang")) return;
+
+  const dong = (m) => {
+    // Mục dựng sẵn không xoá được: "khac" là chỗ file rơi vào khi tải lên
+    // không chọn mục, xoá là để lại file trỏ vào một mã không tồn tại.
+    const xoa = m.macDinh ? el("span", {class:"meta"}, "dựng sẵn")
+      : el("button", {class:"ghost", onclick: async () => {
+          if (!confirm(`Xoá mục ${m.ten}?`)) return;
+          try { await api(`/api/du-lieu-chung/muc/${encodeURIComponent(m.ma)}`, {method:"DELETE"});
+                showToast(`Đã xoá mục ${m.ten}.`); load(); }
+          catch(e){ showErr(e.message); }
+        }}, "Xoá");
+
+    const oTen = el("input", {value:m.ten, style:"width:160px"});
+    const luu = el("button", {onclick: async () => {
+      try { await api(`/api/du-lieu-chung/muc/${encodeURIComponent(m.ma)}`, {
+              method:"PATCH", body: JSON.stringify({ten: oTen.value.trim()}) });
+            showToast(`Đã lưu mục ${m.ma}.`); load(); }
+      catch(e){ showErr(e.message); }
+    }}, "Lưu");
+
+    return el("tr", {},
+      el("td", {}, el("span", {class:"code"}, m.ma)),
+      el("td", {}, oTen),
+      el("td", {}, m.moTa || "—"),
+      el("td", {}, String(m.thuTu)),
+      el("td", {}, m.soFile + " file"),
+      el("td", {}, el("div", {class:"actions"}, luu, xoa)));
+  };
+
+  khung.innerHTML = "";
+  khung.appendChild(el("table", {},
+    el("thead", {}, el("tr", {},
+      el("th", {}, "Mã"), el("th", {}, "Tên"), el("th", {}, "Mô tả"),
+      el("th", {}, "Thứ tự"), el("th", {}, "Số file"), el("th", {}, "Hành động"))),
+    el("tbody", {}, ...dsMucDuLieu.map(dong))));
 }
 
 function renderDuLieuChung(rows){
@@ -1168,6 +1225,34 @@ document.getElementById("q").addEventListener("input", () => { clearTimeout(debo
 document.getElementById("filter-state").addEventListener("change", load);
 document.getElementById("filter-loai").addEventListener("change", load);
 
+const dlcMucForm = document.getElementById("dlc-muc-form");
+document.getElementById("dlc-muc-toggle").addEventListener("click", () => {
+  const bang = document.getElementById("dlc-muc-bang");
+  bang.classList.toggle("show");
+  dlcMucForm.classList.toggle("show", bang.classList.contains("show"));
+  renderBangMuc();
+});
+document.getElementById("dlc-muc-huy").addEventListener("click", () => {
+  document.getElementById("dlc-muc-bang").classList.remove("show");
+  dlcMucForm.classList.remove("show");
+  dlcMucForm.reset();
+  renderBangMuc();
+});
+dlcMucForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const body = Object.fromEntries(new FormData(ev.target).entries());
+  for (const k of Object.keys(body)) if (body[k] === "") body[k] = null;
+  if (body.thuTu !== null) body.thuTu = Number(body.thuTu);
+  try {
+    const m = await api("/api/du-lieu-chung/muc", {method:"POST", body: JSON.stringify(body)});
+    // Máy chủ chuẩn hoá mã, nên báo lại mã THẬT chứ không phải chuỗi người gõ.
+    showToast(`Đã tạo mục ${m.ma}.`);
+    ev.target.reset();
+    showErr(null);
+    load();
+  } catch(e){ showErr(e.message); }
+});
+
 const dlcForm = document.getElementById("dlc-form");
 document.getElementById("dlc-toggle").addEventListener("click", () => {
   dlcForm.classList.toggle("show");
@@ -1327,6 +1412,7 @@ function apDungQuyen(){
   an("toggle-duan", coQuyen("BENCH.CREATE"));
   an("sec-dulieu", coQuyen("DULIEU.VIEW"));
   an("dlc-toggle", coQuyen("DULIEU.UPLOAD"));
+  an("dlc-muc-toggle", coQuyen("DULIEU.MUC"));
   an("sec-user", coQuyen("USER.VIEW"));
   an("sec-role", coQuyen("ROLE.VIEW"));
   an("toggle-user", coQuyen("USER.CREATE"));

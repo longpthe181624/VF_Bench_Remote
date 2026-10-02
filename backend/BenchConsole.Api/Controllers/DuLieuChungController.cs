@@ -19,8 +19,8 @@ namespace BenchConsole.Api.Controllers;
 /// endpoint, hai mục trên giao diện — gộp lại là sớm muộn có ngày một file
 /// riêng tư lọt sang danh sách chung.
 ///
-/// Danh mục loại nằm trong code (<see cref="LoaiDuLieuChung"/>), không cho
-/// người dùng tự thêm.
+/// Danh mục mục nằm trong database, **quản trị tự thêm được** (quyền
+/// `DULIEU.MUC`). Bốn mục dựng sẵn do <see cref="MucDuLieuSeed"/> tạo.
 /// </summary>
 [ApiController]
 [Route("api/du-lieu-chung")]
@@ -43,9 +43,14 @@ public class DuLieuChungController(
             .Select(g => new { Loai = g.Key, So = g.Count() })
             .ToListAsync(ct);
 
-        return LoaiDuLieuChung.TatCa
-            .Select(x => new MucDuLieuChungDto(
-                x.Ma, x.Ten, dem.FirstOrDefault(d => d.Loai == x.Ma)?.So ?? 0))
+        var muc = await db.MucDuLieuChungs.AsNoTracking()
+            .OrderBy(m => m.ThuTu).ThenBy(m => m.Ma)
+            .ToListAsync(ct);
+
+        return muc
+            .Select(m => new MucDuLieuChungDto(
+                m.Ma, m.Ten, m.MoTa, m.ThuTu, m.MacDinh,
+                dem.FirstOrDefault(d => d.Loai == m.Ma)?.So ?? 0))
             .ToList();
     }
 
@@ -54,15 +59,14 @@ public class DuLieuChungController(
     public async Task<ActionResult<List<TepDuLieuChungDto>>> List(
         [FromQuery] string? loai, [FromQuery] string? q, CancellationToken ct)
     {
-        // Loại lạ trả 400 chứ không im lặng bỏ qua bộ lọc: bỏ qua thì người
-        // dùng tưởng mục đó rỗng, mà thật ra họ đang xem cả kho.
-        var lyDo = LoaiDuLieuChung.LyDoTuChoi(loai);
-        if (lyDo is not null) return BadRequest(new { error = lyDo });
-
         var query = db.TepDuLieuChungs.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(loai))
         {
-            var can = LoaiDuLieuChung.ChuanHoa(loai);
+            // Mục lạ trả 400 chứ không im lặng bỏ qua bộ lọc: bỏ qua thì người
+            // dùng tưởng mục đó rỗng, mà thật ra họ đang xem cả kho.
+            var can = LoaiDuLieuChung.ChuanHoaMa(loai);
+            if (!await db.MucDuLieuChungs.AnyAsync(m => m.Ma == can, ct))
+                return BadRequest(new { error = await LoiMucLaAsync(loai, ct) });
             query = query.Where(t => t.Loai == can);
         }
         if (!string.IsNullOrWhiteSpace(q))
@@ -73,7 +77,8 @@ public class DuLieuChungController(
         }
 
         var rows = await query.OrderByDescending(t => t.TaiLenLuc).Take(500).ToListAsync(ct);
-        return rows.Select(TepDuLieuChungDto.From).ToList();
+        var ten = await TenMucAsync(ct);
+        return rows.Select(t => TepDuLieuChungDto.From(t, ten.GetValueOrDefault(t.Loai))).ToList();
     }
 
     [HttpPost]
@@ -85,10 +90,14 @@ public class DuLieuChungController(
         if (form.File is null || form.File.Length == 0)
             return BadRequest(new { error = "Chưa chọn file." });
 
-        var lyDo = LoaiDuLieuChung.LyDoTuChoi(form.Loai);
-        if (lyDo is not null) return BadRequest(new { error = lyDo });
+        // Không chọn mục thì rơi vào "Khác" chứ không từ chối — thiếu chỗ chứa
+        // tạm thì người ta nhét bừa vào mục gần đúng nhất, còn khó dọn hơn.
+        var loai = string.IsNullOrWhiteSpace(form.Loai)
+            ? LoaiDuLieuChung.Khac
+            : LoaiDuLieuChung.ChuanHoaMa(form.Loai);
 
-        var loai = LoaiDuLieuChung.ChuanHoa(form.Loai);
+        var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == loai, ct);
+        if (muc is null) return BadRequest(new { error = await LoiMucLaAsync(form.Loai, ct) });
         // Không khai tên thì lấy tên file, để không ai phải gõ hai lần cùng một thứ.
         var ten = string.IsNullOrWhiteSpace(form.Ten)
             ? Path.GetFileNameWithoutExtension(form.File.FileName)
@@ -122,7 +131,7 @@ public class DuLieuChungController(
         log.LogInformation("Dữ liệu chung: {Ai} tải lên {Loai}/{Ten} ({KB} KB)",
             User.Email(), loai, ten, luu.KichThuoc / 1024);
 
-        return TepDuLieuChungDto.From(tep);
+        return TepDuLieuChungDto.From(tep, muc.Ten);
     }
 
     [HttpGet("{id:int}/download")]
@@ -156,6 +165,103 @@ public class DuLieuChungController(
 
         log.LogWarning("Dữ liệu chung: {Ai} xoá {Loai}/{Ten}", User.Email(), tep.Loai, tep.Ten);
         return NoContent();
+    }
+
+    // ------------------------------------------------------- quản lý mục
+
+    [HttpPost("muc")]
+    [HasPermission(MaQuyen.DuLieuMuc)]
+    public async Task<ActionResult<MucDuLieuChungDto>> TaoMuc(TaoMucRequest req, CancellationToken ct)
+    {
+        // Chuẩn hoá trước rồi mới kiểm: gõ "File DBC" làm mã là nhầm rất thường
+        // gặp, biến thành `file-dbc` vừa đúng ý vừa khỏi bắt gõ lại.
+        var ma = LoaiDuLieuChung.ChuanHoaMa(req.Ma);
+        var lyDo = LoaiDuLieuChung.LyDoMaKhongDung(ma);
+        if (lyDo is not null) return BadRequest(new { error = lyDo });
+
+        if (string.IsNullOrWhiteSpace(req.Ten))
+            return BadRequest(new { error = "Thiếu tên mục." });
+
+        if (await db.MucDuLieuChungs.AnyAsync(m => m.Ma == ma, ct))
+            return Conflict(new { error = $"Đã có mục mã '{ma}'." });
+
+        var muc = new MucDuLieuChung
+        {
+            Ma = ma,
+            Ten = req.Ten.Trim(),
+            MoTa = req.MoTa,
+            // Không khai thứ tự thì xếp sau mục cuối, nhưng TRƯỚC "Khác" —
+            // mục đó cố ý giữ số rất lớn để luôn nằm cuối.
+            ThuTu = req.ThuTu ?? 100,
+            TaoLuc = DateTimeOffset.UtcNow,
+        };
+        db.MucDuLieuChungs.Add(muc);
+        await db.SaveChangesAsync(ct);
+
+        log.LogInformation("Dữ liệu chung: {Ai} tạo mục {Ma}", User.Email(), ma);
+        return new MucDuLieuChungDto(muc.Ma, muc.Ten, muc.MoTa, muc.ThuTu, muc.MacDinh, 0);
+    }
+
+    [HttpPatch("muc/{ma}")]
+    [HasPermission(MaQuyen.DuLieuMuc)]
+    public async Task<ActionResult<MucDuLieuChungDto>> SuaMuc(
+        string ma, SuaMucRequest req, CancellationToken ct)
+    {
+        var can = LoaiDuLieuChung.ChuanHoaMa(ma);
+        var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == can, ct);
+        if (muc is null) return NotFound(new { error = $"Không có mục {ma}" });
+
+        // Mã KHÔNG đổi được, kể cả mục tự tạo: nó nằm trong cột `Loai` của mọi
+        // file thuộc mục đó. Đổi mã là mồ côi toàn bộ số file ấy.
+        if (req.Ten is not null && req.Ten.Trim().Length > 0) muc.Ten = req.Ten.Trim();
+        if (req.MoTa is not null) muc.MoTa = req.MoTa;
+        if (req.ThuTu is not null) muc.ThuTu = req.ThuTu.Value;
+
+        await db.SaveChangesAsync(ct);
+
+        var so = await db.TepDuLieuChungs.CountAsync(t => t.Loai == muc.Ma, ct);
+        return new MucDuLieuChungDto(muc.Ma, muc.Ten, muc.MoTa, muc.ThuTu, muc.MacDinh, so);
+    }
+
+    [HttpDelete("muc/{ma}")]
+    [HasPermission(MaQuyen.DuLieuMuc)]
+    public async Task<IActionResult> XoaMuc(string ma, CancellationToken ct)
+    {
+        var can = LoaiDuLieuChung.ChuanHoaMa(ma);
+        var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == can, ct);
+        if (muc is null) return NotFound(new { error = $"Không có mục {ma}" });
+
+        if (muc.MacDinh)
+            return Conflict(new { error = $"Mục '{muc.Ten}' là mục dựng sẵn, không xoá được." });
+
+        // Còn file thì chặn. Xoá mục mà để file lại là chúng trỏ vào một mã
+        // không tồn tại: không hiện ở mục nào, cũng không ai biết để dọn.
+        var so = await db.TepDuLieuChungs.CountAsync(t => t.Loai == muc.Ma, ct);
+        if (so > 0)
+            return Conflict(new
+            {
+                error = $"Mục '{muc.Ten}' còn {so} file. Chuyển hoặc xoá file trước khi xoá mục.",
+            });
+
+        db.MucDuLieuChungs.Remove(muc);
+        await db.SaveChangesAsync(ct);
+
+        log.LogWarning("Dữ liệu chung: {Ai} xoá mục {Ma}", User.Email(), muc.Ma);
+        return NoContent();
+    }
+
+    // ------------------------------------------------------- dùng chung
+
+    private async Task<Dictionary<string, string>> TenMucAsync(CancellationToken ct)
+        => await db.MucDuLieuChungs.AsNoTracking()
+            .ToDictionaryAsync(m => m.Ma, m => m.Ten, ct);
+
+    /// <summary>Thông báo mục lạ, kèm danh sách mục đang có để người dùng biết gõ gì.</summary>
+    private async Task<string> LoiMucLaAsync(string? goVao, CancellationToken ct)
+    {
+        var co = await db.MucDuLieuChungs.AsNoTracking()
+            .OrderBy(m => m.ThuTu).Select(m => m.Ma).ToListAsync(ct);
+        return $"Mục '{goVao}' không có. Hiện có: {string.Join(", ", co)}.";
     }
 }
 

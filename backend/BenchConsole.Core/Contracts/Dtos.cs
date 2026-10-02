@@ -149,13 +149,20 @@ public record TepDuLieuChungDto(
     string? NguoiTaiLen,
     DateTimeOffset TaiLenLuc)
 {
-    public static TepDuLieuChungDto From(TepDuLieuChung t) => new(
-        t.Id, t.Loai, LoaiDuLieuChung.Ten(t.Loai), t.Ten, t.TenFile,
+    /// <summary>Tên mục truyền từ ngoài vào: danh mục nay nằm trong database.</summary>
+    public static TepDuLieuChungDto From(TepDuLieuChung t, string? tenLoai) => new(
+        t.Id, t.Loai, string.IsNullOrWhiteSpace(tenLoai) ? t.Loai : tenLoai, t.Ten, t.TenFile,
         t.Sha256, t.KichThuoc, t.MoTa, t.NguoiTaiLen, t.TaiLenLuc);
 }
 
-/// <summary>Một mục trong danh mục loại dữ liệu chung, kèm số file đang có.</summary>
-public record MucDuLieuChungDto(string Ma, string Ten, int SoFile);
+/// <summary>Một mục trong kho dữ liệu chung, kèm số file đang có.</summary>
+public record MucDuLieuChungDto(
+    string Ma, string Ten, string? MoTa, int ThuTu, bool MacDinh, int SoFile);
+
+public record TaoMucRequest(string Ma, string Ten, string? MoTa, int? ThuTu);
+
+/// <summary>Mã KHÔNG đổi được: nó nằm trong `Loai` của mọi file thuộc mục đó.</summary>
+public record SuaMucRequest(string? Ten, string? MoTa, int? ThuTu);
 
 /// <summary>Du an dung thiet bi.</summary>
 public record DuAnDto(
