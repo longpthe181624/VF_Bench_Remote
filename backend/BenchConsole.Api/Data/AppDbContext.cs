@@ -46,9 +46,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Xoá thiết bị chứa thì thiết bị con thành ĐỨNG RIÊNG, không bị
             // xoá theo: tháo bench đi thì con MHU vẫn còn ngoài đời. Cascade ở
             // đây là âm thầm xoá mất cả lịch sử chạy của con MHU đó.
+            //
+            // ClientSetNull chứ KHÔNG phải SetNull. SQL Server từ chối
+            // ON DELETE SET NULL trên khoá ngoại TỰ THAM CHIẾU — lỗi 1785
+            // "may cause cycles or multiple cascade paths" — migration đổ
+            // ngay lúc áp và backend chết lặp. ClientSetNull giữ nguyên ý đồ
+            // trên: EF gỡ liên kết cho thiết bị con ĐÃ NẠP, còn phía database
+            // khai NO ACTION nên SQL Server chấp nhận. Hệ quả phải nhớ: muốn
+            // xoá thiết bị chứa thì phải nạp kèm danh sách con, không thì
+            // database chặn vì còn ràng buộc.
             e.HasOne(x => x.ThuocVe).WithMany(x => x.ChuaNhung)
                 .HasForeignKey(x => x.ThuocVeId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.ClientSetNull);
             e.Property(x => x.TenMay).HasMaxLength(64);
             e.Property(x => x.PrimaryChannel).HasMaxLength(64);
             e.Property(x => x.PrimaryUnit).HasMaxLength(16);

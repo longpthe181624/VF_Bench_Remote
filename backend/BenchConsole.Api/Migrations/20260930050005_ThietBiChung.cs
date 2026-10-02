@@ -120,7 +120,7 @@ namespace BenchConsole.Api.Migrations
                 column: "ThuocVeId",
                 principalTable: "Benches",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
+                onDelete: ReferentialAction.NoAction);
         }
 
         /// <inheritdoc />
