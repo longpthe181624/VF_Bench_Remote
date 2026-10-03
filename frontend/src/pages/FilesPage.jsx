@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Plus, Upload, Download, FolderCog } from 'lucide-react'
 import { useAuth } from '../context/auth-context'
@@ -61,12 +61,14 @@ export function UploadDialog({kind,category,categories,onClose,onlyTestcase=fals
     <Field label={kind==='private'?'Chọn file *':'File *'} hint={kind==='package'?'ZIP tối đa 64 MB. Manual cần Excel; tự động cần .tc / .mtc.':kind==='private'?'Tối đa 100 file; tổng dung lượng 256 MB mỗi lần.':'Một file tối đa 256 MB.'}><input name="file" type="file" required multiple={kind==='private'} accept={kind==='package'?'.zip':undefined}/></Field>{kind!=='package'&&<Field label="Mô tả"><textarea name="moTa" maxLength={512} rows={3}/></Field>}</fieldset><ErrorMessage>{error}</ErrorMessage>{busy&&<div className="upload-progress" role="status"><progress max={100} value={progress}/><span>{progress===100?'Đang kiểm tra và lưu file…':`Đã gửi ${progress}%`}</span></div>}<div className="form-footer"><Button onClick={()=>busy?controller.current?.abort():onClose()}>{busy?'Huỷ tải':'Huỷ'}</Button><Button type="submit" variant="primary" busy={busy}><Upload size={14}/>Tải lên</Button></div></form></Modal>
 }
 function SharedDataTabs(){
-  const [params,setParams]=useSearchParams(),categories=useApi('/du-lieu-chung/muc','DULIEU.VIEW'),database=useApi('/database/files','DULIEU.VIEW',{page:1,size:1})
+  const {can}=useAuth(),location=useLocation(),navigate=useNavigate(),[params]=useSearchParams(),categories=useApi('/du-lieu-chung/muc','DULIEU.VIEW'),database=useApi('/database/files','DULIEU.VIEW',{page:1,size:1})
   const category=params.get('category')||''
-  return <div className="tabs"><Button variant="ghost" className={!category?'selected':''} onClick={()=>setParams({})}>Tất cả</Button>{(categories.data||[]).map(c=><Button variant="ghost" className={category===c.ma?'selected':''} key={c.ma} onClick={()=>setParams({category:c.ma})}>{c.ten} <span className="tab-count">{c.ma==='dbc'?database.data?.total||0:c.soFile}</span></Button>)}</div>
+  const items=[['/testcases','Testcase','TESTCASE.VIEW'],['/software','Phiên bản phần mềm','DULIEU.VIEW'],['/packages','Gói / cấu hình','TESTCASE.VIEW']]
+  return <div className="tabs">{items.filter(item=>can(item[2])).map(([path,label])=><Button variant="ghost" className={location.pathname===path||(path==='/software'&&category==='phien-ban')?'selected':''} key={path} onClick={()=>navigate(path)}>{label}</Button>)}{can('DULIEU.VIEW')&&(categories.data||[]).filter(c=>c.ma!=='phien-ban').map(c=><Button variant="ghost" className={location.pathname==='/files'&&category===c.ma?'selected':''} key={c.ma} onClick={()=>navigate('/files?category='+encodeURIComponent(c.ma))}>{c.ten} <span className="tab-count">{c.ma==='dbc'?database.data?.total||0:c.soFile}</span></Button>)}</div>
 }
 export default function FilesPage(props){
   const [params]=useSearchParams()
+  if((props.kind||'shared')==='shared'&&!props.software&&!params.get('category'))return <Navigate to="/files?category=tai-lieu" replace/>
   if((props.kind||'shared')==='shared'&&!props.software&&params.get('category')==='dbc')return <><PageHeading title="Dữ liệu chung" description="Tài liệu và file dùng chung của nhóm, phân theo mục."/><SharedDataTabs/><DatabasePage embedded/></>
   return <FilesListPage {...props}/>
 }
@@ -83,7 +85,7 @@ function FilesListPage({kind='shared',software=false,onlyTestcase=false}){
   const canUpload=kind==='package'?can('TESTCASE.UPLOAD')||(!onlyTestcase&&can('CONFIG.UPLOAD')):can(config.upload)
   const rows=(files.data||[]).filter(f=>matches(f,q,['ten','tenFile','tenFileGoc','moTa','nguoiTaiLen'])&&(!type||f.loai===type))
   async function deleteFile(file){if(!window.confirm(`Xoá ${file.ten||file.tenFile}?`))return;try{await remove(kind==='private'?`/storage/files/${file.id}`:`${config.path}/${file.id}`);await cache.invalidateQueries();notify('Đã xoá file.')}catch(e){setError(errorText(e))}}
-  return <><PageHeading title={software?'Phiên bản phần mềm':onlyTestcase?'Testcase':config.title} description={software?'Kho file phần mềm và ghi chú phiên bản dùng chung.':config.description}><Badge>{files.data?.length||0} file</Badge></PageHeading>{kind==='shared'&&!software&&<SharedDataTabs/>}
+  return <><PageHeading title={software?'Phiên bản phần mềm':onlyTestcase?'Testcase':config.title} description={software?'Kho file phần mềm và ghi chú phiên bản dùng chung.':config.description}><Badge>{files.data?.length||0} file</Badge></PageHeading>{(kind==='shared'||kind==='package')&&<SharedDataTabs/>}
     <Toolbar value={q} onSearch={setQ} placeholder="Tìm tên / file / mô tả" actions={<>{kind==='shared'&&category!=='phien-ban'&&can('DULIEU.MUC')&&<Button onClick={()=>navigate('/categories')}><FolderCog size={14}/>Quản lý mục</Button>}{canUpload&&<Button variant="primary" onClick={()=>setUploading(true)}><Upload size={14}/>Tải lên</Button>}</>}>{category==='phien-ban'&&<select aria-label="Type phần mềm" value={softwareTypeId} onChange={e=>{const next=new URLSearchParams(params);e.target.value?next.set('softwareTypeId',e.target.value):next.delete('softwareTypeId');setParams(next)}}><option value="">ALL — Tất cả Type</option><option value="0">Chưa phân loại</option>{(softwareTypes.data||[]).map(t=><option key={t.id} value={t.id}>{t.ten}</option>)}</select>}{kind==='package'&&!onlyTestcase&&<select aria-label="Loại gói" value={type} onChange={e=>setType(e.target.value)}><option value="">Mọi loại</option><option value="testcase">Testcase</option><option value="config">Cấu hình</option></select>}</Toolbar><ErrorMessage>{error||files.error&&errorText(files.error)}</ErrorMessage>
     <DataTable key={q+type+category+softwareTypeId} rows={rows} loading={files.isLoading} columns={[
       {key:'ten',label:kind==='package'?'Tên gói':'File',render:f=><><strong>{f.ten||f.tenFile}</strong>{f.ten&&<small>{f.tenFile||f.tenFileGoc}</small>}</>},
