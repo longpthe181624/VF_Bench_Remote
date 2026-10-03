@@ -8,10 +8,11 @@ import { matches } from '../lib/format'
 import { notify } from '../lib/notify'
 import { Button, Field, ErrorMessage, Modal, PageHeading, Toolbar, DataTable } from '../components/ui'
 import { MutationForm } from '../components/MutationForm'
+import { ClassificationSelect } from '../components/ClassificationSelect'
 
 export function SoftwareTypeSelect({defaultValue='',disabled=false,required=false}){
   const query=useApi('/software/types','DULIEU.VIEW')
-  return <><Field label="Type phần mềm"><select key={query.data?'ready':'loading'} name="softwareTypeId" defaultValue={defaultValue||''} disabled={disabled} required={required}><option value={!query.data?defaultValue||'':''}>{!query.data?'Đang tải Type…':required?'Chọn Type':'Chưa phân loại'}</option>{(query.data||[]).map(t=><option key={t.id} value={t.id}>{t.ten}</option>)}</select></Field><ErrorMessage>{query.error&&errorText(query.error)}</ErrorMessage></>
+  return <><ClassificationSelect label="Type phần mềm" name="softwareTypeId" items={query.data||[]} defaultValue={defaultValue} disabled={disabled} required={required} loading={query.isLoading} path="/software/types"/><ErrorMessage>{query.error&&errorText(query.error)}</ErrorMessage></>
 }
 export default function SoftwareTypesPage(){
   const navigate=useNavigate(),cache=useQueryClient(),query=useApi('/software/types','DULIEU.VIEW'),[q,setQ]=useState(''),[editing,setEditing]=useState(null),[error,setError]=useState('')
