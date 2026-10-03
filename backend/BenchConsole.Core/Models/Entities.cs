@@ -195,6 +195,8 @@ public class MucDuLieuChung
 public class TepDuLieuChung
 {
     public int Id { get; set; }
+    public int? SoftwareTypeId { get; set; }
+    public SoftwareType? SoftwareType { get; set; }
 
     /// <summary>Xem <see cref="LoaiDuLieuChung"/>.</summary>
     public string Loai { get; set; } = LoaiDuLieuChung.Khac;

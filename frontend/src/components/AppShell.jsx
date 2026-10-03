@@ -7,7 +7,7 @@ import { Button } from './ui'
 const groups=[
   {name:'VẬN HÀNH',items:[['/requests','Request test',ClipboardList,'BENCH.VIEW'],['/devices','Thiết bị',Boxes,'BENCH.VIEW'],['/projects','Dự án',Layers,'BENCH.VIEW'],['/alerts','Cảnh báo',Bell,'BENCH.VIEW']]},
   {name:'DỮ LIỆU',items:[['/database','Database',Layers,'DULIEU.VIEW'],['/testcases','Testcase',FileCheck,'TESTCASE.VIEW'],['/software','Phần mềm',Cpu,'DULIEU.VIEW'],['/packages','Gói / cấu hình',FileArchive,'TESTCASE.VIEW'],['/files','Dữ liệu chung',FolderOpen,'DULIEU.VIEW'],['/storage','Kho cá nhân',FolderLock,'KHO.VIEW'],['/reports','Báo cáo',FileCheck,'REPORT.VIEW']]},
-  {name:'QUẢN TRỊ',items:[['/database-settings','Cấu hình Database',Settings,'AdminOnly'],['/users','Người dùng',Users,'USER.VIEW'],['/roles','Vai trò',Shield,'ROLE.VIEW']]},
+  {name:'QUẢN TRỊ',items:[['/software-types','Type phần mềm',Settings,'AdminOnly'],['/database-settings','Cấu hình Database',Settings,'AdminOnly'],['/users','Người dùng',Users,'USER.VIEW'],['/roles','Vai trò',Shield,'ROLE.VIEW']]},
 ]
 export default function AppShell(){
   const {user,can,logout}=useAuth(),location=useLocation(),navigate=useNavigate()

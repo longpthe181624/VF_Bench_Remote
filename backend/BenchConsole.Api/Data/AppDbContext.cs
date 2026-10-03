@@ -7,6 +7,7 @@ namespace BenchConsole.Api.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<DatabaseModel> DatabaseModels => Set<DatabaseModel>();
+    public DbSet<SoftwareType> SoftwareTypes => Set<SoftwareType>();
     public DbSet<DatabaseCategory> DatabaseCategories => Set<DatabaseCategory>();
     public DbSet<DatabaseType> DatabaseTypes => Set<DatabaseType>();
     public DbSet<DatabaseFile> DatabaseFiles => Set<DatabaseFile>();
@@ -46,6 +47,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     protected override void OnModelCreating(ModelBuilder b)
     {
         DanhMuc<DatabaseModel>(b);
+        DanhMuc<SoftwareType>(b);
         DanhMuc<DatabaseCategory>(b);
         DanhMuc<DatabaseType>(b);
         b.Entity<DatabaseFile>(e =>
@@ -150,6 +152,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<TepDuLieuChung>(e =>
         {
+            e.HasOne(x => x.SoftwareType).WithMany().HasForeignKey(x => x.SoftwareTypeId).OnDelete(DeleteBehavior.Restrict);
             e.Property(x => x.Loai).HasMaxLength(32).IsRequired();
             e.Property(x => x.Ten).HasMaxLength(200).IsRequired();
             e.Property(x => x.TenFile).HasMaxLength(260).IsRequired();

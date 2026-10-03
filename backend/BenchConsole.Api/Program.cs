@@ -188,6 +188,7 @@ using (var scope = app.Services.CreateScope())
     // được, mà cũng không có cách nào tạo người dùng đầu tiên.
     await MucDuLieuSeed.RunAsync(db);
     await DatabaseSeed.RunAsync(db);
+    await SoftwareTypeSeed.RunAsync(db);
 
     await AuthSeed.RunAsync(db, app.Configuration,
         app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AuthSeed"));

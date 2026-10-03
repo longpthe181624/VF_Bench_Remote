@@ -48,6 +48,8 @@ Dockerfile dùng context thư mục gốc repo: `docker build -f backend/Dockerf
 - ZIP testcase tự động/manual, cấu hình client, triển khai gói tự động/cấu hình.
 - Dữ liệu chung, danh mục lưu trữ, file phần mềm, kho cá nhân:
   upload có tiến độ/huỷ, tải file có xác thực, xem trước, sửa metadata, xoá.
+- Phần mềm có Type cấu hình bởi Admin, bộ lọc và sửa phân loại file;
+  xem [software-types.md](software-types.md).
 - Người dùng, vai trò/quyền. Nút và đường dẫn kiểm tra quyền, BE quyết định cuối.
 
 Danh sách file/gói có phân trang trên tập dữ liệu BE trả về; BE hiện giới hạn

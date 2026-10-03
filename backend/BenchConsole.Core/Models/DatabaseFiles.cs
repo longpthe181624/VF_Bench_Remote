@@ -7,6 +7,13 @@ public interface IDatabaseDanhMuc
     string Ten { get; set; }
 }
 
+public class SoftwareType : IDatabaseDanhMuc
+{
+    public int Id { get; set; }
+    public string Ma { get; set; } = "";
+    public string Ten { get; set; } = "";
+}
+
 public class DatabaseModel : IDatabaseDanhMuc
 {
     public int Id { get; set; }
