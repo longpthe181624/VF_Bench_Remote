@@ -6,6 +6,11 @@ namespace BenchConsole.Api.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<DatabaseModel> DatabaseModels => Set<DatabaseModel>();
+    public DbSet<DatabaseCategory> DatabaseCategories => Set<DatabaseCategory>();
+    public DbSet<DatabaseType> DatabaseTypes => Set<DatabaseType>();
+    public DbSet<DatabaseFile> DatabaseFiles => Set<DatabaseFile>();
+    public DbSet<DatabaseChange> DatabaseChanges => Set<DatabaseChange>();
     public DbSet<Bench> Benches => Set<Bench>();
     public DbSet<DuAn> DuAns => Set<DuAn>();
     public DbSet<TepDuLieuChung> TepDuLieuChungs => Set<TepDuLieuChung>();
@@ -26,8 +31,48 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
+    private static void DanhMuc<T>(ModelBuilder b) where T : class, IDatabaseDanhMuc
+    {
+        b.Entity<T>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Ma).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Ten).HasMaxLength(128).IsRequired();
+            e.HasIndex(x => x.Ma).IsUnique();
+            e.HasIndex(x => x.Ten).IsUnique();
+        });
+    }
+
     protected override void OnModelCreating(ModelBuilder b)
     {
+        DanhMuc<DatabaseModel>(b);
+        DanhMuc<DatabaseCategory>(b);
+        DanhMuc<DatabaseType>(b);
+        b.Entity<DatabaseFile>(e =>
+        {
+            e.Property(x => x.TenFile).HasMaxLength(260).IsRequired();
+            e.Property(x => x.PhienBan).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            e.Property(x => x.MoTa).HasMaxLength(512);
+            e.Property(x => x.NguoiTaiLen).HasMaxLength(128);
+            e.Property(x => x.NguoiThayDoi).HasMaxLength(128);
+            e.Property(x => x.Revision).IsConcurrencyToken();
+            e.HasOne(x => x.Model).WithMany().HasForeignKey(x => x.ModelId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Type).WithMany().HasForeignKey(x => x.TypeId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.ModelId, x.CategoryId, x.TypeId, x.TenFile, x.PhienBan }).IsUnique();
+            e.HasIndex(x => x.Status);
+        });
+        b.Entity<DatabaseChange>(e =>
+        {
+            e.Property(x => x.Action).HasMaxLength(16);
+            e.Property(x => x.FromStatus).HasMaxLength(16);
+            e.Property(x => x.ToStatus).HasMaxLength(16);
+            e.Property(x => x.NguoiThayDoi).HasMaxLength(128);
+            e.HasIndex(x => new { x.FileId, x.Id });
+            e.HasIndex(x => x.PublishedAt);
+        });
         b.Entity<Bench>(e =>
         {
             e.HasIndex(x => x.Code).IsUnique();

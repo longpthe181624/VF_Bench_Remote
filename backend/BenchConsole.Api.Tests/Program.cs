@@ -1052,6 +1052,15 @@ Console.WriteLine();
 Console.WriteLine(new string('=', 51));
 Nhom("Lưu trữ file: dữ liệu thật, sửa / chuyển mục, manual và phân quyền");
 await FileStorageChecks.Run(http, tokenAdmin, tokenViewer, tokenKySu, Check);
+Nhom("Database: danh mục, bản file bất biến, Release / Draft và Client");
+await DatabaseChecks.Run(http, tokenAdmin, tokenViewer, tokenKySu, Check);
+using (var scope = may.Services.CreateScope())
+{
+    var database = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var pending = database.DatabaseChanges.Where(x => x.PublishedAt == null).ToList();
+    Check(pending.Any(x => x.Action == "status") && pending.Any(x => x.Action == "delete") && pending.Any(x => x.Action == "lookups"),
+        "Database: broker mất kết nối vẫn giữ outbox trạng thái/xoá/danh mục để gửi lại");
+}
 
 if (loi.Count == 0)
 {

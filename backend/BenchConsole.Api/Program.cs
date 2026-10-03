@@ -43,6 +43,8 @@ builder.Services.AddSingleton<KhoGoiTestCase>();
 builder.Services.AddSingleton<KhoBaoCao>();
 builder.Services.AddSingleton<KhoNguoiDung>();
 builder.Services.AddSingleton<KhoDuLieuChung>();
+builder.Services.AddSingleton<KhoDatabase>();
+builder.Services.AddHostedService<DatabaseNotificationService>();
 
 // Dọn báo cáo cũ. Không có nó thì kho phình vô hạn cho tới lúc đầy đĩa, và
 // lúc đó cả SQL Server lẫn backend cùng chết chứ không phải hỏng mỗi báo cáo.
@@ -185,6 +187,7 @@ using (var scope = app.Services.CreateScope())
     // khác DevSeed. Không có nó thì máy thật dựng xong là không ai đăng nhập
     // được, mà cũng không có cách nào tạo người dùng đầu tiên.
     await MucDuLieuSeed.RunAsync(db);
+    await DatabaseSeed.RunAsync(db);
 
     await AuthSeed.RunAsync(db, app.Configuration,
         app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AuthSeed"));

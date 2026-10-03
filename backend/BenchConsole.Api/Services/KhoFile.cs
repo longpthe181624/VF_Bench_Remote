@@ -140,3 +140,6 @@ public class KhoNguoiDung(IConfiguration cfg, IHostEnvironment env)
 /// </summary>
 public class KhoDuLieuChung(IConfiguration cfg, IHostEnvironment env)
     : KhoFile(cfg, env, "DuLieuChung:ThuMuc", "du-lieu-chung");
+
+public class KhoDatabase(IConfiguration cfg, IHostEnvironment env)
+    : KhoFile(cfg, env, "DatabaseFiles:ThuMuc", "database");

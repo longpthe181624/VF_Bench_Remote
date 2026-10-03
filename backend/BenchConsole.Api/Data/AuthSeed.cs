@@ -73,7 +73,7 @@ public static class AuthSeed
             "Chạy test, quản lý gói và xem báo cáo. Không quản trị người dùng.",
             quyen.Select(p => p.Ma).Where(m =>
                 !m.StartsWith("USER.") && !m.StartsWith("ROLE.")
-                && m != MaQuyen.DuLieuMuc), ct);
+                && m != MaQuyen.DuLieuMuc && m != MaQuyen.DatabaseRelease), ct);
 
         // Chỉ xem phần CHUYÊN MÔN, không phải xem mọi thứ.
         //

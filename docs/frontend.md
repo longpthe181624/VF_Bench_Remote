@@ -38,6 +38,8 @@ Dockerfile dùng context thư mục gốc repo: `docker build -f backend/Dockerf
 
 ## Những màn đã kết nối API
 
+- Database: Model/Category/Type, phiên bản file, Release/Draft, lịch sử,
+  cấu hình Admin và nhập file cũ. Chi tiết tích hợp Client: [database.md](database.md).
 - Đăng nhập, QR ghi danh lần đầu, OTP ở những lần sau, mã khôi phục, tài khoản.
   Không mở ứng dụng hoặc lưu token chính thức trước khi hoàn tất QR.
 - Thiết bị: Bench, Vehicle, ECU; dự án, remote/robot, phòng/tầng, ECU bên trong.

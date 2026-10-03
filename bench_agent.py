@@ -44,6 +44,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
+from database_client import DatabaseClient
 
 
 LOG_QAUTO_MAC_DINH = r"D:\Qauto_2610\Qauto_2610\Logs\log.txt"
@@ -815,6 +816,7 @@ class BenchAgent:
         self.ket_qua = getattr(args, "ket_qua", "tu-sinh")
         self.gia_lap_giay = getattr(args, "gia_lap_giay", 2.0)
         self.console = getattr(args, "console", None)
+        self.database = DatabaseClient(self.console, getattr(args, "database_cache", None) or os.path.join(self.config_dir, "database-manifest.json")) if self.console else None
         # Tên bài đang chạy giả lập, để gói status báo "đang chạy" cho đúng.
         self.dang_gia_lap: str | None = None
         # Chỉ nhắc một lần chuyện thiếu --console, đừng rải kín màn hình.
@@ -873,10 +875,17 @@ class BenchAgent:
         # Mã bench là duy nhất nên nghe rộng ở chỗ model không lẫn sang bench khác.
         topic_nghe = f"bench/+/{self.id}/cmd"
         client.subscribe(topic_nghe, qos=1)
+        if self.database:
+            client.subscribe("bench/database/changed", qos=1)
+            self.database.start()
         print(f"[{self.id}] đã kết nối, nghe {topic_nghe}")
         self.lan_gui_cuoi = 0.0          # ép gửi status ngay sau khi nối lại
 
     def _khi_co_lenh(self, client, userdata, msg):
+        if getattr(msg, "topic", "") == "bench/database/changed":
+            if self.database:
+                self.database.notify_changed()
+            return
         try:
             lenh = json.loads(msg.payload.decode())
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -1179,10 +1188,13 @@ class BenchAgent:
             time.sleep(0.5)
             self.client.loop_stop()
             self.client.disconnect()
+            if self.database:
+                self.database.close()
 
 
 def main():
     ap = argparse.ArgumentParser(description="Agent Bench Console trên máy bench")
+    ap.add_argument("--database-cache", default=None, help="File manifest Database; mặc định config-dir/database-manifest.json")
     ap.add_argument("--host", default="127.0.0.1", help="IP broker MQTT (máy A)")
     ap.add_argument("--port", type=int, default=1883)
     ap.add_argument("--id", default="QAUTO-01", help="Mã bench, phải khớp Console")

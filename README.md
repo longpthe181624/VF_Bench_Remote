@@ -5,6 +5,7 @@ Công cụ nội bộ để chạy test bench ô tô từ xa qua MQTT.
 Hiện có **frontend React**, **backend** và **bench giả lập**.
 FE kết nối API thật, với đăng nhập Microsoft Authenticator và lưu trữ file.
 Hướng dẫn chạy/build và phạm vi từng tính năng: [docs/frontend.md](docs/frontend.md).
+Kho Database, Release/Draft và tích hợp Client: [docs/database.md](docs/database.md).
 
 ## Bắt đầu
 

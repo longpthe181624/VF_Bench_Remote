@@ -45,6 +45,7 @@ public static class MaQuyen
     public const string DuLieuView = "DULIEU.VIEW";
     public const string DuLieuUpload = "DULIEU.UPLOAD";
     public const string DuLieuDelete = "DULIEU.DELETE";
+    public const string DatabaseRelease = "DATABASE.RELEASE";
 
     /// <summary>
     /// Thêm, sửa, xoá MỤC trong kho dữ liệu chung — khác với thêm file vào mục.
@@ -77,6 +78,7 @@ public static class MaQuyen
     /// <summary>Nguồn để seed database và dựng màn quản trị quyền.</summary>
     public static readonly IReadOnlyList<MoTaQuyen> TatCa =
     [
+        new(DatabaseRelease, "DATABASE", "RELEASE", "Chuyển trạng thái file Database Release / Draft"),
         new(BenchView,   "BENCH",    "VIEW",     "Xem danh sách bench"),
         new(BenchCreate, "BENCH",    "CREATE",   "Đăng ký bench mới"),
         new(BenchUpdate, "BENCH",    "UPDATE",   "Sửa thông tin bench"),

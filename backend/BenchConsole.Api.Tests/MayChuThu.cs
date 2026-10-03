@@ -48,6 +48,7 @@ public class MayChuThu : WebApplicationFactory<DiemVaoApi>
             ["Auth:AdminPassword"] = "Admin@12345",
             ["KhoNguoiDung:ThuMuc"] = Path.Combine(_tepThu, "private"),
             ["DuLieuChung:ThuMuc"] = Path.Combine(_tepThu, "shared"),
+            ["DatabaseFiles:ThuMuc"] = Path.Combine(_tepThu, "database"),
             ["BaoCao:ThuMuc"] = Path.Combine(_tepThu, "reports"),
             ["GoiTestCase:ThuMuc"] = Path.Combine(_tepThu, "packages"),
         }));
