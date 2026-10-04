@@ -16,7 +16,9 @@ Model Database là chương trình test (VF6/XMD), độc lập với Model thi�
 
 - Upload tạo Draft, lưu file trên ổ App_Data/database, metadata trong SQL Server.
 - Cùng Model/Category/Type/tên file/phiên bản không được upload đè.
-  Phiên bản mới tạo ID mới, giữ bản cũ. Nội dung, tên file và phiên bản bất biến.
+  Phiên bản mới tạo ID mới, giữ bản cũ. Draft có thể sửa thông tin hoặc thay file
+  trên cùng ID bằng form Chỉnh sửa file; revision và SHA cập nhật, Client đã
+  chọn SHA cũ cần đồng bộ rồi chọn lại. Blob cũ giữ để lượt tải đang chạy không bị mất.
 - File cũ ở dữ liệu chung có thể nhập bằng `Nhập file đã lưu`: người dùng tự
   chọn phân loại/phiên bản, kết quả Draft, nguồn cũ giữ nguyên. Không đoán Model
   hay tự Release dữ liệu cũ.
@@ -27,7 +29,7 @@ Model Database là chương trình test (VF6/XMD), độc lập với Model thi�
   revision cũ trả 409 để tránh ghi đè thao tác đồng thời.
 - Nhiều phiên bản Release có thể cùng tồn tại. Không có API chọn latest hoặc
   tự chọn theo ngày upload. Client/Qauto chọn ID + SHA-256 của bản cụ thể.
-- Release phải về Draft trước khi sửa phân loại hoặc xoá. Lịch sử giữ sau xoá.
+- Release khóa sửa nội dung/thông tin và xoá; phải về Draft trước khi cập nhật. Lịch sử giữ sau xoá.
 
 Migration `20261003081644_DatabaseFileCatalog` tạo năm bảng, FK và unique index,
 seed danh mục đúng một lần. Mục Admin đã xoá không được thêm lại lúc restart.
@@ -41,6 +43,7 @@ Backend tự chạy migration khi khởi động, theo cơ chế đang có của
 | POST/PATCH/DELETE /api/database/lookups/{models\|categories\|types}[/{id}] | Admin cấu hình danh mục |
 | GET /api/database/files | Lọc modelId/categoryId/typeId/status/q, phân trang page/size |
 | POST /api/database/files | Multipart file, modelId, categoryId, typeId, phienBan, moTa |
+| POST /api/database/files/{id}/update | Multipart modelId/categoryId/typeId/phienBan/moTa/revision, file tùy chọn; chỉ Draft |
 | POST /api/database/import-shared | JSON fileId, modelId, categoryId, typeId, phienBan, moTa |
 | GET /api/database/files/{id} | Metadata bản cụ thể |
 | PATCH /api/database/files/{id} | Sửa phân loại Draft; modelId/categoryId/typeId/moTa/revision |

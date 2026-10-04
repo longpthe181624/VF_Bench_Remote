@@ -6,6 +6,7 @@ using BenchConsole.Core.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Net.Http.Headers;
 
 namespace BenchConsole.Api.Controllers;
 
@@ -21,6 +22,16 @@ public sealed class DatabaseUploadForm
     public int TypeId { get; set; }
     public string PhienBan { get; set; } = "";
     public string? MoTa { get; set; }
+}
+public sealed class DatabaseUpdateForm
+{
+    public IFormFile? File { get; set; }
+    public int ModelId { get; set; }
+    public int CategoryId { get; set; }
+    public int TypeId { get; set; }
+    public string PhienBan { get; set; } = "";
+    public string? MoTa { get; set; }
+    public long Revision { get; set; }
 }
 public record DatabaseFileDto(int Id, int ModelId, string Model, int CategoryId, string Category,
     int TypeId, string Type, string TenFile, string PhienBan, string Sha256, long KichThuoc,
@@ -93,7 +104,7 @@ public class DatabaseController(AppDbContext db, KhoDatabase kho, KhoDuLieuChung
             return BadRequest(new { error = "Model / Category / Type không tồn tại. Tải lại danh mục." });
         var name = KiemTraTep.TenGoc(form.File.FileName);
         if (await db.DatabaseFiles.AnyAsync(x => x.ModelId == form.ModelId && x.CategoryId == form.CategoryId && x.TypeId == form.TypeId && x.TenFile == name && x.PhienBan == version, ct))
-            return Conflict(new { error = "Đã có tên file và phiên bản này trong cùng Model / Category / Type. Dùng phiên bản khác." });
+            return Conflict(new { error = "Đã có tên file và phiên bản này. Mở Chỉnh sửa file để cập nhật bản Draft hoặc tạo phiên bản khác." });
         await using var stream = form.File.OpenReadStream();
         var saved = await kho.LuuAsync(stream, ct);
         var now = DateTimeOffset.UtcNow;
@@ -163,11 +174,51 @@ public class DatabaseController(AppDbContext db, KhoDatabase kho, KhoDuLieuChung
         return DatabaseFileDto.From(await Files.FirstAsync(x => x.Id == id, ct));
     }
 
+    [HttpPost("files/{id:int}/update"), HasPermission(MaQuyen.DuLieuUpload)]
+    [RequestSizeLimit(KiemTraTep.TranYeuCau), RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranYeuCau)]
+    public async Task<ActionResult<DatabaseFileDto>> UpdateDraft(int id, [FromForm] DatabaseUpdateForm form, CancellationToken ct)
+    {
+        using var guard = await kho.Khoa.LayAsync(ct);
+        var file = await Files.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (file is null) return NotFound();
+        if (file.Status != "Draft") return Conflict(new { error = "Chuyển về Draft trước khi chỉnh sửa file." });
+        if (file.Revision != form.Revision) return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại trước khi sửa." });
+        if (form.File is not null && KiemTraTep.Loi([form.File]) is { } loi) return BadRequest(new { error = loi });
+        var version = form.PhienBan.Trim();
+        if (version.Length is < 1 or > 64 || form.MoTa?.Length > 512)
+            return BadRequest(new { error = "Phiên bản cần 1–64 ký tự, mô tả tối đa 512 ký tự." });
+        if (!await db.DatabaseModels.AnyAsync(x => x.Id == form.ModelId, ct) || !await db.DatabaseCategories.AnyAsync(x => x.Id == form.CategoryId, ct) || !await db.DatabaseTypes.AnyAsync(x => x.Id == form.TypeId, ct))
+            return BadRequest(new { error = "Model / Category / Type không tồn tại." });
+        var name = form.File is null ? file.TenFile : KiemTraTep.TenGoc(form.File.FileName);
+        if (await db.DatabaseFiles.AnyAsync(x => x.Id != id && x.ModelId == form.ModelId && x.CategoryId == form.CategoryId && x.TypeId == form.TypeId && x.TenFile == name && x.PhienBan == version, ct))
+            return Conflict(new { error = "Đã có tên file và phiên bản này trong phân loại đích." });
+        if (form.File is not null)
+        {
+            await using var stream = form.File.OpenReadStream();
+            var saved = await kho.LuuAsync(stream, ct);
+            file.Sha256 = saved.Sha256; file.KichThuoc = saved.KichThuoc; file.TenFile = name;
+        }
+        file.ModelId = form.ModelId; file.CategoryId = form.CategoryId; file.TypeId = form.TypeId;
+        file.PhienBan = version; file.MoTa = form.MoTa; file.Revision++;
+        file.NguoiThayDoi = User.Email()!; file.ThayDoiLuc = DateTimeOffset.UtcNow;
+        db.DatabaseChanges.Add(new DatabaseChange { FileId = id, Action = form.File is null ? "metadata" : "replace", FromStatus = "Draft", ToStatus = "Draft", Revision = file.Revision, NguoiThayDoi = file.NguoiThayDoi, ThayDoiLuc = file.ThayDoiLuc });
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại." }); }
+        catch (DbUpdateException) { return Conflict(new { error = "Phân loại đích vừa có file cùng tên/phiên bản." }); }
+        // Giữ blob cũ để lượt tải/test đã bắt đầu không bị mất nội dung.
+        db.ChangeTracker.Clear();
+        return DatabaseFileDto.From(await Files.FirstAsync(x => x.Id == id, ct));
+    }
+
     [HttpGet("files/{id:int}/history"), HasPermission(MaQuyen.DuLieuView)]
     public async Task<object> History(int id, CancellationToken ct) => await db.DatabaseChanges.AsNoTracking().Where(x => x.FileId == id).OrderByDescending(x => x.Id).Select(x => new { x.Id, x.Action, x.FromStatus, x.ToStatus, x.Revision, x.NguoiThayDoi, x.ThayDoiLuc }).ToListAsync(ct);
 
     [HttpGet("files/{id:int}/download"), HasPermission(MaQuyen.DuLieuView)]
-    public Task<IActionResult> Download(int id, CancellationToken ct) => DownloadFile(db, kho, id, null, true, false, ct);
+    public Task<IActionResult> Download(int id, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "no-store";
+        return DownloadFile(db, kho, id, null, true, false, ct);
+    }
 
     public static async Task<IActionResult> DownloadFile(AppDbContext db, KhoDatabase kho, int id, string? sha256, bool testing, bool client, CancellationToken ct)
     {
@@ -177,7 +228,7 @@ public class DatabaseController(AppDbContext db, KhoDatabase kho, KhoDuLieuChung
         if (client && file.Status != "Release" && !testing) return new ConflictObjectResult(new { error = "File đang Draft. Chỉ tải khi người dùng chọn kiểm thử Draft rõ ràng (testing=true)." });
         var path = kho.DuongDan(file.Sha256);
         if (!System.IO.File.Exists(path)) return new NotFoundObjectResult(new { error = "File đã mất trên ổ lưu trữ." });
-        return new PhysicalFileResult(path, "application/octet-stream") { FileDownloadName = file.TenFile, EnableRangeProcessing = true };
+        return new PhysicalFileResult(path, "application/octet-stream") { FileDownloadName = file.TenFile, EnableRangeProcessing = true, EntityTag = new EntityTagHeaderValue($"\"{file.Sha256}\"") };
     }
 
     [HttpDelete("files/{id:int}"), HasPermission(MaQuyen.DuLieuDelete)]

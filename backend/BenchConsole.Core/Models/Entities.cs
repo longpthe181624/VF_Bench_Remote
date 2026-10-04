@@ -195,6 +195,8 @@ public class MucDuLieuChung
 public class TepDuLieuChung
 {
     public int Id { get; set; }
+    public string Status { get; set; } = "Draft";
+    public long Revision { get; set; } = 1;
     public int? SoftwareTypeId { get; set; }
     public SoftwareType? SoftwareType { get; set; }
 

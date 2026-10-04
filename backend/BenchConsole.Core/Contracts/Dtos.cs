@@ -180,12 +180,13 @@ public record TepDuLieuChungDto(
     long KichThuoc,
     string? MoTa,
     string? NguoiTaiLen,
-    DateTimeOffset TaiLenLuc, int? SoftwareTypeId = null, string? SoftwareType = null)
+    DateTimeOffset TaiLenLuc, int? SoftwareTypeId = null, string? SoftwareType = null,
+    string Status = "Draft", long Revision = 1)
 {
     /// <summary>Tên mục truyền từ ngoài vào: danh mục nay nằm trong database.</summary>
     public static TepDuLieuChungDto From(TepDuLieuChung t, string? tenLoai) => new(
         t.Id, t.Loai, string.IsNullOrWhiteSpace(tenLoai) ? t.Loai : tenLoai, t.Ten, t.TenFile,
-        t.Sha256, t.KichThuoc, t.MoTa, t.NguoiTaiLen, t.TaiLenLuc, t.SoftwareTypeId, t.SoftwareType?.Ten);
+        t.Sha256, t.KichThuoc, t.MoTa, t.NguoiTaiLen, t.TaiLenLuc, t.SoftwareTypeId, t.SoftwareType?.Ten, t.Status, t.Revision);
 }
 
 /// <summary>Một mục trong kho dữ liệu chung, kèm số file đang có.</summary>

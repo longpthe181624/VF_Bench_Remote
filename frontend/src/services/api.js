@@ -38,9 +38,9 @@ export async function download(path, filename) {
   const link = document.createElement('a'); link.href = url; link.download = filename; link.click()
   setTimeout(() => URL.revokeObjectURL(url), 30000)
 }
-export function upload(path, data, { signal, progress } = {}) {
+export function upload(path, data, { signal, progress, allowEmpty = false } = {}) {
   const files = data.getAll('file'), limit = path === '/test-cases' ? 64 : 256
-  if (!files.length || files.length > 100) throw Error('Chọn từ 1 đến 100 file.')
+  if ((!files.length && !allowEmpty) || files.length > 100) throw Error('Chọn từ 1 đến 100 file.')
   if (files.some(f => !f.size)) throw Error('Có file rỗng trong danh sách đã chọn.')
   if (files.reduce((sum, f) => sum + f.size, 0) > limit * 1024 * 1024) throw Error(`Tổng dung lượng vượt ${limit} MB.`)
   return api.post(path, data, { signal, timeout: 600000, onUploadProgress: e => progress?.(e.progress ? Math.round(e.progress * 100) : 0) }).then(r => r.data)

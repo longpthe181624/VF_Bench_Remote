@@ -7,6 +7,7 @@ using BenchConsole.Core.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Net.Http.Headers;
 
 namespace BenchConsole.Api.Controllers;
 
@@ -119,7 +120,7 @@ public class DuLieuChungController(
         if (ten.Length == 0 || ten.Length > 128) return BadRequest(new { error = "Tên cần có từ 1 đến 128 ký tự." });
 
         if (await db.TepDuLieuChungs.AnyAsync(t => t.Loai == loai && t.Ten == ten, ct))
-            return Conflict(new { error = $"Mục này đã có '{ten}'. Xoá bản cũ hoặc dùng tên khác." });
+            return Conflict(new { error = $"Mục này đã có '{ten}'. Mở Thông tin / sửa để cập nhật bản Draft hoặc dùng tên khác." });
 
         await using var s = form.File.OpenReadStream();
         var luu = await kho.LuuAsync(s, ct);
@@ -162,16 +163,29 @@ public class DuLieuChungController(
         if (!System.IO.File.Exists(duongDan))
             return NotFound(new { error = "Bản ghi còn nhưng file đã mất trên đĩa." });
 
-        return PhysicalFile(duongDan, "application/octet-stream", tep.TenFile, enableRangeProcessing: true);
+        Response.Headers.CacheControl = "no-store";
+        return new PhysicalFileResult(duongDan, "application/octet-stream")
+        { FileDownloadName = tep.TenFile, EntityTag = new EntityTagHeaderValue($"\"{tep.Sha256}\""), EnableRangeProcessing = true };
     }
 
     [HttpPatch("{id:int}")]
     [HasPermission(MaQuyen.DuLieuUpload)]
-    public async Task<ActionResult<TepDuLieuChungDto>> Sua(int id, SuaDuLieuRequest req, CancellationToken ct)
+    public Task<ActionResult<TepDuLieuChungDto>> Sua(int id, SuaDuLieuRequest req, CancellationToken ct)
+        => UpdateDraft(id, req, null, ct);
+
+    [HttpPost("{id:int}/update"), HasPermission(MaQuyen.DuLieuUpload)]
+    [RequestSizeLimit(KiemTraTep.TranYeuCau), RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranYeuCau)]
+    public Task<ActionResult<TepDuLieuChungDto>> Replace(int id, [FromForm] SuaDuLieuForm form, CancellationToken ct)
+        => UpdateDraft(id, new SuaDuLieuRequest(form.Ten, form.Loai, form.MoTa, form.SoftwareTypeId, form.Revision), form.File, ct);
+
+    private async Task<ActionResult<TepDuLieuChungDto>> UpdateDraft(int id, SuaDuLieuRequest req, IFormFile? replacement, CancellationToken ct)
     {
         using var khoa = await kho.Khoa.LayAsync(ct);
         var tep = await db.TepDuLieuChungs.Include(t => t.SoftwareType).FirstOrDefaultAsync(t => t.Id == id, ct);
         if (tep is null) return NotFound();
+        if (tep.Status != "Draft") return Conflict(new { error = "Chuyển về Draft trước khi chỉnh sửa file Release." });
+        if (req.Revision.HasValue && req.Revision != tep.Revision) return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại trước khi sửa." });
+        if (replacement is not null && KiemTraTep.Loi([replacement]) is { } loi) return BadRequest(new { error = loi });
         var loai = req.Loai is null ? tep.Loai : LoaiDuLieuChung.ChuanHoaMa(req.Loai);
         var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == loai, ct);
         if (muc is null) return BadRequest(new { error = await LoiMucLaAsync(req.Loai, ct) });
@@ -190,7 +204,17 @@ public class DuLieuChungController(
         tep.SoftwareTypeId = typeId;
         tep.Ten = ten;
         if (req.MoTa is not null) tep.MoTa = req.MoTa.Trim();
-        await db.SaveChangesAsync(ct);
+        if (replacement is not null)
+        {
+            await using var stream = replacement.OpenReadStream();
+            var saved = await kho.LuuAsync(stream, ct);
+            tep.Sha256 = saved.Sha256; tep.KichThuoc = saved.KichThuoc;
+            tep.TenFile = KiemTraTep.TenGoc(replacement.FileName);
+        }
+        tep.Revision++;
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại." }); }
+        catch (DbUpdateException) { return Conflict(new { error = "Mục đích vừa có file cùng tên." }); }
         db.ChangeTracker.Clear();
         tep = await db.TepDuLieuChungs.Include(t => t.SoftwareType).FirstAsync(t => t.Id == id, ct);
         return TepDuLieuChungDto.From(tep, muc.Ten);
@@ -198,14 +222,17 @@ public class DuLieuChungController(
 
     [HttpDelete("{id:int}")]
     [HasPermission(MaQuyen.DuLieuDelete)]
-    public async Task<IActionResult> Xoa(int id, CancellationToken ct)
+    public async Task<IActionResult> Xoa(int id, CancellationToken ct, [FromQuery] long? revision = null)
     {
         using var khoa = await kho.Khoa.LayAsync(ct);
         var tep = await db.TepDuLieuChungs.FirstOrDefaultAsync(t => t.Id == id, ct);
         if (tep is null) return NotFound();
+        if (tep.Status != "Draft") return Conflict(new { error = "Chuyển về Draft trước khi xoá file Release." });
+        if (revision.HasValue && revision != tep.Revision) return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại trước khi xoá." });
 
         db.TepDuLieuChungs.Remove(tep);
-        await db.SaveChangesAsync(ct);
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại." }); }
 
         // Hai bản ghi khác nhau có thể trỏ cùng một file, nên chỉ xoá file khi
         // không còn ai dùng tới nó nữa — kể cả bản ghi ở loại khác.
@@ -214,6 +241,25 @@ public class DuLieuChungController(
 
         log.LogWarning("Dữ liệu chung: {Ai} xoá {Loai}/{Ten}", User.Email(), tep.Loai, tep.Ten);
         return NoContent();
+    }
+
+    [HttpPatch("{id:int}/status"), HasPermission(MaQuyen.DatabaseRelease)]
+    public async Task<ActionResult<TepDuLieuChungDto>> Status(int id, DatabaseStatusRequest req, CancellationToken ct)
+    {
+        if (req.Status is not ("Draft" or "Release")) return BadRequest(new { error = "Status chỉ nhận Release / Draft." });
+        using var guard = await kho.Khoa.LayAsync(ct);
+        var file = await db.TepDuLieuChungs.Include(x => x.SoftwareType).FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (file is null) return NotFound();
+        if (file.Loai != LoaiDuLieuChung.PhienBan) return BadRequest(new { error = "Trạng thái này áp dụng cho phiên bản phần mềm." });
+        if (file.Revision != req.Revision) return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại trước khi đổi trạng thái." });
+        if (file.Status != req.Status)
+        {
+            file.Status = req.Status; file.Revision++;
+            try { await db.SaveChangesAsync(ct); }
+            catch (DbUpdateConcurrencyException) { return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại." }); }
+        }
+        var names = await TenMucAsync(ct);
+        return TepDuLieuChungDto.From(file, names.GetValueOrDefault(file.Loai));
     }
 
     // ------------------------------------------------------- quản lý mục
@@ -355,4 +401,8 @@ public class TaiLenDuLieuForm
     public int? SoftwareTypeId { get; set; }
 }
 
-public record SuaDuLieuRequest(string? Ten, string? Loai, string? MoTa, int? SoftwareTypeId = null);
+public record SuaDuLieuRequest(string? Ten, string? Loai, string? MoTa, int? SoftwareTypeId = null, long? Revision = null);
+public class SuaDuLieuForm : TaiLenDuLieuForm
+{
+    public long Revision { get; set; }
+}

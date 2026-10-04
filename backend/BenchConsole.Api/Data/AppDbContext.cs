@@ -152,6 +152,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<TepDuLieuChung>(e =>
         {
+            e.Property(x => x.Status).HasMaxLength(16).HasDefaultValue("Draft").IsRequired();
+            e.Property(x => x.Revision).HasDefaultValue(1L).IsConcurrencyToken();
             e.HasOne(x => x.SoftwareType).WithMany().HasForeignKey(x => x.SoftwareTypeId).OnDelete(DeleteBehavior.Restrict);
             e.Property(x => x.Loai).HasMaxLength(32).IsRequired();
             e.Property(x => x.Ten).HasMaxLength(200).IsRequired();

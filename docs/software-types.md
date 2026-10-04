@@ -1,7 +1,7 @@
 # Type phiên bản phần mềm
 
 Màn `/app/software` có cột và bộ lọc Type; khi upload phần mềm chọn Type.
-Admin quản lý danh mục ở `/app/software-types` hoặc nút `Quản lý Type`.
+Admin thêm/đổi tên/xoá Type ngay trong ô chọn Type khi thêm/sửa file.
 Ban đầu có Ứng dụng, Lib, Public; có thể đổi tên hoặc thêm Type theo từng phần
 mềm. Public là tên phân loại, không làm thay đổi quyền truy cập file.
 
@@ -11,7 +11,9 @@ Chặn xoá Type còn file. Người có DULIEU.UPLOAD đổi Type của file tr
 `Thông tin / sửa`, sau đó Admin có thể xoá Type không còn sử dụng.
 
 File phần mềm cũ hiện `Chưa phân loại`, có thể gán Type mà không upload lại.
-Tên hiển thị và mô tả file vẫn sửa được. Di chuyển file ra khỏi mục phiên bản
+File Draft sửa được tên hiển thị, mô tả, Type và thay nội dung file ngay trong form.
+File Release chỉ xem/tải, không chỉnh sửa hoặc xoá; có thể chuyển về Draft
+(với quyền DATABASE.RELEASE) để cập nhật. Revision cũ trả 409. Di chuyển file ra khỏi mục phiên bản
 phần mềm sẽ bỏ liên kết SoftwareTypeId. DBC/tài liệu không gán Type phần mềm.
 Migration `SoftwareFileTypes` thêm FK nullable, giữ file/metadata cũ và seed
 ba Type đúng một lần; Type đã xoá không được tạo lại khi restart.
@@ -35,3 +37,12 @@ trạng thái chưa phân loại để tương thích.
 Kiểm tra API trong `SoftwareTypeChecks.cs`; UI qua
 `node scripts/test-software-types-ui.cjs` với test server 5077 (xem frontend.md).
 Migration sinh từ EF model; SQL Server thật chưa có trên máy kiểm thử.
+
+Migration `20261004103030_SoftwareDraftRelease` thêm Status/Revision; file cũ
+được gán Draft, không tự Release. API status trả trạng thái cho người xem file.
+
+- POST /api/du-lieu-chung/{id}/update: multipart ten/loai/moTa/softwareTypeId/revision; file thay thế tùy chọn.
+- PATCH /api/du-lieu-chung/{id}/status: JSON status (Draft/Release), revision; DATABASE.RELEASE.
+- DELETE /api/du-lieu-chung/{id}?revision=N: xoá Draft đúng revision.
+
+Kiểm thử thay file và khóa Release: `DraftFileChecks.cs` và `scripts/test-draft-files-ui.cjs`.

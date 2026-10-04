@@ -33,7 +33,7 @@ public class DatabaseType : IDatabaseDanhMuc
     public string Ten { get; set; } = "";
 }
 
-/// <summary>Một bản file bất biến; chọn bằng ID + SHA-256, không theo ngày upload.</summary>
+/// <summary>Draft được cập nhật, Release khoá sửa; Client chọn bằng ID + SHA-256.</summary>
 public class DatabaseFile
 {
     public int Id { get; set; }
