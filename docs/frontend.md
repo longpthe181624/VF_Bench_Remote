@@ -4,6 +4,25 @@ FE thật nằm trong `frontend/`, tham khảo stack của `D:\AQC\ai-web`: Reac
 Vite 8, Tailwind CSS 4, React Router 7, TanStack Query 5, Axios, Lucide,
 Radix UI và font Geist. Giao diện tiếng Việt, dùng API cùng origin.
 
+## Tổ chức code
+
+- `pages/`: điều phối dữ liệu, bộ lọc và các màn ứng dụng. Trang không được
+  dùng làm nơi xuất component cho trang khác.
+- `components/files/`: form upload, chi tiết/sửa file, đổi trạng thái, chọn Type
+  và các tab dùng chung. DBC và phần mềm dùng chung dialog Draft/Release.
+- `hooks/use-shared-data-sections.js`: đường dẫn, quyền và trạng thái đang chọn
+  của Dữ liệu chung; menu bên trái và tab lấy cùng danh sách này.
+- `lib/database-fields.js`: tên trường Model/Category/Type dùng chung cho form,
+  bộ lọc và cấu hình danh mục.
+- `services/files.js`: đường tải theo revision, cấu hình kho, cập nhật Draft và
+  đổi trạng thái. `services/api.js` giữ trách nhiệm HTTP/auth/upload/download.
+
+Định dạng FE theo `.prettierrc.json`; có thể dùng Prettier 3.6.2 trong editor.
+BE dùng `Contracts/DatabaseFiles.cs` cho DTO/form; `DatabaseFileQueries` cho
+luồng đọc FE/Client, `FileWritePolicy` cho Draft/revision và `FileDownload` cho
+ETag/Range. Các endpoint sửa DBC dùng chung một luồng kiểm tra/lưu/outbox.
+Refactor này không thêm migration hoặc đổi đường dẫn API.
+
 ## Chạy phát triển
 
 ```powershell

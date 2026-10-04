@@ -7,7 +7,7 @@ import { post, errorText } from '../services/api'
 import { notify } from '../lib/notify'
 import { date, matches, typeName } from '../lib/format'
 import { Badge, Button, DataTable, DetailList, ErrorMessage, Field, Notice, PageHeading, Toolbar } from '../components/ui'
-import { UploadDialog } from './FilesPage'
+import { UploadDialog } from '../components/files/UploadDialog'
 function loadDrafts(key){try{const value=JSON.parse(localStorage.getItem(key));return Array.isArray(value)?value:[]}catch{return[]}}
 function exportRequest(request){const url=URL.createObjectURL(new Blob([JSON.stringify(request,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=request.code+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 const modeName=value=>value==='manual'?'Manual':'Tự động'
