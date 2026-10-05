@@ -19,6 +19,7 @@ import {
 import { useAuth } from '../context/auth-context'
 import { useSharedDataSections } from '../hooks/use-shared-data-sections'
 import { Button } from './ui'
+import { PageErrorBoundary } from './PageErrorBoundary'
 const groups = [
   {
     name: 'VẬN HÀNH',
@@ -180,7 +181,9 @@ export default function AppShell() {
           </div>
         </header>
         <main className="page-content">
-          <Outlet />
+          <PageErrorBoundary resetKey={location.pathname + location.search}>
+            <Outlet />
+          </PageErrorBoundary>
         </main>
       </div>
     </div>

@@ -94,6 +94,18 @@ dotnet run --project backend/BenchConsole.Api.Tests --no-restore -- --serve-ui
 node scripts/test-react-ui.cjs
 ```
 
+Kiểm tra hồi quy tạo Request trên HTTP qua IP/origin ngoài localhost:
+
+```powershell
+node scripts/test-request-http-ui.cjs
+```
+
+Script giữ origin HTTP không phải secure context trong browser và chuyển request
+đến server test bằng Playwright. Nó kiểm tra tạo/sửa/lưu nháp, reload, Back và
+khôi phục sau lỗi render ở một page. Mã nháp dùng `crypto.getRandomValues`,
+không phụ thuộc `crypto.randomUUID` chỉ có trong secure context. Lỗi render của
+page được giữ trong phần nội dung; menu ứng dụng vẫn dùng được khi đổi trang.
+
 Script cần Playwright và Chromium; có thể đặt `PLAYWRIGHT_MODULE`,
 `CHROMIUM_PATH` tới bản đã cài. `REACT_UI_URL` mặc định
 `http://127.0.0.1:5077/app/`. Tài khoản test cố định chỉ tồn tại trong server

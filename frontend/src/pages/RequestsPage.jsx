@@ -8,11 +8,12 @@ import { notify } from '../lib/notify'
 import { date, matches, typeName } from '../lib/format'
 import { Badge, Button, DataTable, DetailList, ErrorMessage, Field, Notice, PageHeading, Toolbar } from '../components/ui'
 import { UploadDialog } from '../components/files/UploadDialog'
+import { createRequestCode } from '../lib/request-code'
 function loadDrafts(key){try{const value=JSON.parse(localStorage.getItem(key));return Array.isArray(value)?value:[]}catch{return[]}}
 function exportRequest(request){const url=URL.createObjectURL(new Blob([JSON.stringify(request,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=request.code+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 const modeName=value=>value==='manual'?'Manual':'Tự động'
 function RequestWizard({initial,devices,projects,packages,software,onSave,onClose}){
-  const {user,can}=useAuth(),[step,setStep]=useState(0),[form,setForm]=useState(()=>({...initial,code:initial.code||"REQ-"+crypto.randomUUID().slice(0,8).toUpperCase(),createdAt:initial.createdAt||new Date().toISOString()})),[error,setError]=useState(''),[busy,setBusy]=useState(false),[uploading,setUploading]=useState(false)
+  const {user,can}=useAuth(),[step,setStep]=useState(0),[form,setForm]=useState(()=>({...initial,code:initial.code||createRequestCode(),createdAt:initial.createdAt||new Date().toISOString()})),[error,setError]=useState(''),[busy,setBusy]=useState(false),[uploading,setUploading]=useState(false)
   const device=devices.find(d=>d.code===form.device),chosen=packages.filter(p=>form.packageIds.includes(p.id)),steps=['Thông tin','Đối tượng / phần mềm','Testcase','Thời gian','Kiểm tra']
   const update=(key,value)=>setForm(v=>({...v,[key]:value}))
   function validate(current){
