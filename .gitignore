@@ -66,3 +66,7 @@ obj/
 # Kho gói test case người dùng tải lên — dữ liệu chạy, không phải mã nguồn
 backend/BenchConsole.Api/App_Data/
 backend/BenchConsole.Api/wwwroot/app/
+# Backup contains application data and authentication records, never commit it.
+sao-luu/
+bench-backup-*/
+.bench-backup.lock

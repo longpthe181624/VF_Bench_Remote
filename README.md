@@ -7,6 +7,7 @@ FE kết nối API thật, với đăng nhập Microsoft Authenticator và lưu 
 Hướng dẫn chạy/build và phạm vi từng tính năng: [docs/frontend.md](docs/frontend.md).
 Kho Database, Release/Draft và tích hợp Client: [docs/database.md](docs/database.md).
 Client thêm Model / Category / Type qua REST: [docs/client-catalogs.md](docs/client-catalogs.md).
+Backup thủ công trước khi chuyển server: [docs/sao-luu.md](docs/sao-luu.md).
 
 ## Bắt đầu
 

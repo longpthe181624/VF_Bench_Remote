@@ -1,99 +1,132 @@
-<#
+﻿<#
 .SYNOPSIS
-    Sao lưu Bench Console: database và toàn bộ file người dùng gửi lên.
-
-.DESCRIPTION
-    Hai thứ cần cứu, nằm ở hai chỗ khác nhau:
-
-      database  bench đã đăng ký, lịch sử chạy, tài khoản, phân quyền
-      App_Data  gói test case, gói cấu hình, báo cáo, kho riêng của từng người
-
-    Mất một trong hai là hỏng: có database mà không có file thì Console liệt kê
-    gói và báo cáo nhưng tải về không có gì; có file mà không database thì
-    không biết file nào của ai.
-
-    Cả hai đang nằm trong volume Docker. Volume hỏng là mất sạch, không có
-    đường lùi nào khác.
-
+    Backup thủ công SQL Server và toàn bộ App_Data trong cùng khoảng dừng API.
 .PARAMETER Dich
-    Thư mục chứa bản sao lưu. Mặc định `.\sao-luu`.
-
+    Thư mục đích trên máy server. Mặc định sao-luu trong repo.
 .PARAMETER GiuNgay
-    Xoá bản sao lưu cũ hơn số ngày này. `0` = giữ hết.
-
-.EXAMPLE
-    .\scripts\sao-luu.ps1
-    .\scripts\sao-luu.ps1 -Dich D:\backup -GiuNgay 30
+    Chỉ dọn backup hoàn tất do script mới tạo, cũ hơn số ngày này. 0 = giữ hết.
+.PARAMETER GiuDungApi
+    Giữ API dừng sau khi backup thành công để chuyển server không phát sinh ghi mới.
 #>
+[CmdletBinding()]
 param(
-    [string]$Dich = ".\sao-luu",
-    [int]$GiuNgay = 30
+    [string]$Dich = (Join-Path $PSScriptRoot '../sao-luu'),
+    [ValidateRange(0, 36500)][int]$GiuNgay = 0,
+    [switch]$GiuDungApi,
+    [string]$SqlContainer = 'bench-sql',
+    [string]$ApiContainer = 'bench-api',
+    [string]$HelperImage = 'alpine:3'
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'backup-common.ps1')
+$projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$lock = $null
+$apiWasRunning = $false
+$apiStopped = $false
+$completed = $false
+$databaseCreated = $false
 
-# Mật khẩu đọc từ .env, không nhận qua tham số dòng lệnh: tham số nằm lại
-# trong lịch sử shell và trong danh sách tiến trình.
-$envFile = Join-Path $PSScriptRoot "..\.env"
-if (-not (Test-Path $envFile)) {
-    throw "Không thấy .env. Sao lưu cần SQL_SA_PASSWORD trong đó."
-}
+try {
+    # Khoá theo repo, không theo đích: hai lần chạy khác đích cũng không được chồng nhau.
+    $lock = [IO.File]::Open((Join-Path $projectRoot '.bench-backup.lock'),
+        [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    if ((Invoke-BackupDocker @('inspect', '--format', '{{.State.Running}}', $SqlContainer)) -ne 'true') {
+        throw 'SQL container chưa chạy. Không tạo backup.'
+    }
+    $apiWasRunning = (Invoke-BackupDocker @('inspect', '--format', '{{.State.Running}}', $ApiContainer)) -eq 'true'
+    $mounts = (Invoke-BackupDocker @('inspect', '--format', '{{json .Mounts}}', $ApiContainer)) | ConvertFrom-Json
+    if (-not (@($mounts | Where-Object { $_.Destination -eq '/app/App_Data' }).Count)) {
+        throw 'API chưa gắn volume /app/App_Data. Kiểm tra cấu hình trước khi backup.'
+    }
+    $sqlImage = Invoke-BackupDocker @('inspect', '--format', '{{.Image}}', $SqlContainer)
+    $apiImage = Invoke-BackupDocker @('inspect', '--format', '{{.Image}}', $ApiContainer)
+    # Kiểm tra helper trước khi dừng API; Docker chỉ kéo image nếu máy chưa có.
+    Invoke-BackupDocker @('run', '--rm', $HelperImage, 'tar', '--help') | Out-Null
 
-$matKhau = (Get-Content $envFile |
-    Where-Object { $_ -match '^\s*SQL_SA_PASSWORD\s*=' } |
-    Select-Object -First 1) -replace '^\s*SQL_SA_PASSWORD\s*=\s*', ''
+    New-Item -ItemType Directory -Force -Path $Dich | Out-Null
+    $backupRoot = (Resolve-Path -LiteralPath $Dich).Path
+    if ($backupRoot.Contains(',')) { throw 'Thư mục đích không được có dấu phẩy (Docker --mount).' }
+    $backupId = 'bench-backup-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+    $staging = Join-Path $backupRoot ($backupId + '.incomplete')
+    $destination = Join-Path $backupRoot $backupId
+    New-Item -ItemType Directory -Path $staging | Out-Null
+    $sqlPath = '/var/opt/mssql/backup/' + $backupId + '.bak'
+    Write-Host "Backup: $destination"
 
-if ([string]::IsNullOrWhiteSpace($matKhau)) {
-    throw "Chưa đặt SQL_SA_PASSWORD trong .env."
-}
+    if ($apiWasRunning) {
+        Write-Host '[1/4] Dừng API (web, upload và MQTT ingest tạm ngừng)...'
+        $apiStopped = $true
+        Invoke-BackupDocker @('stop', '--time', '120', $ApiContainer) | Out-Null
+    }
+    if ((Invoke-BackupDocker @('inspect', '--format', '{{.State.Running}}', $ApiContainer)) -ne 'false') {
+        throw 'API vẫn chạy; huỷ backup để tránh database và file lệch nhau.'
+    }
 
-$moc = Get-Date -Format "yyyy-MM-dd_HHmm"
-$thuMuc = Join-Path $Dich $moc
-New-Item -ItemType Directory -Force -Path $thuMuc | Out-Null
-$duongDanTuyetDoi = (Resolve-Path $thuMuc).Path
+    Write-Host '[2/4] Backup database và RESTORE VERIFYONLY...'
+    Invoke-BackupDocker @('exec', $SqlContainer, 'mkdir', '-p', '/var/opt/mssql/backup') | Out-Null
+    $databaseCreated = $true
+    Invoke-BackupSql $SqlContainer "BACKUP DATABASE [BenchConsole] TO DISK = N'$sqlPath' WITH COPY_ONLY, INIT, COMPRESSION, CHECKSUM;"
+    Invoke-BackupSql $SqlContainer "RESTORE VERIFYONLY FROM DISK = N'$sqlPath' WITH CHECKSUM;"
+    Invoke-BackupDocker @('cp', ($SqlContainer + ':' + $sqlPath), (Join-Path $staging 'BenchConsole.bak')) | Out-Null
 
-Write-Host "Sao lưu vào $duongDanTuyetDoi"
+    Write-Host '[3/4] Nén toàn bộ kho file...'
+    Invoke-BackupDocker @('run', '--rm', '--volumes-from', ($ApiContainer + ':ro'),
+        '--mount', ('type=bind,source=' + $staging + ',target=/backup'), $HelperImage,
+        'tar', 'czf', '/backup/app-data.tar.gz', '-C', '/app/App_Data', '.') | Out-Null
+    Invoke-BackupDocker @('run', '--rm', '--mount', ('type=bind,source=' + $staging + ',target=/backup,readonly'),
+        $HelperImage, 'tar', 'tzf', '/backup/app-data.tar.gz') | Out-Null
 
-# ---------------------------------------------------------------- database
-Write-Host "  [1/2] database..."
+    Write-Host '[4/4] Tạo manifest và SHA-256...'
+    $files = @('BenchConsole.bak', 'app-data.tar.gz') | ForEach-Object {
+        $path = Join-Path $staging $_
+        $item = Get-Item -LiteralPath $path
+        if ($item.Length -eq 0) { throw "File backup rỗng: $_" }
+        [ordered]@{ name = $_; size = $item.Length; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
+    }
+    $manifest = [ordered]@{
+        format = 'bench-console-backup'; version = 1; backupId = $backupId
+        completed = $true; createdAtUtc = [DateTime]::UtcNow.ToString('o')
+        database = 'BenchConsole'; files = @($files)
+        sqlImageId = $sqlImage; apiImageId = $apiImage
+        databaseVerified = $true; archiveVerified = $true
+        apiWasRunning = $apiWasRunning; appDataPath = '/app/App_Data'
+    }
+    $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $staging 'manifest.json') -Encoding UTF8
+    Test-BackupPackage $staging -AllowIncomplete | Out-Null
+    Move-Item -LiteralPath $staging -Destination $destination
+    $completed = $true
 
-# BACKUP DATABASE chứ không copy file .mdf: copy file của một database đang
-# chạy thì bản sao hỏng, vì SQL Server còn đang ghi dở.
-docker exec bench-sql mkdir -p /var/opt/mssql/backup
-docker exec bench-sql /opt/mssql-tools18/bin/sqlcmd `
-    -S localhost -U sa -P $matKhau -C `
-    -Q "BACKUP DATABASE BenchConsole TO DISK='/var/opt/mssql/backup/BenchConsole.bak' WITH FORMAT, INIT, COMPRESSION"
-if ($LASTEXITCODE -ne 0) { throw "BACKUP DATABASE hỏng." }
-
-docker cp bench-sql:/var/opt/mssql/backup/BenchConsole.bak "$duongDanTuyetDoi\BenchConsole.bak"
-if ($LASTEXITCODE -ne 0) { throw "Không chép được file .bak ra ngoài." }
-
-# ---------------------------------------------------------------- file
-Write-Host "  [2/2] file người dùng gửi lên..."
-
-# `--volumes-from bench-api` thay vì gọi tên volume: tên volume do Docker
-# Compose ghép từ tên thư mục dự án, đổi tên thư mục là script hỏng. Mượn
-# volume của chính container thì luôn đúng.
-docker run --rm --volumes-from bench-api -v "${duongDanTuyetDoi}:/backup" `
-    alpine tar czf /backup/app-data.tar.gz -C /app/App_Data .
-if ($LASTEXITCODE -ne 0) { throw "Không nén được App_Data." }
-
-# ---------------------------------------------------------------- dọn bản cũ
-if ($GiuNgay -gt 0) {
-    $mocCu = (Get-Date).AddDays(-$GiuNgay)
-    Get-ChildItem -Path $Dich -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.CreationTime -lt $mocCu } |
-        ForEach-Object {
-            Write-Host "  dọn bản cũ: $($_.Name)"
-            Remove-Item $_.FullName -Recurse -Force
+    if ($GiuNgay -gt 0) {
+        $cutoff = [DateTime]::UtcNow.AddDays(-$GiuNgay)
+        Get-ChildItem -LiteralPath $backupRoot -Directory | Where-Object {
+            $_.Name -match '^bench-backup-\d{8}T\d{9}Z-[a-f0-9]{8}$' -and $_.FullName -ne $destination
+        } | ForEach-Object {
+            if (($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+                try {
+                    $old = Test-BackupPackage $_.FullName
+                    if ([DateTime]::Parse($old.createdAtUtc).ToUniversalTime() -lt $cutoff) {
+                        $target = [IO.Path]::GetFullPath($_.FullName)
+                        if ([IO.Path]::GetDirectoryName($target) -ne $backupRoot) { throw 'Đích dọn backup ngoài thư mục được chọn.' }
+                        Remove-Item -LiteralPath $target -Recurse -Force
+                    }
+                } catch { Write-Warning "Giữ bản cũ vì chưa kiểm tra/dọn được: $($_.Exception.Message)" }
+            }
         }
+    }
+    Write-Host "HOÀN TẤT: $destination"
+    Write-Host 'Chép cả thư mục này sang máy khác. .env/khóa bí mật được chuyển riêng, không nằm trong backup.'
+} finally {
+    if ($databaseCreated) {
+        try { Invoke-BackupDocker @('exec', $SqlContainer, 'rm', '-f', $sqlPath) | Out-Null }
+        catch { Write-Warning 'Chưa xoá được file .bak tạm bên trong SQL container.' }
+    }
+    try {
+        if ($apiStopped -and -not ($GiuDungApi -and $completed)) {
+            Write-Host 'Bật lại API...'
+            Invoke-BackupDocker @('start', $ApiContainer) | Out-Null
+        } elseif ($apiStopped) {
+            Write-Host "API vẫn DỪNG để chuyển server. Bật lại nếu cần bằng: docker start $ApiContainer"
+        }
+    } finally { if ($lock) { $lock.Dispose() } }
 }
-
-# ---------------------------------------------------------------- kết quả
-$tong = (Get-ChildItem $duongDanTuyetDoi -Recurse | Measure-Object -Property Length -Sum).Sum
-Write-Host ""
-Write-Host "Xong. $([math]::Round($tong / 1MB, 1)) MB tại $duongDanTuyetDoi"
-Get-ChildItem $duongDanTuyetDoi | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,2)}}
-
-Write-Host "Nhớ chép ra khỏi máy này. Sao lưu nằm cùng máy với bản gốc thì"
-Write-Host "hỏng ổ cứng là mất cả hai."
