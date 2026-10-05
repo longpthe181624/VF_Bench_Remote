@@ -1057,6 +1057,7 @@ await DatabaseChecks.Run(http, tokenAdmin, tokenViewer, tokenKySu, Check);
 Nhom("Type phần mềm: cấu hình Admin, phân loại, đổi tên và lọc file");
 await SoftwareTypeChecks.Run(http, tokenAdmin, tokenViewer, tokenKySu, Check);
 await DraftFileChecks.Run(http, tokenAdmin, tokenViewer, tokenKySu, Check);
+await ClientCatalogChecks.Run(http, may.Services, tokenAdmin, tokenViewer, tokenKySu, Check);
 using (var scope = may.Services.CreateScope())
 {
     var database = scope.ServiceProvider.GetRequiredService<AppDbContext>();

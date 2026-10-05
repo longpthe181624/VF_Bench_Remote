@@ -6,6 +6,7 @@ Hiện có **frontend React**, **backend** và **bench giả lập**.
 FE kết nối API thật, với đăng nhập Microsoft Authenticator và lưu trữ file.
 Hướng dẫn chạy/build và phạm vi từng tính năng: [docs/frontend.md](docs/frontend.md).
 Kho Database, Release/Draft và tích hợp Client: [docs/database.md](docs/database.md).
+Client thêm Model / Category / Type qua REST: [docs/client-catalogs.md](docs/client-catalogs.md).
 
 ## Bắt đầu
 

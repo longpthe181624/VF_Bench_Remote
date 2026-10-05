@@ -11,8 +11,8 @@ public record MoTaQuyen(string Ma, string Module, string Action, string Ten);
 /// hậu quả là **mọi người đều bị từ chối** vì không ai có quyền tên đó. Dùng
 /// hằng số thì sai chính tả thành lỗi biên dịch.
 ///
-/// PHẠM VI: đây là quyền trên **web Console**, không phải quyền trên Qauto.
-/// Quyền trong Qauto do chính Qauto lo, Console không đảm nhận.
+/// PHẠM VI: quyền truy cập API Console từ web và các API ghi của Client.
+/// Quyền nghiệp vụ bên trong Qauto vẫn do Qauto quản lý.
 /// </summary>
 public static class MaQuyen
 {
@@ -46,6 +46,7 @@ public static class MaQuyen
     public const string DuLieuUpload = "DULIEU.UPLOAD";
     public const string DuLieuDelete = "DULIEU.DELETE";
     public const string DatabaseRelease = "DATABASE.RELEASE";
+    public const string ClientCatalogCreate = "CLIENT.CATALOG.CREATE";
 
     /// <summary>
     /// Thêm, sửa, xoá MỤC trong kho dữ liệu chung — khác với thêm file vào mục.
@@ -78,6 +79,7 @@ public static class MaQuyen
     /// <summary>Nguồn để seed database và dựng màn quản trị quyền.</summary>
     public static readonly IReadOnlyList<MoTaQuyen> TatCa =
     [
+        new(ClientCatalogCreate, "CLIENT", "CATALOG.CREATE", "Client tra cứu và thêm Model / Category / Type"),
         new(DatabaseRelease, "DATABASE", "RELEASE", "Chuyển trạng thái file Database Release / Draft"),
         new(BenchView,   "BENCH",    "VIEW",     "Xem danh sách bench"),
         new(BenchCreate, "BENCH",    "CREATE",   "Đăng ký bench mới"),

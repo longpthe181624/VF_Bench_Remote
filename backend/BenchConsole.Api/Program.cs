@@ -52,9 +52,9 @@ builder.Services.AddHostedService<DonBaoCaoService>();
 
 // ------------------------------------------------- xác thực và phân quyền
 //
-// PHẠM VI: xác thực này là của WEB CONSOLE. Qauto KHÔNG xác thực — hai endpoint
-// nó gọi được đánh [AllowAnonymous] tại chỗ. Quyền bên trong Qauto do chính
-// Qauto lo, Console không đảm nhận.
+// Web và API ghi danh mục của Client dùng JWT của Console. Các endpoint Qauto
+// cũ được đánh [AllowAnonymous] tại chỗ giữ hợp đồng hiện có; API Client mới
+// không tự kế thừa ngoại lệ này. Quyền bên trong Qauto vẫn do Qauto quản lý.
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
 
 if (string.IsNullOrWhiteSpace(jwt.Key))
