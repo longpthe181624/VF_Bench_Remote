@@ -210,6 +210,7 @@ function FilesListPage({ kind = 'shared', software = false, onlyTestcase = false
                     can('DATABASE.RELEASE') ? (
                       <Button
                         aria-label={'Đổi trạng thái ' + f.ten}
+                        className="btn-status"
                         onClick={() => setStatusFile(f)}
                       >
                         <Badge tone={f.status === 'Release' ? 'success' : 'warning'}>

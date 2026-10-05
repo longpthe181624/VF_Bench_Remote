@@ -143,6 +143,7 @@ export default function DatabasePage({ embedded = false }) {
               can('DATABASE.RELEASE') ? (
                 <Button
                   aria-label={`Đổi trạng thái ${f.tenFile} ${f.phienBan}`}
+                  className="btn-status"
                   onClick={() => setStatusFile(f)}
                 >
                   <Badge tone={f.status === 'Release' ? 'success' : 'warning'}>{f.status}</Badge>

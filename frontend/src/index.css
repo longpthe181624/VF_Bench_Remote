@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @theme{--font-sans:"Geist Variable",sans-serif;}
+.btn.btn-status,.btn.btn-status:hover{border:0;padding:0;background:transparent}
 .inline-classification{padding:10px;margin-top:8px;border:1px solid var(--line);border-radius:6px;background:#fafafa}.inline-classification .field{margin-bottom:8px}
 .nav-toggle{width:100%;border:0;background:transparent;text-align:left}.nav-chevron{margin-left:auto;transition:transform .15s}.nav-chevron.open{transform:rotate(180deg)}.nav-category.active{background:#efeff3;color:#202024;font-weight:600;border-radius:6px}
 :root{font-family:"Geist Variable",sans-serif;color:#202024;background:#f7f7f9;font-size:13px;line-height:1.5;font-synthesis:none;text-rendering:optimizeLegibility;--line:#e4e4e9;--muted:#7c7c88;}
