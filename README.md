@@ -8,6 +8,7 @@ Hướng dẫn chạy/build và phạm vi từng tính năng: [docs/frontend.md]
 Kho Database, Release/Draft và tích hợp Client: [docs/database.md](docs/database.md).
 Client thêm Model / Category / Type qua REST: [docs/client-catalogs.md](docs/client-catalogs.md).
 Backup thủ công trước khi chuyển server: [docs/sao-luu.md](docs/sao-luu.md).
+Backup tự động 18:00 và khôi phục server mới: [docs/backup-tu-dong-va-chuyen-server.md](docs/backup-tu-dong-va-chuyen-server.md).
 
 ## Bắt đầu
 

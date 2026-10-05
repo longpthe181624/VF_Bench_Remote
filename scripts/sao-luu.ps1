@@ -13,6 +13,7 @@ param(
     [string]$Dich = (Join-Path $PSScriptRoot '../sao-luu'),
     [ValidateRange(0, 36500)][int]$GiuNgay = 0,
     [switch]$GiuDungApi,
+    [switch]$PassThru,
     [string]$SqlContainer = 'bench-sql',
     [string]$ApiContainer = 'bench-api',
     [string]$HelperImage = 'alpine:3'
@@ -116,6 +117,7 @@ try {
     }
     Write-Host "HOÀN TẤT: $destination"
     Write-Host 'Chép cả thư mục này sang máy khác. .env/khóa bí mật được chuyển riêng, không nằm trong backup.'
+    if ($PassThru) { Write-Output $destination }
 } finally {
     if ($databaseCreated) {
         try { Invoke-BackupDocker @('exec', $SqlContainer, 'rm', '-f', $sqlPath) | Out-Null }

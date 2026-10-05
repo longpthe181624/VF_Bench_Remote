@@ -102,8 +102,11 @@ bật lại và có thay đổi, cần tạo một bản cuối mới trước k
 
 ## Khôi phục trên server mới
 
-Hiện chưa có script tự restore khi khởi động. Dùng server/volume mới, API chưa
-chạy. Không áp các bước sau lên server đang có dữ liệu cần giữ.
+Đã có lệnh restore/start và cài lịch tại
+[backup-tu-dong-va-chuyen-server.md](backup-tu-dong-va-chuyen-server.md).
+Khuyến nghị dùng `khoi-dong-server.ps1 -Build -Backup <folder>` trên server mới;
+các bước dưới đây mô tả thao tác tương đương khi làm thủ công. Dùng server/volume
+mới, API chưa chạy; không áp lên server đang có dữ liệu cần giữ.
 
 1. Đưa code và cấu hình `.env` vào server mới. SQL Server phải cùng hoặc phiên
    bản mới hơn tương thích với bản backup; không restore ngược xuống bản cũ hơn.
@@ -174,4 +177,5 @@ khi dùng để chuyển dữ liệu chính thức.
 
 Docker volume bảo toàn dữ liệu khi build container; backup ngoài máy mới giúp
 khôi phục khi mất volume hoặc mất server. Script chưa tự gửi backup sang kho
-ngoài và chưa đăng ký lịch chạy tự động.
+ngoài hoặc cài lịch; dùng `backup-tu-dong.ps1` / `cai-lich-backup.ps1` cho các
+chức năng này, xem hướng dẫn tự động ở trên.

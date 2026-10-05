@@ -70,3 +70,6 @@ backend/BenchConsole.Api/wwwroot/app/
 sao-luu/
 bench-backup-*/
 .bench-backup.lock
+.bench-backup-job.lock
+backup.config.json
+.bench-restore-*.json
