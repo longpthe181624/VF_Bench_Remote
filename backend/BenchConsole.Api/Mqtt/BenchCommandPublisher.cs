@@ -31,7 +31,8 @@ public class BenchCommandPublisher(
         string? plan = null,
         string? issuedBy = null,
         IReadOnlyDictionary<string, object?>? themVaoPayload = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        int? testRequestId = null)
     {
         var client = mqtt.Client;
         if (client is null || !client.IsConnected)
@@ -42,6 +43,7 @@ public class BenchCommandPublisher(
         // ack và result về đúng lệnh, phải chắc chắn không trùng.
         var cmd = new BenchCommand
         {
+            TestRequestId = testRequestId,
             CmdId = Guid.NewGuid().ToString("N")[..16],
             BenchId = bench.Id,
             Action = action,

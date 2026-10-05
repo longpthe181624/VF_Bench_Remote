@@ -60,7 +60,7 @@ export default function App() {
             <Route
               path="requests"
               element={
-                <Allowed permission="BENCH.VIEW">
+                <Allowed permission="REQUEST.VIEW">
                   <RequestsPage />
                 </Allowed>
               }
@@ -68,7 +68,7 @@ export default function App() {
             <Route
               path="requests/:requestId"
               element={
-                <Allowed permission="BENCH.VIEW">
+                <Allowed permission="REQUEST.VIEW">
                   <RequestsPage />
                 </Allowed>
               }

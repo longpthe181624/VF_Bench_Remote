@@ -24,7 +24,7 @@ const groups = [
   {
     name: 'VẬN HÀNH',
     items: [
-      ['/requests', 'Request test', ClipboardList, 'BENCH.VIEW'],
+      ['/requests', 'Request test', ClipboardList, 'REQUEST.VIEW'],
       ['/devices', 'Thiết bị', Boxes, 'BENCH.VIEW'],
       ['/projects', 'Dự án', Layers, 'BENCH.VIEW'],
       ['/alerts', 'Cảnh báo', Bell, 'BENCH.VIEW'],

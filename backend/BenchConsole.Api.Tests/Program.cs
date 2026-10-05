@@ -1058,6 +1058,8 @@ Nhom("Type phần mềm: cấu hình Admin, phân loại, đổi tên và lọc 
 await SoftwareTypeChecks.Run(http, tokenAdmin, tokenViewer, tokenKySu, Check);
 await DraftFileChecks.Run(http, tokenAdmin, tokenViewer, tokenKySu, Check);
 await ClientCatalogChecks.Run(http, may.Services, tokenAdmin, tokenViewer, tokenKySu, Check);
+Nhom("Request: lưu BE, phân quyền, revision, snapshot và liên kết lệnh/kết quả");
+await RequestChecks.Run(http, may.Services, tokenAdmin, tokenViewer, tokenKySu, Check);
 using (var scope = may.Services.CreateScope())
 {
     var database = scope.ServiceProvider.GetRequiredService<AppDbContext>();

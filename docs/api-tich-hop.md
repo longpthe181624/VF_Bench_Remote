@@ -5,6 +5,9 @@ không mô tả cách cài đặt bên trong.
 
 Cập nhật 30/09/2026.
 
+API Request được bổ sung ngày 05/10/2026: xem [requests.md](requests.md) về lưu nháp,
+snapshot file, revision và liên kết lệnh. Tool/Qauto và flash chưa được triển khai thực thi.
+
 ## 0. Ba điều phải đọc trước khi viết dòng code đầu tiên
 
 **ĐỔI ĐƯỜNG DẪN từ 30/09. Thay đổi GÃY, đường dẫn cũ trả 404.**

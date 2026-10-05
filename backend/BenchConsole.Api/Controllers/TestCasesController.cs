@@ -199,7 +199,8 @@ public class TestCasesController(
         // Hai gói khác tên mà cùng nội dung dùng chung một file, nên chỉ xoá
         // file khi không còn bản ghi nào trỏ vào sha đó.
         var conDung = await db.GoiTestCases.AnyAsync(g => g.Sha256 == goi.Sha256, ct);
-        if (!conDung) kho.XoaFile(goi.Sha256);
+        if (!conDung && !await db.TestRequestFiles.AnyAsync(f => f.Kind == "package" && f.Sha256 == goi.Sha256, ct))
+            kho.XoaFile(goi.Sha256);
 
         return NoContent();
     }

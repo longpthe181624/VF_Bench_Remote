@@ -230,6 +230,8 @@ public class ThietBiDuAn
 /// <summary>Một lệnh gửi xuống bench. Ghi trước khi publish để không mất dấu.</summary>
 public class BenchCommand
 {
+    public int? TestRequestId { get; set; }
+    public TestRequest? TestRequest { get; set; }
     public int Id { get; set; }
     public string CmdId { get; set; } = "";          // khớp với ack
     public int BenchId { get; set; }

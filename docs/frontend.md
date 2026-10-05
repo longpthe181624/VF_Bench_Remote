@@ -77,11 +77,12 @@ Trạng thái thiết bị/cảnh báo được cập nhật bằng polling API.
 
 ## Phần scope đang chờ BE
 
-Request có wizard 5 bước và bản nháp riêng theo tài khoản trên trình duyệt,
-xuất JSON. Một gói tự động, chạy ngay, không flash dùng API start hiện có;
-BE xác nhận gửi lệnh, kết quả chỉ hiện khi client trả về.
-Flash, hẹn giờ, manual, nhiều gói và lưu Request tập trung chưa có API điều phối;
-FE ghi rõ và chỉ lưu nháp, không giả trạng thái thành công.
+Request có wizard 5 bước và lưu tập trung trên BE, snapshot file, chống sửa cùng
+revision và nhập nháp cũ từ trình duyệt. Xem [requests.md](requests.md).
+Một gói tự động, chạy ngay, không flash giữ luồng lệnh hiện có và liên kết Request;
+BE xác nhận gửi lệnh, kết quả chỉ hiện khi client trả về. Tool chưa thực thi Qauto thật.
+Flash, hẹn giờ, manual và nhiều gói chưa có API điều phối thực thi;
+FE ghi rõ và lưu nháp, không giả trạng thái thành công.
 Kho phần mềm lưu file/mô tả thật; chưa có danh mục phiên bản có cấu trúc.
 AI gen testcase và danh mục tính năng tạm ẩn theo yêu cầu.
 
@@ -101,7 +102,8 @@ node scripts/test-request-http-ui.cjs
 ```
 
 Script giữ origin HTTP không phải secure context trong browser và chuyển request
-đến server test bằng Playwright. Nó kiểm tra tạo/sửa/lưu nháp, reload, Back và
+đến server test bằng Playwright. Nó kiểm tra tạo/sửa/lưu nháp trên BE, một browser
+context độc lập đọc lại bản lưu, reload, Back và
 khôi phục sau lỗi render ở một page. Mã nháp dùng `crypto.getRandomValues`,
 không phụ thuộc `crypto.randomUUID` chỉ có trong secure context. Lỗi render của
 page được giữ trong phần nội dung; menu ứng dụng vẫn dùng được khi đổi trang.

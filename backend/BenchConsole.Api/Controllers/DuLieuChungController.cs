@@ -331,7 +331,7 @@ public class DuLieuChungController(
         // Hai bản ghi khác nhau có thể trỏ cùng một file, nên chỉ xoá file khi
         // không còn ai dùng tới nó nữa — kể cả bản ghi ở loại khác.
         var conDung = await db.TepDuLieuChungs.AnyAsync(t => t.Sha256 == tep.Sha256, ct);
-        if (!conDung)
+        if (!conDung && !await db.TestRequestFiles.AnyAsync(f => f.Kind == "software" && f.Sha256 == tep.Sha256, ct))
             kho.XoaFile(tep.Sha256);
 
         log.LogWarning("Dữ liệu chung: {Ai} xoá {Loai}/{Ten}", User.Email(), tep.Loai, tep.Ten);

@@ -16,6 +16,10 @@ public record MoTaQuyen(string Ma, string Module, string Action, string Ten);
 /// </summary>
 public static class MaQuyen
 {
+    public const string RequestView = "REQUEST.VIEW";
+    public const string RequestCreate = "REQUEST.CREATE";
+    public const string RequestUpdate = "REQUEST.UPDATE";
+    public const string RequestDelete = "REQUEST.DELETE";
     public const string BenchView = "BENCH.VIEW";
     public const string BenchCreate = "BENCH.CREATE";
     public const string BenchUpdate = "BENCH.UPDATE";
@@ -79,6 +83,10 @@ public static class MaQuyen
     /// <summary>Nguồn để seed database và dựng màn quản trị quyền.</summary>
     public static readonly IReadOnlyList<MoTaQuyen> TatCa =
     [
+        new(RequestView, "REQUEST", "VIEW", "Xem Request test của nhóm"),
+        new(RequestCreate, "REQUEST", "CREATE", "Tạo Request test"),
+        new(RequestUpdate, "REQUEST", "UPDATE", "Sửa Request nháp của mình (Admin sửa tất cả)"),
+        new(RequestDelete, "REQUEST", "DELETE", "Xoá Request nháp của mình (Admin xoá tất cả)"),
         new(ClientCatalogCreate, "CLIENT", "CATALOG.CREATE", "Client tra cứu và thêm Model / Category / Type"),
         new(DatabaseRelease, "DATABASE", "RELEASE", "Chuyển trạng thái file Database Release / Draft"),
         new(BenchView,   "BENCH",    "VIEW",     "Xem danh sách bench"),

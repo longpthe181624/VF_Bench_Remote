@@ -1,7 +1,7 @@
 # REST API — danh sách cần có
 
-Cập nhật 22/09/2026. Tài liệu này liệt kê toàn bộ endpoint REST mà Bench Console
-cần, đối chiếu với những gì đã chạy được trong code hiện tại.
+Bản đối chiếu gốc 22/09/2026; riêng phần Request cập nhật 05/10/2026.
+Các phần chưa cập nhật là scope dự kiến, không thay thế Swagger của code hiện tại.
 
 Ba cột trạng thái:
 
@@ -121,26 +121,33 @@ Ghi chú theo bản đã làm 24/09:
 
 | Endpoint | Method | Mô tả | Trạng thái |
 |---|---|---|---|
-| `/api/test-requests` | POST | Tạo request | Chưa có |
-| `/api/test-requests` | GET | Danh sách. Lọc: `status`, `requester`, `deviceId` | Chưa có |
-| `/api/test-requests/{id}` | GET | Chi tiết kèm tiến độ | Chưa có |
-| `/api/test-requests/{id}/cancel` | POST | Huỷ request chưa chạy | Chưa có |
-| `/api/test-requests/{id}/runs` | GET | Các lượt chạy thuộc request | Chưa có |
-| `/api/software-versions` | GET | Danh sách phiên bản phần mềm để chọn | Chưa có |
+| `/api/requests` | POST | Tạo nháp trên BE | Đã có |
+| `/api/requests` | GET | Danh sách: `q`, `page`, `size` | Đã có |
+| `/api/requests/{code}` | GET | Nội dung, snapshot file và lệnh đã gửi | Đã có |
+| `/api/requests/{code}` | PATCH | Sửa nháp với revision | Đã có |
+| `/api/requests/{code}` | DELETE | Xoá nháp với revision | Đã có |
+| `/api/requests/{code}/files/{fileId}/download` | GET | Tải bản file đã chọn | Đã có |
+| `/api/requests/{code}/start` | POST | Gửi lệnh legacy, chưa điều khiển Qauto thật | Đã có |
+| `/api/runs?plan={code}` | GET | Kết quả thuộc Request | Đã có |
+| `/api/du-lieu-chung?loai=phien-ban` | GET | Kho file phần mềm để chọn | Đã có |
+| API claim/huỷ/điều phối công việc | — | Chờ hợp đồng tool | Chưa có |
 
 Trường của một request:
 
 | Trường | Bắt buộc | Ghi chú |
 |---|---|---|
 | `name` | Có | Tên request |
-| `requester` | Có | Người yêu cầu |
-| `softwareVersion` | Không | Có giá trị thì phải flash trước khi chạy |
-| `testCaseIds` | Có | Danh sách test case, chạy theo thứ tự |
-| `targetDeviceId` | Có | Đối tượng chạy. Phải có `supportsRemote = true` |
-| `scheduledAt` | Không | Bỏ trống nghĩa là chạy ngay |
+| `requester` | BE cấp | Email tài khoản đăng nhập |
+| `project`, `device` | Không ở nháp | Mã dự án, mã thiết bị; có chọn thì kiểm tra quan hệ |
+| `mode` | Mặc định auto | auto / manual |
+| `packageIds` | Không ở nháp | Gói testcase phù hợp với mode |
+| `softwareId` | Không | Ghim file phần mềm, không tự suy ra thao tác flash |
+| `flash` | Không | Chỉ ghi nhận; nghiệp vụ flash chưa được chốt/thực thi |
+| `timing`, `scheduledAt` | Không | now / scheduled; lịch mới chỉ lưu |
+| `revision` | Có khi sửa/xoá | Chống ghi đè bản nháp từ phiên cũ |
 
-Bản đầu, `/api/software-versions` trả danh sách nhập tay cộng các giá trị đã
-dùng trước đó, chưa nối vào kho build.
+Hợp đồng và giới hạn thực thi hiện tại: [requests.md](requests.md).
+Kho phần mềm chưa có trường phiên bản riêng; Request giữ ID, revision và SHA256.
 
 ## 6. Kết quả và report
 

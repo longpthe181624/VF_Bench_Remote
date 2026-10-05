@@ -6,6 +6,8 @@ namespace BenchConsole.Api.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<TestRequest> TestRequests => Set<TestRequest>();
+    public DbSet<TestRequestFile> TestRequestFiles => Set<TestRequestFile>();
     public DbSet<DatabaseModel> DatabaseModels => Set<DatabaseModel>();
     public DbSet<SoftwareType> SoftwareTypes => Set<SoftwareType>();
     public DbSet<DatabaseCategory> DatabaseCategories => Set<DatabaseCategory>();
@@ -46,6 +48,33 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<TestRequest>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasIndex(x => x.CreatedAt);
+            e.Property(x => x.Code).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(128).IsRequired();
+            e.Property(x => x.Requester).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Project).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Device).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.Mode).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Timing).HasMaxLength(16).IsRequired();
+            e.Property(x => x.State).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Revision).IsConcurrencyToken();
+        });
+        b.Entity<TestRequestFile>(e =>
+        {
+            e.HasIndex(x => new { x.TestRequestId, x.Kind, x.SourceId }).IsUnique();
+            e.HasIndex(x => new { x.Kind, x.Sha256 });
+            e.Property(x => x.Kind).HasMaxLength(16).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            e.Property(x => x.FileName).HasMaxLength(260).IsRequired();
+            e.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Mode).HasMaxLength(16).IsRequired();
+            e.HasOne(x => x.TestRequest).WithMany(x => x.Files)
+                .HasForeignKey(x => x.TestRequestId).OnDelete(DeleteBehavior.Cascade);
+        });
         DanhMuc<DatabaseModel>(b);
         DanhMuc<SoftwareType>(b);
         DanhMuc<DatabaseCategory>(b);
@@ -173,6 +202,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<BenchCommand>(e =>
         {
+            e.HasOne(x => x.TestRequest).WithMany(x => x.Commands)
+                .HasForeignKey(x => x.TestRequestId).OnDelete(DeleteBehavior.Restrict);
             // Ghép ack với lệnh bằng cmd_id, nên phải tra nhanh và không trùng.
             e.HasIndex(x => x.CmdId).IsUnique();
             e.Property(x => x.CmdId).HasMaxLength(64).IsRequired();
