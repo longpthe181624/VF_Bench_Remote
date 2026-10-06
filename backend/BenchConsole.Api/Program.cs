@@ -73,7 +73,11 @@ builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<AuthService>();
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services.AddAuthentication("ConsoleAuth")
+    .AddPolicyScheme("ConsoleAuth", "JWT hoặc client API key", o =>
+        o.ForwardDefaultSelector = context => context.Request.Headers.ContainsKey(ClientKeyAccess.Header)
+            ? ClientKeyAccess.Scheme : JwtBearerDefaults.AuthenticationScheme)
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ClientApiKeyHandler>(ClientKeyAccess.Scheme, _ => { })
     .AddJwtBearer(o =>
     {
         o.TokenValidationParameters = new TokenValidationParameters
@@ -123,6 +127,7 @@ builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>
 {
+    o.OperationFilter<ClientApiKeyOpenApi>();
     // Không có phần này thì nút "Try it out" trên Swagger gọi mọi endpoint mà
     // không kèm token, và endpoint nào có [Authorize] cũng trả 401 — người thử
     // sẽ tưởng API hỏng. Mà mình đã bảo đội Qauto và bên tích hợp dùng Swagger.
@@ -134,6 +139,11 @@ builder.Services.AddSwaggerGen(o =>
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
         Description = "Dán access token lấy từ POST /api/auth/login. Không cần gõ chữ 'Bearer'.",
+    });
+    o.AddSecurityDefinition("ClientApiKey", new OpenApiSecurityScheme
+    {
+        Name = ClientKeyAccess.Header, Type = SecuritySchemeType.ApiKey, In = ParameterLocation.Header,
+        Description = "API key do Admin cấp cho tool. Chỉ dùng trên API file/danh mục cho Client; không gửi cùng Bearer token.",
     });
     o.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
@@ -221,6 +231,19 @@ app.UseCors(CorsPolicy);
 
 // Thứ tự BẮT BUỘC: xác thực trước, phân quyền sau. Đảo lại thì lúc kiểm quyền
 // chưa có danh tính, và mọi endpoint có [HasPermission] đều từ chối tất cả.
+// Chặn cả endpoint AllowAnonymous nếu caller mang API key ngoài phạm vi Client.
+// Các endpoint legacy không mang header này giữ hợp đồng hiện có.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Headers.ContainsKey(ClientKeyAccess.Header)
+        && context.GetEndpoint()?.Metadata.GetMetadata<AllowClientApiKeyAttribute>() is null)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new { error = "API key không được sử dụng trên endpoint này." });
+        return;
+    }
+    await next();
+});
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

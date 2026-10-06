@@ -70,6 +70,8 @@ Dockerfile dùng context thư mục gốc repo: `docker build -f backend/Dockerf
 - Phần mềm có Type cấu hình bởi Admin, bộ lọc và sửa phân loại file;
   xem [software-types.md](software-types.md).
 - Người dùng, vai trò/quyền. Nút và đường dẫn kiểm tra quyền, BE quyết định cuối.
+- Admin cấp API key riêng cho tool, chọn quyền, đổi quyền và thu hồi trên web;
+  xem [client-api-keys.md](client-api-keys.md).
 
 Danh sách file/gói có phân trang trên tập dữ liệu BE trả về; BE hiện giới hạn
 500 file kho/chung và 200 gói. Báo cáo lượt chạy phân trang từ máy chủ.

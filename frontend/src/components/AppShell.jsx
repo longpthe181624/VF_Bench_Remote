@@ -15,6 +15,7 @@ import {
   X,
   Layers,
   ChevronDown,
+  KeyRound,
 } from 'lucide-react'
 import { useAuth } from '../context/auth-context'
 import { useSharedDataSections } from '../hooks/use-shared-data-sections'
@@ -43,6 +44,7 @@ const groups = [
     items: [
       ['/users', 'Người dùng', Users, 'USER.VIEW'],
       ['/roles', 'Vai trò', Shield, 'ROLE.VIEW'],
+      ['/client-keys', 'API key cho Client', KeyRound, 'AdminOnly'],
     ],
   },
 ]
@@ -112,7 +114,7 @@ export default function AppShell() {
         <nav>
           {groups.map((group) => {
             const items = group.items.filter((i) =>
-              i[3] === 'SharedData' ? sections.length > 0 : can(i[3]),
+              i[3] === 'SharedData' ? sections.length > 0 : i[3] === 'AdminOnly' ? user.vaiTro.includes('Admin') : can(i[3]),
             )
             return (
               !!items.length && (

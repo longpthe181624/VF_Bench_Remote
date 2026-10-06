@@ -5,9 +5,10 @@ Danh mục dùng chung với web, không tạo một kho riêng cho Client.
 
 ## Xác thực và quyền
 
-Dùng `Authorization: Bearer <accessToken>` từ luồng đăng nhập/refresh hiện có
-của Console. Tài khoản có MFA vẫn phải hoàn thành MFA; token tạm 2FA không dùng được.
-API không nhận ghi anonymous và chưa có cơ chế API key/service token riêng.
+Dùng `X-API-Key` do Admin cấp cho tool hoặc `Authorization: Bearer <accessToken>`
+từ luồng đăng nhập/refresh của Console. Không gửi cả hai cùng lúc.
+Tài khoản JWT có MFA vẫn phải hoàn thành MFA; token tạm 2FA không dùng được.
+API không nhận ghi anonymous. Cách cấp/quản lý key: [client-api-keys.md](client-api-keys.md).
 
 Admin tạo vai trò riêng trên web, cấp `CLIENT.CATALOG.CREATE`, rồi gán vai trò
 cho tài khoản dùng bởi Client. Admin cũng gọi được API này. Engineer/Viewer

@@ -14,7 +14,7 @@ public record SoftwareTypeRequest(string Ten);
 [ApiController, Route("api/software/types"), Authorize]
 public class SoftwareTypesController(AppDbContext db, KhoDuLieuChung kho) : ControllerBase
 {
-    [HttpGet, HasPermission(MaQuyen.DuLieuView)]
+    [AllowClientApiKey, HttpGet, HasPermission(MaQuyen.DuLieuView)]
     public async Task<object> List(CancellationToken ct) => await db.SoftwareTypes.AsNoTracking().OrderBy(x => x.Ten)
         .Select(x => new { x.Id, x.Ma, x.Ten, SoFile = db.TepDuLieuChungs.Count(f => f.SoftwareTypeId == x.Id) }).ToListAsync(ct);
 

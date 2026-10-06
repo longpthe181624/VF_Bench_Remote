@@ -14,6 +14,7 @@ public record ClientCatalogDto(int Id, string Ma, string Ten, bool Created);
 
 /// <summary>Client tạo hoặc lấy lại danh mục bằng mã cố định; không sửa mục đã có.</summary>
 [ApiController, Route("api/client/catalogs"), Authorize]
+[AllowClientApiKey]
 [HasPermission(MaQuyen.ClientCatalogCreate)]
 public class ClientCatalogsController(AppDbContext db, KhoDatabase database, KhoDuLieuChung shared) : ControllerBase
 {

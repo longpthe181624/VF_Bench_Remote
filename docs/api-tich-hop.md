@@ -8,6 +8,10 @@ Cập nhật 30/09/2026.
 API Request được bổ sung ngày 05/10/2026: xem [requests.md](requests.md) về lưu nháp,
 snapshot file, revision và liên kết lệnh. Tool/Qauto và flash chưa được triển khai thực thi.
 
+Tool upload file/thêm danh mục có thể dùng API key do Admin cấp, không cần đăng nhập
+tài khoản người dùng: [client-api-keys.md](client-api-keys.md). Key chỉ dùng trên
+các endpoint Client được cho phép và theo quyền đã cấp.
+
 ## 0. Ba điều phải đọc trước khi viết dòng code đầu tiên
 
 **ĐỔI ĐƯỜNG DẪN từ 30/09. Thay đổi GÃY, đường dẫn cũ trả 404.**

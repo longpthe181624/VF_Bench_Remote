@@ -35,7 +35,7 @@ public class DuLieuChungController(
     /// Danh mục các mục, kèm số file từng mục. Giao diện dựng menu từ đây chứ
     /// không chép cứng danh sách — thêm một loại trong Core là nó tự hiện ra.
     /// </summary>
-    [HttpGet("muc")]
+    [AllowClientApiKey, HttpGet("muc")]
     [HasPermission(MaQuyen.DuLieuView)]
     public async Task<ActionResult<List<MucDuLieuChungDto>>> Muc(CancellationToken ct)
     {
@@ -55,7 +55,7 @@ public class DuLieuChungController(
             .ToList();
     }
 
-    [HttpGet]
+    [AllowClientApiKey, HttpGet]
     [HasPermission(MaQuyen.DuLieuView)]
     public async Task<ActionResult<List<TepDuLieuChungDto>>> List(
         [FromQuery] string? loai, [FromQuery] string? q, CancellationToken ct, [FromQuery] int? softwareTypeId = null)
@@ -94,7 +94,7 @@ public class DuLieuChungController(
         return rows.Select(t => TepDuLieuChungDto.From(t, ten.GetValueOrDefault(t.Loai))).ToList();
     }
 
-    [HttpPost]
+    [AllowClientApiKey, HttpPost]
     [HasPermission(MaQuyen.DuLieuUpload)]
     [RequestSizeLimit(KiemTraTep.TranYeuCau)]
     [RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranYeuCau)]
@@ -188,7 +188,7 @@ public class DuLieuChungController(
         return TepDuLieuChungDto.From(tep, muc.Ten);
     }
 
-    [HttpGet("{id:int}/download")]
+    [AllowClientApiKey, HttpGet("{id:int}/download")]
     [HasPermission(MaQuyen.DuLieuView)]
     public async Task<IActionResult> Tai(int id, CancellationToken ct)
     {

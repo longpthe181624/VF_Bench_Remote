@@ -1,0 +1,50 @@
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
+const assert = require('node:assert/strict')
+const base = process.env.REACT_UI_URL || 'http://127.0.0.1:5077/app/'
+const url = path => new URL('/api' + path, base).href
+
+;(async () => {
+  const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) })
+  try {
+    const page = await browser.newPage(), errors = []
+    page.on('pageerror', error => errors.push(error.message))
+    await page.goto(base)
+    await page.getByLabel('Email', { exact: true }).fill('admin@benchconsole.local')
+    await page.getByLabel('Mật khẩu', { exact: true }).fill('Admin@12345')
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click()
+    await page.getByRole('link', { name: 'API key cho Client', exact: true }).click()
+    await page.getByRole('button', { name: 'Cấp API key', exact: true }).click()
+    let dialog = page.getByRole('dialog')
+    const name = 'Tool UI ' + Date.now()
+    await dialog.getByLabel('Tên tool / Client *', { exact: true }).fill(name)
+    await dialog.getByLabel('Xem và tải file dữ liệu chung', { exact: false }).check()
+    await dialog.getByLabel('Upload file mới vào dữ liệu chung / File DBC', { exact: false }).check()
+    const issued = page.waitForResponse(response => response.url() === url('/client-api-keys') && response.request().method() === 'POST')
+    await dialog.getByRole('button', { name: 'Cấp key', exact: true }).click()
+    const data = await (await issued).json(), key = data.apiKey
+    dialog = page.getByRole('dialog')
+    await dialog.getByRole('heading', { name: 'API key · ' + name, exact: true }).waitFor()
+    assert.equal((await dialog.getByLabel('API key', { exact: true }).inputValue()) === key, true)
+    assert.equal(await page.evaluate(secret => JSON.stringify(localStorage).includes(secret), key), false)
+    await dialog.getByRole('button', { name: 'Đã lưu, đóng', exact: true }).click()
+    await page.reload()
+    const row = page.getByRole('row').filter({ hasText: name })
+    await row.waitFor()
+    assert.equal(await page.getByLabel('API key', { exact: true }).count(), 0)
+    const headers = { 'X-API-Key': key }
+    assert.equal((await page.request.get(url('/database/files'), { headers })).status(), 200)
+    assert.equal((await page.request.get(url('/users'), { headers })).status(), 403)
+    await row.getByRole('button', { name: 'Đổi quyền', exact: true }).click()
+    dialog = page.getByRole('dialog')
+    await dialog.getByLabel('Upload file mới vào dữ liệu chung / File DBC', { exact: false }).uncheck()
+    await dialog.getByRole('button', { name: 'Lưu quyền', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    assert.equal((await page.request.post(url('/du-lieu-chung'), { headers, multipart: { ten: name, file: { name: 'test.txt', mimeType: 'text/plain', buffer: Buffer.from('denied') } } })).status(), 403)
+    page.once('dialog', prompt => prompt.accept())
+    await row.getByRole('button', { name: 'Thu hồi', exact: true }).click()
+    await row.getByText('Đã thu hồi', { exact: true }).waitFor()
+    assert.equal((await page.request.get(url('/database/files'), { headers })).status(), 401)
+    assert.deepEqual(errors, [])
+    console.log('OK: Admin cấp API key một lần, không lưu secret vào browser storage, đổi quyền có hiệu lực, chặn API khác và thu hồi key.')
+  } finally { await browser.close() }
+})().catch(error => { console.error(error); process.exitCode = 1 })

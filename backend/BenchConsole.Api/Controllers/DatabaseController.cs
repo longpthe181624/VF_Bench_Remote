@@ -15,7 +15,7 @@ public class DatabaseController(AppDbContext db, KhoDatabase kho, KhoDuLieuChung
 {
     private IQueryable<DatabaseFile> Files => DatabaseFileQueries.WithClassification(db);
 
-    [HttpGet("lookups"), HasPermission(MaQuyen.DuLieuView)]
+    [AllowClientApiKey, HttpGet("lookups"), HasPermission(MaQuyen.DuLieuView)]
     public async Task<object> Lookups(CancellationToken ct) => new
     {
         models = await db.DatabaseModels.AsNoTracking().OrderBy(x => x.Ten).ToListAsync(ct),
@@ -23,18 +23,18 @@ public class DatabaseController(AppDbContext db, KhoDatabase kho, KhoDuLieuChung
         types = await db.DatabaseTypes.AsNoTracking().OrderBy(x => x.Ten).ToListAsync(ct),
     };
 
-    [HttpGet("files"), HasPermission(MaQuyen.DuLieuView)]
+    [AllowClientApiKey, HttpGet("files"), HasPermission(MaQuyen.DuLieuView)]
     public Task<object> List(int? modelId, int? categoryId, int? typeId, string? status, string? q, int page = 1, int size = 20, CancellationToken ct = default)
         => DatabaseFileQueries.ListAsync(db, modelId, categoryId, typeId, status, q, page, size, ct);
 
-    [HttpGet("files/{id:int}"), HasPermission(MaQuyen.DuLieuView)]
+    [AllowClientApiKey, HttpGet("files/{id:int}"), HasPermission(MaQuyen.DuLieuView)]
     public async Task<ActionResult<DatabaseFileDto>> Detail(int id, CancellationToken ct)
     {
         var file = await Files.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         return file is null ? NotFound() : DatabaseFileDto.From(file);
     }
 
-    [HttpPost("files"), HasPermission(MaQuyen.DuLieuUpload)]
+    [AllowClientApiKey, HttpPost("files"), HasPermission(MaQuyen.DuLieuUpload)]
     [RequestSizeLimit(KiemTraTep.TranYeuCau), RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranYeuCau)]
     public async Task<ActionResult<DatabaseFileDto>> Upload([FromForm] DatabaseUploadForm form, CancellationToken ct)
     {
@@ -243,7 +243,7 @@ public class DatabaseController(AppDbContext db, KhoDatabase kho, KhoDuLieuChung
     [HttpGet("files/{id:int}/history"), HasPermission(MaQuyen.DuLieuView)]
     public async Task<object> History(int id, CancellationToken ct) => await db.DatabaseChanges.AsNoTracking().Where(x => x.FileId == id).OrderByDescending(x => x.Id).Select(x => new { x.Id, x.Action, x.FromStatus, x.ToStatus, x.Revision, x.NguoiThayDoi, x.ThayDoiLuc }).ToListAsync(ct);
 
-    [HttpGet("files/{id:int}/download"), HasPermission(MaQuyen.DuLieuView)]
+    [AllowClientApiKey, HttpGet("files/{id:int}/download"), HasPermission(MaQuyen.DuLieuView)]
     public Task<IActionResult> Download(int id, CancellationToken ct)
     {
         Response.Headers.CacheControl = "no-store";

@@ -6,6 +6,7 @@ namespace BenchConsole.Api.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<ClientApiKey> ClientApiKeys => Set<ClientApiKey>();
     public DbSet<TestRequest> TestRequests => Set<TestRequest>();
     public DbSet<TestRequestFile> TestRequestFiles => Set<TestRequestFile>();
     public DbSet<DatabaseModel> DatabaseModels => Set<DatabaseModel>();
@@ -48,6 +49,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<ClientApiKey>(e =>
+        {
+            e.HasIndex(x => x.KeyId).IsUnique();
+            e.Property(x => x.KeyId).HasMaxLength(32).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(128).IsRequired();
+            e.Property(x => x.SecretHash).HasMaxLength(32).IsRequired();
+            e.Property(x => x.PermissionsJson).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.CreatedBy).HasMaxLength(256).IsRequired();
+            e.Property(x => x.Revision).IsConcurrencyToken();
+        });
         b.Entity<TestRequest>(e =>
         {
             e.HasIndex(x => x.Code).IsUnique();

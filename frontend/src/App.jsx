@@ -13,6 +13,7 @@ import { UsersPage, RolesPage } from './pages/AdminPages'
 import AccountPage from './pages/AccountPage'
 import SoftwareTypesPage from './pages/SoftwareTypesPage'
 import DatabaseSettingsPage from './pages/DatabaseSettingsPage'
+import ClientKeysPage from './pages/ClientKeysPage'
 function Protected() {
   const { ready, session } = useAuth()
   return !ready ? (
@@ -185,6 +186,7 @@ export default function App() {
                 </Allowed>
               }
             />
+            <Route path="client-keys" element={<AdminOnly><ClientKeysPage /></AdminOnly>} />
             <Route path="account" element={<AccountPage />} />
             <Route path="*" element={<Notice>Không tìm thấy màn yêu cầu.</Notice>} />
           </Route>
@@ -200,6 +202,6 @@ function AdminOnly({ children }) {
   return user.vaiTro.includes('Admin') ? (
     children
   ) : (
-    <Notice>Chỉ Admin được cấu hình danh mục.</Notice>
+    <Notice>Chỉ Admin được dùng chức năng này.</Notice>
   )
 }
