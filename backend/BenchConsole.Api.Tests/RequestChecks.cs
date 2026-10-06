@@ -56,6 +56,7 @@ public static class RequestChecks
                 .LuuAsync(new MemoryStream(Encoding.UTF8.GetBytes("original request software")), default);
             var software = new TepDuLieuChung { Ten = "Request software", Loai = "phien-ban", TenFile = "software.bin",
                 Sha256 = savedSoftware.Sha256, KichThuoc = savedSoftware.KichThuoc };
+            db.DuAns.Add(new DuAn { Ma = "REQUEST-OTHER", Ten = "Another project" });
             db.Benches.Add(bench); db.GoiTestCases.Add(package); db.TepDuLieuChungs.Add(software);
             await db.SaveChangesAsync();
             packageId = package.Id; softwareId = software.Id; benchId = bench.Id; originalSha = software.Sha256;
@@ -103,8 +104,18 @@ public static class RequestChecks
             new { name = "Bad mode", mode = "robot" }, new { name = "Bad timing", timing = "weekly" },
             new { name = "Bad ID", packageIds = new[] { -1 } }, new { name = "Missing file", packageIds = new[] { 999999 } },
             new { name = "Missing project", project = "UNKNOWN" }, new { name = "Missing device", device = "UNKNOWN" },
-            new { name = "Wrong project", device = "REQUEST-BENCH" }, new { name = "Config not testcase", mode = "manual", packageIds = new[] { packageId } } })
+            new { name = "Wrong project", project = "REQUEST-OTHER", device = "REQUEST-BENCH" }, new { name = "Config not testcase", mode = "manual", packageIds = new[] { packageId } } })
             check((await Send(HttpMethod.Post, "/api/requests", engineer, body)).StatusCode == HttpStatusCode.BadRequest, "Request: chặn đầu vào không hợp lệ");
+        var independent = await Json(await Send(HttpMethod.Post, "/api/requests", engineer,
+            new { name = "Feature without project", device = "REQUEST-BENCH", packageIds = new[] { packageId } }));
+        var independentPath = "/api/requests/" + independent.GetProperty("code").GetString();
+        check(independent.GetProperty("project").GetString() == "" && independent.GetProperty("device").GetString() == "REQUEST-BENCH",
+            "Request: chọn bench có dự án nhưng request không cần gán dự án");
+        check((await Send(HttpMethod.Patch, independentPath, engineer,
+            new { name = "Independent feature updated", device = "REQUEST-BENCH", packageIds = new[] { packageId }, revision = 1 })).IsSuccessStatusCode,
+            "Request: sửa và lưu nháp không dự án");
+        check((await Send(HttpMethod.Post, independentPath + "/start", engineer)).StatusCode == HttpStatusCode.ServiceUnavailable,
+            "Request: legacy start không chặn vì thiếu dự án, chỉ báo broker offline");
         var scheduled = await Json(await Send(HttpMethod.Post, "/api/requests", engineer,
             new { name = "Scheduled draft", timing = "scheduled", scheduledAt = "2030-10-05T18:00:00+07:00" }));
         check(DateTimeOffset.Parse(scheduled.GetProperty("scheduledAt").GetString()!).UtcDateTime.Hour == 11, "Request: lịch lưu đúng offset Việt Nam");

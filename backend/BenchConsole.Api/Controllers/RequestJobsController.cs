@@ -32,7 +32,7 @@ public class RequestJobsController(AppDbContext db, JobWorkflow flow, JobWriteGa
         JobWorkflow.Require(row.Mode == "auto" && !row.Flash, "Chỉ gửi kiểm thử tự động không flash. Manual / flash giữ ở nháp.");
         JobWorkflow.Require(row.Files.Any(x => x.Kind == "package"), "Chọn gói testcase.", 400);
         var bench = await db.Benches.Include(x => x.DuAns).ThenInclude(x => x.DuAn).FirstOrDefaultAsync(x => x.Code == row.Device, ct);
-        JobWorkflow.Require(bench is not null && bench.HoTroRemote && bench.DuAns.Any(x => x.DuAn!.Ma == row.Project), "Kiểm tra thiết bị và dự án.");
+        JobWorkflow.Require(bench is not null && bench.HoTroRemote && (row.Project.Length == 0 || bench.DuAns.Any(x => x.DuAn!.Ma == row.Project)), "Kiểm tra thiết bị và dự án.");
         JobWorkflow.Require(row.Timing != "scheduled" || row.ScheduledAt > flow.Now, "Lịch phải ở tương lai.", 400);
         foreach (var file in row.Files)
             JobWorkflow.Require(System.IO.File.Exists(file.Kind == "package" ? packages.DuongDan(file.Sha256) : software.DuongDan(file.Sha256)), "File đã mất trên đĩa.");

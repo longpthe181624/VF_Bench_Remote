@@ -27,6 +27,7 @@ public static class StorageUiServer
             using (var zip = new System.IO.Compression.ZipArchive(stream, System.IO.Compression.ZipArchiveMode.Create, true))
             using (var entry = zip.CreateEntry("simulation.tc").Open()) entry.Write(System.Text.Encoding.UTF8.GetBytes("simulation only"));
             stream.Position = 0;
+            db.Benches.Add(new Core.Models.Bench { Code = "SIMULATION-STANDALONE", Ten = "Standalone simulation", State = Core.Models.BenchState.Idle });
             var saved = await scope.ServiceProvider.GetRequiredService<Api.Services.KhoGoiTestCase>().LuuAsync(stream, default);
             db.GoiTestCases.Add(new Core.Models.GoiTestCase { Ten = "Simulation-UI", TenFileGoc = "simulation.zip",
                 Sha256 = saved.Sha256, KichThuoc = saved.KichThuoc, SoTestCase = 1 });

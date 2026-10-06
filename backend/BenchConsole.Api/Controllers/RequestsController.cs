@@ -119,7 +119,7 @@ public class RequestsController(AppDbContext db, KhoGoiTestCase packages, KhoDuL
             var bench = await db.Benches.Include(x => x.DuAns).ThenInclude(x => x.DuAn)
                 .FirstOrDefaultAsync(x => x.Code == device, ct);
             if (bench is null) return "Thiết bị không tồn tại.";
-            if (project.Length == 0 || !bench.DuAns.Any(x => x.DuAn?.Ma == project)) return "Thiết bị không thuộc dự án đã chọn.";
+            if (project.Length > 0 && !bench.DuAns.Any(x => x.DuAn?.Ma == project)) return "Thiết bị không thuộc dự án đã chọn.";
             if (input.Mode == "auto" && !bench.HoTroRemote) return "Thiết bị không hỗ trợ kiểm thử từ xa.";
         }
         if (input.PackageIds is null || input.PackageIds.Any(x => x <= 0) || input.SoftwareId is <= 0)
@@ -211,11 +211,11 @@ public class RequestsController(AppDbContext db, KhoGoiTestCase packages, KhoDuL
         var files = row.Files.Where(f => f.Kind == "package").ToList();
         if (row.Mode != "auto" || row.Flash || row.Timing != "now" || files.Count != 1)
             return Conflict(new { error = "Chỉ hỗ trợ lệnh chạy ngay một gói tự động, không flash. Các yêu cầu khác được lưu nháp." });
-        if (string.IsNullOrWhiteSpace(row.Project) || string.IsNullOrWhiteSpace(row.Device))
-            return BadRequest(new { error = "Chọn dự án và đối tượng chạy." });
+        if (string.IsNullOrWhiteSpace(row.Device))
+            return BadRequest(new { error = "Chọn đối tượng chạy." });
         var bench = await db.Benches.Include(x => x.DuAns).ThenInclude(x => x.DuAn)
             .FirstOrDefaultAsync(x => x.Code == row.Device, ct);
-        if (bench is null || !bench.HoTroRemote || !bench.DuAns.Any(x => x.DuAn?.Ma == row.Project))
+        if (bench is null || !bench.HoTroRemote || (row.Project.Length > 0 && !bench.DuAns.Any(x => x.DuAn?.Ma == row.Project)))
             return Conflict(new { error = "Thiết bị hoặc dự án đã thay đổi. Kiểm tra lại Request." });
         if (await db.TestJobs.AnyAsync(x => x.ActiveDevice == row.Device, ct)) return Conflict(new { error = "Thiết bị đang được giữ bởi tool." });
         if (bench.State is not BenchState.Idle) return Conflict(new { error = "Thiết bị chưa sẵn sàng chạy." });

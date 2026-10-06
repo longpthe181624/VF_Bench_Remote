@@ -1,5 +1,7 @@
 # Request test lưu trên server
 
+Dự án là tùy chọn: có thể kiểm thử một tính năng trên bench / vehicle / component chưa gán dự án. Nếu chọn dự án, thiết bị phải thuộc dự án đó. Chế độ tự động vẫn yêu cầu hỗ trợ remote.
+
 Cập nhật 06/10/2026: FE gửi bằng `POST /api/requests/{code}/enqueue`, hỗ trợ nhiều gói tự động và hẹn giờ. Xem [client-jobs.md](client-jobs.md) về API key, lease, kết quả và phục hồi. `/start` bên dưới là luồng MQTT legacy.
 
 Request được lưu trong SQL Server, không còn phụ thuộc localStorage của máy tạo.

@@ -1,5 +1,7 @@
 # Giao request và nhận kết quả qua REST
 
+Dự án là tùy chọn: có thể kiểm thử một tính năng trên bench / vehicle / component chưa gán dự án. Nếu chọn dự án, thiết bị phải thuộc dự án đó. Chế độ tự động vẫn yêu cầu hỗ trợ remote.
+
 Web lưu Request và các file đã chọn, sau đó **Gửi yêu cầu cho tool** để tạo việc trong DB. Tool chủ động polling REST, nhận việc của bench được gán, tải file, kiểm tra SHA256, chạy Qauto và trả kết quả. Server chưa tự gọi Qauto. MQTT vẫn đồng bộ trạng thái thiết bị và phục vụ các lệnh legacy.
 
 Flash chưa triển khai theo yêu cầu hiện tại. Request manual / flash vẫn lưu nháp. Có thể gửi nhiều gói testcase tự động trong cùng Request.

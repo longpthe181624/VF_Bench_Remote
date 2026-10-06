@@ -43,6 +43,7 @@ public static class JobChecks
             var project = new DuAn { Ma = "JOB-PROJECT", Ten = "Job project" };
             foreach (var code in new[] { "JOB-A", "JOB-B" }) db.Benches.Add(new Bench { Code = code, State = BenchState.Idle,
                 DuAns = [new ThietBiDuAn { DuAn = project }] });
+            db.Benches.Add(new Bench { Code = "JOB-STANDALONE", State = BenchState.Idle });
             var saved = await scope.ServiceProvider.GetRequiredService<KhoGoiTestCase>().LuuAsync(new MemoryStream(bytes), default);
             var package = new GoiTestCase { Ten = "job-test", TenFileGoc = "job.zip", Sha256 = saved.Sha256, KichThuoc = saved.KichThuoc };
             db.GoiTestCases.Add(package); await db.SaveChangesAsync(); packageId = package.Id;
@@ -56,14 +57,22 @@ public static class JobChecks
         foreach (var token in new[] { admin, engineer, viewer }) check((await Send(HttpMethod.Get, "/api/client/jobs", token: token)).StatusCode == HttpStatusCode.Unauthorized, "Jobs: JWT không impersonate tool");
         check((await Send(HttpMethod.Get, "/api/client/jobs", key: upload)).StatusCode == HttpStatusCode.Forbidden, "Jobs: upload key không nhận việc");
         check((await Send(HttpMethod.Get, "/api/client/jobs")).StatusCode == HttpStatusCode.Unauthorized, "Jobs: anonymous bị chặn");
-        async Task<(string Request, JsonElement Job)> Queue(string device = "JOB-A", bool scheduled = false)
+        async Task<(string Request, JsonElement Job)> Queue(string device = "JOB-A", bool scheduled = false, string project = "JOB-PROJECT")
         {
-            var request = await Json(await Send(HttpMethod.Post, "/api/requests", new { name = "Job fixture", project = "JOB-PROJECT", device,
+            var request = await Json(await Send(HttpMethod.Post, "/api/requests", new { name = "Job fixture", project, device,
                 packageIds = new[] { packageId }, mode = "auto", timing = scheduled ? "scheduled" : "now", scheduledAt = scheduled ? DateTimeOffset.UtcNow.AddDays(1) : (DateTimeOffset?)null }, token: engineer));
             var code = request.GetProperty("code").GetString()!;
             var job = await Json(await Send(HttpMethod.Post, $"/api/requests/{code}/enqueue", new { revision = 1 }, token: engineer));
             return (code, job);
         }
+        var independent = await Queue("JOB-STANDALONE", project: "");
+        var independentKey = await Key("JOB-STANDALONE"); var independentLease = Guid.NewGuid();
+        var independentPath = "/api/client/jobs/" + independent.Job.GetProperty("code").GetString();
+        check(independent.Job.GetProperty("project").GetString() == "", "Jobs: tạo việc không dự án trên bench chưa gán dự án");
+        check((await Send(HttpMethod.Post, independentPath + "/claim", new { leaseId = independentLease }, key: independentKey)).IsSuccessStatusCode,
+            "Jobs: tool nhận bench độc lập không cần dự án");
+        check((await Send(HttpMethod.Post, independentPath + "/complete", new { leaseId = independentLease, state = "failed", expectedResults = 0, reason = "SIMULATION cleanup" }, key: independentKey)).IsSuccessStatusCode,
+            "Jobs: kết thúc việc không dự án");
         var (requestCode, queued) = await Queue(); var jobCode = queued.GetProperty("code").GetString()!; var path = "/api/client/jobs/" + jobCode;
         var repeatQueue = await Json(await Send(HttpMethod.Post, $"/api/requests/{requestCode}/enqueue", new { revision = 1 }, token: engineer));
         check(repeatQueue.GetProperty("code").GetString() == jobCode, "Jobs: retry enqueue không tạo việc trùng");

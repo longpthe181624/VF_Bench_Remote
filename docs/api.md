@@ -142,7 +142,8 @@ Trường của một request:
 |---|---|---|
 | `name` | Có | Tên request |
 | `requester` | BE cấp | Email tài khoản đăng nhập |
-| `project`, `device` | Không ở nháp | Mã dự án, mã thiết bị; có chọn thì kiểm tra quan hệ |
+| `project` | Không | Dự án tùy chọn; nếu chọn thì thiết bị phải thuộc dự án |
+| `device` | Có khi gửi việc | Mã thiết bị, có thể chọn thiết bị không thuộc dự án nào |
 | `mode` | Mặc định auto | auto / manual |
 | `packageIds` | Không ở nháp | Gói testcase phù hợp với mode |
 | `softwareId` | Không | Ghim file phần mềm, không tự suy ra thao tác flash |
