@@ -10,7 +10,7 @@ public class TestRequest
     public string Device { get; set; } = "";
     public string Mode { get; set; } = "auto";
     public string Description { get; set; } = "";
-    // Chỉ ghi nhận yêu cầu; chưa thực thi flash hoặc lịch chạy.
+    // Flash chỉ ghi nhận; lịch chạy do hàng chờ TestJob điều phối.
     public bool Flash { get; set; }
     public string Timing { get; set; } = "now";
     public DateTimeOffset? ScheduledAt { get; set; }

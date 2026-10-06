@@ -1,5 +1,7 @@
 # Request test lưu trên server
 
+Cập nhật 06/10/2026: FE gửi bằng `POST /api/requests/{code}/enqueue`, hỗ trợ nhiều gói tự động và hẹn giờ. Xem [client-jobs.md](client-jobs.md) về API key, lease, kết quả và phục hồi. `/start` bên dưới là luồng MQTT legacy.
+
 Request được lưu trong SQL Server, không còn phụ thuộc localStorage của máy tạo.
 Mã Request, thời gian và người tạo do BE cấp; không tin các trường tự khai từ client.
 Ai có `REQUEST.VIEW` xem danh sách/chi tiết của nhóm. Người tạo sửa/xoá nháp theo
@@ -18,7 +20,7 @@ Admin cấp các quyền Request tương ứng.
   `Runs.CmdId`/`Runs.Plan` liên kết kết quả với lệnh/mã Request hiện có.
 
 Request nháp cho phép chưa điền đủ dự án, thiết bị, file hoặc lịch. Nếu điền thì BE
-kiểm tra tồn tại, thiết bị thuộc dự án và testcase đúng loại. Không thực thi lịch/flash
+kiểm tra tồn tại, thiết bị thuộc dự án và testcase đúng loại. Không thực thi flash
 chỉ vì đã lưu các trường đó. Thời gian API là ISO 8601 có offset; FE nhập theo UTC+07:00.
 
 Snapshot được giữ khi sửa thông tin Request. Nếu file nguồn được thay bytes hoặc xoá
@@ -38,6 +40,8 @@ Backup SQL + App_Data hiện có bao gồm cả Request và bytes snapshot.
 | `PATCH /api/requests/{code}` | Lưu toàn bộ thông tin nháp, bắt buộc revision hiện tại |
 | `DELETE /api/requests/{code}?revision=...` | Xoá nháp, bắt buộc revision |
 | `GET /api/requests/{code}/files/{fileId}/download` | Tải bytes snapshot, kiểm quyền kho tương ứng |
+| `POST /api/requests/{code}/enqueue` | Tạo việc REST, yêu cầu revision, auto không flash |
+| `GET /api/requests/{code}/jobs` | Theo dõi việc đã gửi |
 | `POST /api/requests/{code}/start` | Gửi lệnh legacy có liên kết Request |
 | `GET /api/runs?plan={code}` | Xem kết quả đã nhận cho Request |
 
@@ -89,6 +93,5 @@ snapshot sau sửa/xoá nguồn, lịch/flash chỉ lưu, broker offline và li�
 Máy phát triển không có Docker/SQL Server, nên migration đã sinh và kiểm cấu trúc;
 chưa chạy migration trên SQL Server thật ở máy server.
 
-Chưa triển khai hàng đợi/claim công việc cho tool, scheduler, đặt chỗ thiết bị,
-điều khiển Qauto, API kết quả JSON có cấu trúc hay flash. Các bước đó cần hợp đồng
-tích hợp riêng; JSON xuất từ FE là mô tả Request, không phải kết quả kiểm thử.
+Đã có hàng chờ / claim, lịch chạy, giữ thiết bị và kết quả JSON qua REST; xem [client-jobs.md](client-jobs.md).
+Chưa triển khai điều khiển Qauto thực tế, thực thi manual hoặc flash. JSON xuất từ FE là mô tả Request, không phải kết quả kiểm thử.

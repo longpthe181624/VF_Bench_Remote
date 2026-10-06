@@ -50,9 +50,10 @@ File upload mặc định Draft. Xung đột trả 409; key này không tự ghi
 | `DULIEU.VIEW` | GET danh sách/chi tiết/download DBC; GET lookups DBC; GET mục/danh sách/download dữ liệu chung; GET Type phần mềm |
 | `DULIEU.UPLOAD` | POST file DBC và dữ liệu chung (phần mềm/tài liệu...) |
 | `CLIENT.CATALOG.CREATE` | GET/POST bốn danh mục Client |
+| `CLIENT.JOBS.EXECUTE` | Nhận việc, tải snapshot và gửi kết quả / báo cáo theo thiết bị được gán; xem [client-jobs.md](client-jobs.md) |
 
 Upload không tự cấp View hay quyền thêm danh mục. Chọn riêng từng quyền trên web.
-Không cấp quyền người dùng/vai trò, kho cá nhân, Request, chạy bench, sửa/xoá file,
+Không cấp quyền người dùng/vai trò, kho cá nhân, quản trị Request, lệnh bench legacy, sửa/xoá file,
 đổi tên/xoá danh mục hay Release. Dù client tự gọi URL khác, request mang key vẫn
 bị chặn. JWT người dùng giữ quyền và endpoint hiện có.
 
@@ -71,9 +72,10 @@ Chỉ JWT của tài khoản Admin gọi được:
 | API | Chức năng |
 | --- | --- |
 | `GET /api/client-api-keys` | Danh sách metadata; không có secret/hash |
+| `GET /api/client-api-keys/devices` | Thiết bị có thể gán cho tool |
 | `GET /api/client-api-keys/permissions` | Quyền có thể cấp |
-| `POST /api/client-api-keys` | `{name, permissions, expiresAt}`; trả `{key, apiKey}` một lần |
-| `PATCH /api/client-api-keys/{id}/permissions` | `{permissions, revision}`; đổi quyền |
+| `POST /api/client-api-keys` | `{name, permissions, devices, expiresAt}`; trả `{key, apiKey}` một lần |
+| `PATCH /api/client-api-keys/{id}/permissions` | `{permissions, devices, revision}`; đổi quyền |
 | `POST /api/client-api-keys/{id}/revoke` | `{revision}`; thu hồi vĩnh viễn |
 
 BE sinh secret 256 bit, chỉ lưu SHA256 trong bảng `ClientApiKeys`; so sánh hash
@@ -85,7 +87,7 @@ tool và kiểm tra, rồi thu hồi key cũ.
 Build lại server bằng Compose hiện có; migration ClientApiKeys được tự áp khi
 BE khởi động. Máy phát triển chưa có SQL Server/Docker để kiểm migration trực tiếp.
 Swagger trong môi trường Development có mục ClientApiKey và các endpoint Client
-cho chọn Bearer **hoặc** API key.
+cho chọn Bearer **hoặc** API key. Riêng `/api/client/jobs` chỉ nhận API key.
 
 ## Kiểm thử
 

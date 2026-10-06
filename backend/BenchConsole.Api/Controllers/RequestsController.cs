@@ -28,7 +28,7 @@ public sealed class SaveTestRequest
 
 [ApiController, Route("api/requests"), Authorize]
 public class RequestsController(AppDbContext db, KhoGoiTestCase packages, KhoDuLieuChung software,
-    BenchCommandPublisher publisher, IConfiguration cfg) : ControllerBase
+    BenchCommandPublisher publisher, IConfiguration cfg, JobWriteGate jobGate) : ControllerBase
 {
     private IQueryable<TestRequest> Query() => db.TestRequests.Include(x => x.Files).Include(x => x.Commands);
     private bool Own(TestRequest row) => User.LaAdmin()
@@ -199,6 +199,7 @@ public class RequestsController(AppDbContext db, KhoGoiTestCase packages, KhoDuL
     [HttpPost("{code}/start"), HasPermission(MaQuyen.BenchRun)]
     public async Task<ActionResult<object>> Start(string code, CancellationToken ct)
     {
+        using var jobLock = await jobGate.Lock.LayAsync(ct);
         // Đồng bộ với lưu/sửa nháp và xoá gói trong instance này; revision vẫn
         // chặn phiên song song ở instance khác trước publish trên SQL Server.
         using var packageLock = await packages.Khoa.LayAsync(ct);
@@ -216,6 +217,7 @@ public class RequestsController(AppDbContext db, KhoGoiTestCase packages, KhoDuL
             .FirstOrDefaultAsync(x => x.Code == row.Device, ct);
         if (bench is null || !bench.HoTroRemote || !bench.DuAns.Any(x => x.DuAn?.Ma == row.Project))
             return Conflict(new { error = "Thiết bị hoặc dự án đã thay đổi. Kiểm tra lại Request." });
+        if (await db.TestJobs.AnyAsync(x => x.ActiveDevice == row.Device, ct)) return Conflict(new { error = "Thiết bị đang được giữ bởi tool." });
         if (bench.State is not BenchState.Idle) return Conflict(new { error = "Thiết bị chưa sẵn sàng chạy." });
         if (!System.IO.File.Exists(packages.DuongDan(files[0].Sha256))) return Conflict(new { error = "File testcase đã mất." });
         var payload = new Dictionary<string, object?> { ["request_code"] = row.Code,

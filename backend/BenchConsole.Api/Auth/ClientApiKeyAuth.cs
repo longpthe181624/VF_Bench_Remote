@@ -20,7 +20,7 @@ public static class ClientKeyAccess
     public const string Scheme = "ClientApiKey";
     public const string Header = "X-API-Key";
     public static readonly string[] Permissions =
-        [MaQuyen.DuLieuView, MaQuyen.DuLieuUpload, MaQuyen.ClientCatalogCreate];
+        [MaQuyen.DuLieuView, MaQuyen.DuLieuUpload, MaQuyen.ClientCatalogCreate, MaQuyen.ClientJobsExecute];
 
     public static string[] ReadPermissions(string json) =>
         (JsonSerializer.Deserialize<string[]>(json) ?? []).Where(Permissions.Contains).Distinct().ToArray();
@@ -56,7 +56,7 @@ public sealed class ClientApiKeyHandler(IOptionsMonitor<AuthenticationSchemeOpti
         var identity = "client:" + key.KeyId;
         var claims = new List<Claim>
         {
-            new(ClaimTypes.NameIdentifier, identity), new(ClaimTypes.Email, identity), new(ClaimTypes.Name, key.Name),
+            new("client_key_id", key.KeyId), new(ClaimTypes.NameIdentifier, identity), new(ClaimTypes.Email, identity), new(ClaimTypes.Name, key.Name),
             new(AuthConstants.TokenUseClaimType, AuthConstants.TokenUseAccess),
         };
         claims.AddRange(permissions.Select(p => new Claim(AuthConstants.PermissionClaimType, p)));

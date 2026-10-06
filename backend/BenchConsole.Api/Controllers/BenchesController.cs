@@ -17,7 +17,7 @@ namespace BenchConsole.Api.Controllers;
 public class BenchesController(
     AppDbContext db,
     BenchCommandPublisher publisher,
-    IConfiguration cfg) : ControllerBase
+    IConfiguration cfg, BenchConsole.Api.Services.JobWriteGate jobGate) : ControllerBase
 {
     /// <summary>
     /// Danh sách bench cho màn Giám sát. Đọc từ database, không hỏi bench —
@@ -308,6 +308,9 @@ public class BenchesController(
     [HasPermission(MaQuyen.BenchDelete)]
     public async Task<IActionResult> Delete(string code, CancellationToken ct)
     {
+        using var locked = await jobGate.Lock.LayAsync(ct);
+        if (await db.TestJobs.AnyAsync(x => x.Device == code && (x.ActiveDevice != null || x.State == "queued"), ct))
+            return Conflict(new { error = "Thiết bị đang có việc. Huỷ hoặc xử lý việc trước khi xoá." });
         // Nạp kèm thiết bị con. Khoá ngoại tự tham chiếu dùng ClientSetNull
         // (SQL Server từ chối ON DELETE SET NULL trên quan hệ tự tham chiếu —
         // lỗi 1785), nghĩa là việc gỡ liên kết do EF làm chứ không do database.
@@ -479,6 +482,9 @@ public class BenchesController(
         string code, string action, string? testCase, string? plan, string? by,
         CancellationToken ct, IReadOnlyDictionary<string, object?>? them = null)
     {
+        using var locked = await jobGate.Lock.LayAsync(ct);
+        if (action != "stop" && await db.TestJobs.AnyAsync(x => x.ActiveDevice == code, ct))
+            return Conflict(new { error = "Thiết bị đang được giữ bởi tool." });
         var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
         if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
 

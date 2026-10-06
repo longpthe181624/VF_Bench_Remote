@@ -27,11 +27,13 @@ public class RunsController(
         [FromQuery] string? plan,
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to,
+        [FromQuery] string[]? caseIds = null,
         [FromQuery] int page = 1,
         [FromQuery] int size = 50,
         CancellationToken ct = default)
     {
-        page = Math.Max(1, page);
+        if (caseIds?.Length > 100) return BadRequest(new { error = "Tối đa 100 testcase mỗi truy vấn." });
+        page = Math.Clamp(page, 1, 1000000);
         size = Math.Clamp(size, 1, 200);
 
         var query = db.Runs.AsNoTracking().Include(r => r.Bench).AsQueryable();
@@ -50,6 +52,7 @@ public class RunsController(
             query = query.Where(r => r.Verdict == wanted);
         }
 
+        if (caseIds?.Length > 0) query = query.Where(r => r.ClientCaseId != null && caseIds.Contains(r.ClientCaseId));
         if (!string.IsNullOrWhiteSpace(plan))
             query = query.Where(r => r.Plan == plan);
         if (from is not null)
@@ -117,6 +120,8 @@ public class RunsController(
     public async Task<ActionResult<List<BaoCaoChayDto>>> NhanBaoCao(
         string cmdId, [FromForm] NopBaoCaoForm form, CancellationToken ct)
     {
+        if (await db.TestJobs.AnyAsync(x => x.Code == cmdId, ct))
+            return StatusCode(403, new { error = "Việc REST yêu cầu API key và lease; dùng /api/client/jobs/{code}/report." });
         if (KiemTraTep.Loi(form.File) is { } loi) return BadRequest(new { error = loi });
         if (cmdId.Length > 64 || form.BenchCode?.Length > 64 || form.TestCase?.Length > 256)
             return BadRequest(new { error = "Mã lệnh / bench tối đa 64 ký tự, tên testcase tối đa 256 ký tự." });

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace BenchConsole.Api.Tests;
 
@@ -15,6 +16,22 @@ public static class StorageUiServer
     {
         using var factory = new MayChuThu();
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false, AllowAutoRedirect = false });
+        // Only the temporary test server gets this idle device; no real MQTT or hardware.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Api.Data.AppDbContext>();
+            var project = new Core.Models.DuAn { Ma = "SIMULATION", Ten = "Simulation UI" };
+            db.Benches.Add(new Core.Models.Bench { Code = "SIMULATION-UI", Ten = "Simulation bench",
+                State = Core.Models.BenchState.Idle, DuAns = [new Core.Models.ThietBiDuAn { DuAn = project }] });
+            using var stream = new MemoryStream();
+            using (var zip = new System.IO.Compression.ZipArchive(stream, System.IO.Compression.ZipArchiveMode.Create, true))
+            using (var entry = zip.CreateEntry("simulation.tc").Open()) entry.Write(System.Text.Encoding.UTF8.GetBytes("simulation only"));
+            stream.Position = 0;
+            var saved = await scope.ServiceProvider.GetRequiredService<Api.Services.KhoGoiTestCase>().LuuAsync(stream, default);
+            db.GoiTestCases.Add(new Core.Models.GoiTestCase { Ten = "Simulation-UI", TenFileGoc = "simulation.zip",
+                Sha256 = saved.Sha256, KichThuoc = saved.KichThuoc, SoTestCase = 1 });
+            await db.SaveChangesAsync();
+        }
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = Api.Services.KiemTraTep.TranYeuCau);

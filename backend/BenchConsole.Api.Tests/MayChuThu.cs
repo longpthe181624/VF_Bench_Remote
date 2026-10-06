@@ -64,6 +64,9 @@ public class MayChuThu : WebApplicationFactory<DiemVaoApi>
             // lambda thì mỗi DbContext lại nối vào một kho khác nhau, và dữ
             // liệu seed nằm ở kho không ai hỏi tới.
             services.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase(_tenDb));
+            Go<TimeProvider>(services);
+            services.AddSingleton<AdjustableTestClock>();
+            services.AddSingleton<TimeProvider>(sp => sp.GetRequiredService<AdjustableTestClock>());
 
             // Gỡ hosted service MQTT. Không gỡ thì nó cố nối broker suốt lúc
             // chạy kiểm, làm chậm và rải log lỗi.
@@ -74,7 +77,7 @@ public class MayChuThu : WebApplicationFactory<DiemVaoApi>
                 var loai = d.ImplementationFactory is not null
                     ? typeof(MqttIngestService)   // đăng ký bằng factory
                     : d.ImplementationType;
-                if (loai == typeof(MqttIngestService)) services.Remove(d);
+                if (loai == typeof(MqttIngestService) || loai == typeof(BenchConsole.Api.Services.JobMaintenance)) services.Remove(d);
             }
         });
     }
@@ -95,4 +98,10 @@ public class MayChuThu : WebApplicationFactory<DiemVaoApi>
             && Path.GetFileName(path).StartsWith("benchconsole-tests-", StringComparison.Ordinal)
             && Directory.Exists(path)) Directory.Delete(path, recursive: true);
     }
+}
+
+public sealed class AdjustableTestClock : TimeProvider
+{
+    public TimeSpan Offset { get; set; }
+    public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow + Offset;
 }

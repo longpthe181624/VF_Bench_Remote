@@ -37,7 +37,7 @@ function totp(secret,offset=0){let bits='';for(const c of secret.replace(/[\s-]/
   await page.getByLabel('Thời gian chạy',{exact:false}).selectOption('scheduled');
   await page.getByLabel('Ngày / giờ chạy (Việt Nam)',{exact:true}).fill('2030-10-05T18:00');
   await page.getByRole('button',{name:'Tiếp tục',exact:true}).click();
-  assert.equal(await page.getByRole('button',{name:'Gửi lệnh chạy ngay',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'Gửi yêu cầu cho tool',exact:true}).count(),0);
   await page.getByRole('button',{name:'Lưu nháp',exact:true}).click();
   await page.getByRole('button',{name:'Sửa nháp',exact:true}).waitFor();
   await page.reload();await page.getByText('Nháp React UI',{exact:true}).waitFor();

@@ -1,3 +1,5 @@
+Cập nhật 06/10/2026: [API giao việc và kết quả cho tool](client-jobs.md).
+
 # REST API — danh sách cần có
 
 Bản đối chiếu gốc 22/09/2026; riêng phần Request cập nhật 05/10/2026.
@@ -130,7 +132,9 @@ Ghi chú theo bản đã làm 24/09:
 | `/api/requests/{code}/start` | POST | Gửi lệnh legacy, chưa điều khiển Qauto thật | Đã có |
 | `/api/runs?plan={code}` | GET | Kết quả thuộc Request | Đã có |
 | `/api/du-lieu-chung?loai=phien-ban` | GET | Kho file phần mềm để chọn | Đã có |
-| API claim/huỷ/điều phối công việc | — | Chờ hợp đồng tool | Chưa có |
+| `/api/requests/{code}/enqueue` | POST | Tạo việc tự động ngay / hẹn giờ, nhiều gói | Đã có |
+| `/api/requests/{code}/jobs` | GET | Trạng thái việc | Đã có |
+| `/api/client/jobs/...` | GET/POST | Claim, lease, progress, kết quả / report; [hợp đồng](client-jobs.md) | Đã có |
 
 Trường của một request:
 
@@ -143,7 +147,7 @@ Trường của một request:
 | `packageIds` | Không ở nháp | Gói testcase phù hợp với mode |
 | `softwareId` | Không | Ghim file phần mềm, không tự suy ra thao tác flash |
 | `flash` | Không | Chỉ ghi nhận; nghiệp vụ flash chưa được chốt/thực thi |
-| `timing`, `scheduledAt` | Không | now / scheduled; lịch mới chỉ lưu |
+| `timing`, `scheduledAt` | Không | now / scheduled; lịch thực thi qua hàng chờ sau enqueue |
 | `revision` | Có khi sửa/xoá | Chống ghi đè bản nháp từ phiên cũ |
 
 Hợp đồng và giới hạn thực thi hiện tại: [requests.md](requests.md).
@@ -155,9 +159,9 @@ Kho phần mềm chưa có trường phiên bản riêng; Request giữ ID, revi
 |---|---|---|---|
 | `/api/runs` | GET | Lịch sử. Lọc: `bench`, `verdict`, `plan`, `from`, `to`, `page`, `size` | Đã có |
 | `/api/runs/{id}` | GET | Chi tiết một lượt chạy kèm `detail` thô | Đã có |
-| `/api/runs` | POST | Agent push kết quả tóm tắt qua REST | Chưa có |
-| `/api/runs/{id}/report` | POST | Agent upload report chi tiết, multipart | Chưa có |
-| `/api/runs/{id}/report` | GET | Tải report chi tiết | Chưa có |
+| `/api/client/jobs/{code}/results` | POST | Tool push kết quả JSON, API key + lease | Đã có |
+| `/api/client/jobs/{code}/report` | POST | Tool upload report, multipart + API key + lease | Đã có |
+| `/api/runs/{cmdId}/report` | GET | Danh sách report; tải `/api/runs/reports/{id}/download` | Đã có |
 
 Hai việc cần sửa ở phần kết quả:
 

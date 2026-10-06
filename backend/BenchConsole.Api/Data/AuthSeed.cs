@@ -74,7 +74,7 @@ public static class AuthSeed
             quyen.Select(p => p.Ma).Where(m =>
                 !m.StartsWith("USER.") && !m.StartsWith("ROLE.")
                 && m != MaQuyen.DuLieuMuc && m != MaQuyen.DatabaseRelease
-                && m != MaQuyen.ClientCatalogCreate), ct);
+                && m != MaQuyen.ClientCatalogCreate && m != MaQuyen.ClientJobsExecute), ct);
 
         // Chỉ xem phần CHUYÊN MÔN, không phải xem mọi thứ.
         //

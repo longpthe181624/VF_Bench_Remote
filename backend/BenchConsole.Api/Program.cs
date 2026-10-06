@@ -119,7 +119,11 @@ builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProv
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionHandler>();
 
 // ---------------------------------------------------------------- web
-builder.Services.AddControllers();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<JobWriteGate>();
+builder.Services.AddScoped<JobWorkflow>();
+builder.Services.AddHostedService<JobMaintenance>();
+builder.Services.AddControllers(o => o.Filters.Add<JobFlowExceptionFilter>());
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
     o.MultipartBodyLengthLimit = KiemTraTep.TranYeuCau);
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = KiemTraTep.TranYeuCau);

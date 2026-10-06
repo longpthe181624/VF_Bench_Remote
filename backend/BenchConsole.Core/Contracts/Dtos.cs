@@ -93,12 +93,13 @@ public record RunDto(
     double? DurationSeconds,
     string? Reason,
     string? RunBy,
-    DateTimeOffset FinishedAt)
+    DateTimeOffset FinishedAt,
+    string? CaseId = null, int? FileId = null, string? JobCode = null)
 {
     public static RunDto From(Run r, string benchCode) => new(
         r.Id, benchCode, r.TestCase, r.Plan,
         r.Verdict.ToString().ToLowerInvariant(),
-        r.DurationSeconds, r.Reason, r.RunBy, r.FinishedAt);
+        r.DurationSeconds, r.Reason, r.RunBy, r.FinishedAt, r.ClientCaseId, r.TestRequestFileId, r.TestJobId.HasValue ? r.CmdId : null);
 }
 
 public record AlertDto(

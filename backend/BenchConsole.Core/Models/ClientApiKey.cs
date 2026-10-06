@@ -6,6 +6,7 @@ public class ClientApiKey
     public string KeyId { get; set; } = "";
     public string Name { get; set; } = "";
     public byte[] SecretHash { get; set; } = [];
+    public string DevicesJson { get; set; } = "[]";
     public string PermissionsJson { get; set; } = "[]";
     public string CreatedBy { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; }

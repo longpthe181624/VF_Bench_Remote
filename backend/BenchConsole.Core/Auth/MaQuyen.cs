@@ -50,6 +50,7 @@ public static class MaQuyen
     public const string DuLieuUpload = "DULIEU.UPLOAD";
     public const string DuLieuDelete = "DULIEU.DELETE";
     public const string DatabaseRelease = "DATABASE.RELEASE";
+    public const string ClientJobsExecute = "CLIENT.JOBS.EXECUTE";
     public const string ClientCatalogCreate = "CLIENT.CATALOG.CREATE";
 
     /// <summary>
@@ -87,6 +88,7 @@ public static class MaQuyen
         new(RequestCreate, "REQUEST", "CREATE", "Tạo Request test"),
         new(RequestUpdate, "REQUEST", "UPDATE", "Sửa Request nháp của mình (Admin sửa tất cả)"),
         new(RequestDelete, "REQUEST", "DELETE", "Xoá Request nháp của mình (Admin xoá tất cả)"),
+        new(ClientJobsExecute, "CLIENT", "JOBS.EXECUTE", "Tool nhận việc và gửi kết quả cho thiết bị được gán"),
         new(ClientCatalogCreate, "CLIENT", "CATALOG.CREATE", "Client tra cứu và thêm Model / Category / Type"),
         new(DatabaseRelease, "DATABASE", "RELEASE", "Chuyển trạng thái file Database Release / Draft"),
         new(BenchView,   "BENCH",    "VIEW",     "Xem danh sách bench"),

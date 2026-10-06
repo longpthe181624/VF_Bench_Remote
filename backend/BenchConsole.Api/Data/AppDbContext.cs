@@ -6,6 +6,8 @@ namespace BenchConsole.Api.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<TestJob> TestJobs => Set<TestJob>();
+    public DbSet<TestResultBatch> TestResultBatches => Set<TestResultBatch>();
     public DbSet<ClientApiKey> ClientApiKeys => Set<ClientApiKey>();
     public DbSet<TestRequest> TestRequests => Set<TestRequest>();
     public DbSet<TestRequestFile> TestRequestFiles => Set<TestRequestFile>();
@@ -49,8 +51,31 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<TestJob>(e =>
+        {
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasIndex(x => x.TestRequestId).IsUnique();
+            e.HasIndex(x => x.ActiveDevice).IsUnique().HasFilter("[ActiveDevice] IS NOT NULL");
+            e.HasIndex(x => new { x.State, x.NotBefore });
+            e.Property(x => x.Code).HasMaxLength(32);
+            e.Property(x => x.Device).HasMaxLength(64);
+            e.Property(x => x.ActiveDevice).HasMaxLength(64);
+            e.Property(x => x.Owner).HasMaxLength(32);
+            e.Property(x => x.State).HasMaxLength(16);
+            e.Property(x => x.Message).HasMaxLength(512);
+            e.Property(x => x.FinishHash).HasMaxLength(64);
+            e.Property(x => x.Revision).IsConcurrencyToken();
+            e.HasOne(x => x.Request).WithMany().HasForeignKey(x => x.TestRequestId).OnDelete(DeleteBehavior.Restrict);
+        });
+        b.Entity<TestResultBatch>(e =>
+        {
+            e.HasIndex(x => new { x.TestJobId, x.BatchId }).IsUnique();
+            e.Property(x => x.Hash).HasMaxLength(64);
+            e.HasOne(x => x.Job).WithMany().HasForeignKey(x => x.TestJobId).OnDelete(DeleteBehavior.Restrict);
+        });
         b.Entity<ClientApiKey>(e =>
         {
+            e.Property(x => x.DevicesJson).HasMaxLength(16000).HasDefaultValue("[]");
             e.HasIndex(x => x.KeyId).IsUnique();
             e.Property(x => x.KeyId).HasMaxLength(32).IsRequired();
             e.Property(x => x.Name).HasMaxLength(128).IsRequired();
@@ -228,6 +253,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<Run>(e =>
         {
+            e.HasIndex(x => new { x.TestJobId, x.TestRequestFileId, x.ClientCaseId }).IsUnique()
+                .HasFilter("[TestJobId] IS NOT NULL AND [ClientCaseId] IS NOT NULL");
+            e.Property(x => x.ClientCaseId).HasMaxLength(256);
+            e.Property(x => x.ResultHash).HasMaxLength(64);
+            e.HasOne(x => x.Job).WithMany().HasForeignKey(x => x.TestJobId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.RequestFile).WithMany().HasForeignKey(x => x.TestRequestFileId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.BenchId, x.FinishedAt });
             e.Property(x => x.TestCase).HasMaxLength(128).IsRequired();
             e.Property(x => x.Plan).HasMaxLength(64);

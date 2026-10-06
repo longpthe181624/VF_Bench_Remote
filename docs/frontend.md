@@ -81,10 +81,9 @@ Trạng thái thiết bị/cảnh báo được cập nhật bằng polling API.
 
 Request có wizard 5 bước và lưu tập trung trên BE, snapshot file, chống sửa cùng
 revision và nhập nháp cũ từ trình duyệt. Xem [requests.md](requests.md).
-Một gói tự động, chạy ngay, không flash giữ luồng lệnh hiện có và liên kết Request;
-BE xác nhận gửi lệnh, kết quả chỉ hiện khi client trả về. Tool chưa thực thi Qauto thật.
-Flash, hẹn giờ, manual và nhiều gói chưa có API điều phối thực thi;
-FE ghi rõ và lưu nháp, không giả trạng thái thành công.
+Request tự động không flash được gửi cho tool qua hàng chờ REST, hỗ trợ nhiều gói và hẹn giờ.
+Web hiển thị tiến độ / kết quả, cho huỷ việc chờ và xử lý việc gián đoạn sau xác nhận phần cứng dừng.
+Xem [client-jobs.md](client-jobs.md). Tool chưa thực thi Qauto thật; manual / flash vẫn lưu nháp.
 Kho phần mềm lưu file/mô tả thật; chưa có danh mục phiên bản có cấu trúc.
 AI gen testcase và danh mục tính năng tạm ẩn theo yêu cầu.
 

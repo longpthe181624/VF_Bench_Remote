@@ -12,16 +12,17 @@ const stateName = { active: 'Hoạt động', revoked: 'Đã thu hồi', expired
 const permissionNames = {
   'DULIEU.VIEW': 'Xem và tải file dữ liệu chung',
   'DULIEU.UPLOAD': 'Upload file mới vào dữ liệu chung / File DBC',
+  'CLIENT.JOBS.EXECUTE': 'Nhận việc, tải kịch bản và gửi kết quả cho thiết bị được gán',
   'CLIENT.CATALOG.CREATE': 'Tra cứu và thêm Model / Category / Type',
 }
 
 export default function ClientKeysPage() {
-  const cache = useQueryClient(), keys = useApi('/client-api-keys'), permissions = useApi('/client-api-keys/permissions')
+  const cache = useQueryClient(), keys = useApi('/client-api-keys'), permissions = useApi('/client-api-keys/permissions'), devices = useApi('/client-api-keys/devices')
   const [q, setQ] = useState(''), [editing, setEditing] = useState(null), [revealed, setRevealed] = useState(null)
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), keyInput = useRef(null)
   const invalidate = () => cache.invalidateQueries({ predicate: query => query.queryKey[1] === '/client-api-keys' })
   async function save(form) {
-    const body = { permissions: form.getAll('permissions') }
+    const body = { permissions: form.getAll('permissions'), devices: form.getAll('devices') }
     if (editing.id) {
       await patch(`/client-api-keys/${editing.id}/permissions`, { ...body, revision: editing.revision })
       notify('Đã cập nhật quyền. Quyền mới áp dụng ở lần gọi API tiếp theo.')
@@ -41,12 +42,13 @@ export default function ClientKeysPage() {
   }
   return <>
     <PageHeading title="API key cho Client" description="Cấp quyền riêng cho từng tool, không cần đăng nhập tài khoản web." />
-    <Notice>Key chỉ dùng cho các API file và danh mục đã cho phép. Không cấp quyền quản trị, ra lệnh bench, sửa / xoá file hay chuyển Release. Có thể đổi quyền hoặc thu hồi bất kỳ lúc nào.</Notice>
+    <Notice>Cấp quyền file, danh mục hoặc nhận việc riêng biệt. Quyền nhận việc chỉ áp dụng cho thiết bị được gán. Có thể đổi quyền hoặc thu hồi bất kỳ lúc nào.</Notice>
     <Toolbar value={q} onSearch={setQ} placeholder="Tìm tên tool / mã key" actions={<Button variant="primary" onClick={() => setEditing({})}><Plus size={14} />Cấp API key</Button>} />
     <ErrorMessage>{error || keys.error && errorText(keys.error) || permissions.error && errorText(permissions.error)}</ErrorMessage>
     <DataTable rows={(keys.data || []).filter(key => matches(key, q, ['name', 'keyId']))} loading={keys.isLoading} columns={[
       { key: 'name', label: 'Tool / Client', render: key => <><strong>{key.name}</strong><small>bck_{key.keyId} ·••••</small></> },
       { key: 'permissions', label: 'Quyền', render: key => <div className="flex flex-wrap gap-1">{key.permissions.map(p => <Badge key={p}>{permissionNames[p] || p}</Badge>)}</div> },
+      { key: 'devices', label: 'Thiết bị nhận việc', render: key => key.devices?.join(', ') || '—' },
       { key: 'state', label: 'Trạng thái', render: key => <Badge tone={key.state === 'active' ? 'success' : 'neutral'}>{stateName[key.state]}</Badge> },
       { key: 'expiresAt', label: 'Hết hạn', render: key => key.expiresAt ? date(key.expiresAt) : 'Không đặt hạn' },
       { key: 'createdAt', label: 'Tạo lúc', render: key => date(key.createdAt) },
@@ -56,6 +58,7 @@ export default function ClientKeysPage() {
       {editing && <MutationForm onSave={save} onClose={() => setEditing(null)} label={editing.id ? 'Lưu quyền' : 'Cấp key'}>
         {!editing.id && <><Field label="Tên tool / Client *"><input name="name" required maxLength={128} placeholder="Ví dụ: Tool upload tại Lab 1" /></Field><Field label="Hết hạn (giờ Việt Nam)" hint="Để trống: key dùng được cho đến khi Admin thu hồi."><input name="expiresAt" type="datetime-local" /></Field></>}
         <div className="check-group"><span className="field-label">Quyền được cấp — chọn ít nhất một quyền</span><div>{(permissions.data || []).map(permission => <label className="check" key={permission.ma}><input name="permissions" type="checkbox" value={permission.ma} defaultChecked={editing.permissions?.includes(permission.ma)} /><span>{permissionNames[permission.ma] || permission.ten}<small>{permission.ma}</small></span></label>)}</div></div>
+      <div className="check-group"><span className="field-label">Thiết bị được phép nhận việc — bắt buộc khi cấp CLIENT.JOBS.EXECUTE</span><div>{(devices.data || []).map(device => <label className="check" key={device.code}><input name="devices" type="checkbox" value={device.code} defaultChecked={editing.devices?.includes(device.code)} /><span>{device.ten || device.code}<small>{device.code}</small></span></label>)}</div></div>
       </MutationForm>}
     </Modal>
     <Modal open={!!revealed} onClose={() => setRevealed(null)} title={`API key · ${revealed?.key.name || ''}`}>

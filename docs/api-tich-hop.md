@@ -1,3 +1,5 @@
+Cập nhật 06/10/2026: [Luồng tool REST với API key, hàng chờ, lịch và kết quả](client-jobs.md). Các lệnh MQTT bên dưới giữ cho client legacy.
+
 # Bench Console — API cho bên tích hợp
 
 Tài liệu cho người **gọi Bench Console từ code của mình**. Chỉ mô tả hợp đồng,

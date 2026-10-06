@@ -252,6 +252,12 @@ public class BenchCommand
 /// <summary>Một lượt chạy test đã xong, dùng cho màn Lịch sử.</summary>
 public class Run
 {
+    public int? TestJobId { get; set; }
+    public TestJob? Job { get; set; }
+    public int? TestRequestFileId { get; set; }
+    public TestRequestFile? RequestFile { get; set; }
+    public string? ClientCaseId { get; set; }
+    public string? ResultHash { get; set; }
     public int Id { get; set; }
     public int BenchId { get; set; }
     public Bench? Bench { get; set; }
