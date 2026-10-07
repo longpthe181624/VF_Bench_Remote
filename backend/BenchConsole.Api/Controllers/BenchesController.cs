@@ -19,11 +19,7 @@ public class BenchesController(
     BenchCommandPublisher publisher,
     IConfiguration cfg, BenchConsole.Api.Services.JobWriteGate jobGate) : ControllerBase
 {
-    /// <summary>
-    /// Danh sách bench cho màn Giám sát. Đọc từ database, không hỏi bench —
-    /// dữ liệu đã được luồng MQTT ghi sẵn nên endpoint này luôn trả nhanh
-    /// và vẫn trả được cả khi bench đang mất kết nối.
-    /// </summary>
+    /// <summary>Danh sách bench cho màn Giám sát.</summary>
     [HttpGet]
     [HasPermission(MaQuyen.BenchView)]
     public async Task<ActionResult<List<BenchDto>>> List(
@@ -34,11 +30,7 @@ public class BenchesController(
         [FromQuery] string? duAn,
         CancellationToken ct)
     {
-        // Include hai nhanh: thiet bi cha (de hien "nam trong BENCH-01") va danh
-        // sach du an. Khong Include thi BenchDto tra ve null/rong, giao dien mat
-        // cot ma khong bao loi gi — kieu hong im lang.
-        // Kieu khai tuong minh: `var` se suy ra IIncludableQueryable, ma kieu
-        // do khong nhan lai ket qua cua .Where() ben duoi.
+        // Include hai nhanh: thiet bi cha (de hien "nam trong BENCH-01") va danh sach du an.
         IQueryable<Bench> query = db.Benches.AsNoTracking()
             .Include(b => b.ThuocVe)
             .Include(b => b.ChuaNhung)
@@ -109,8 +101,7 @@ public class BenchesController(
             return BadRequest(new { error = "Thiếu mã thiết bị" });
 
         var code = req.Code.Trim().ToUpperInvariant();
-        // Giữ nguyên tên người gõ ("VF8New ME") để hiển thị; topic dùng mã đã
-        // chuẩn hoá. Xem MaModel.
+        // Giữ nguyên tên người gõ ("VF8New ME") để hiển thị; topic dùng mã đã chuẩn hoá.
         var model = req.Model?.Trim() ?? "";
 
         if (await db.Benches.AnyAsync(b => b.Code == code, ct))
@@ -125,8 +116,7 @@ public class BenchesController(
             loai = doc.Value;
         }
 
-        // Dòng xe chỉ bắt buộc với thiết bị có agent, vì nó nằm trong topic
-        // MQTT. ECU rời thì không gắn dòng xe nào — đó là lý do bỏ ràng buộc cũ.
+        // Dòng xe chỉ bắt buộc với thiết bị có agent, vì nó nằm trong topic MQTT.
         var hoTroRemote = req.HoTroRemote ?? true;
         var loiModel = LoiThieuModel(hoTroRemote, model);
         if (loiModel is not null) return BadRequest(new { error = loiModel });
@@ -152,8 +142,7 @@ public class BenchesController(
             Loai = loai,
             ThuocVeId = thuocVeId,
             Tang = req.Tang,
-            // Mac dinh CO agent: da dang ky bench thi gan nhu luon la de chay
-            // tu xa. Thiet bi don khong agent la ngoai le, phai khai ro.
+            // Mac dinh CO agent: da dang ky bench thi gan nhu luon la de chay tu xa.
             HoTroRemote = hoTroRemote,
             HoTroRobot = req.HoTroRobot ?? false,
             Code = code,
@@ -165,12 +154,7 @@ public class BenchesController(
             TenMay = req.TenMay,
             PrimaryChannel = req.PrimaryChannel,
             PrimaryUnit = req.PrimaryUnit,
-            // Phải khớp prefix agent dùng để publish. Dựng qua MaModel để
-            // Console và agent không bao giờ ghép lệch nhau.
-            //
-            // Không có dòng xe thì để rỗng chứ không ghép một prefix thiếu khúc
-            // giữa. Thiết bị đó chắc chắn không có agent (đã chặn ở trên), nên
-            // không ai publish vào đây cả.
+            // Phải khớp prefix agent dùng để publish.
             TopicPrefix = model.Length == 0 ? "" : MaModel.TopicPrefix(model, code),
             State = BenchState.Unknown,
         };
@@ -179,8 +163,7 @@ public class BenchesController(
         foreach (var d in duAns) bench.DuAns.Add(new ThietBiDuAn { Bench = bench, DuAnId = d.Id });
         await db.SaveChangesAsync(ct);
 
-        // Chưa có LastSeenAt: thẻ sẽ hiện "Chưa từng kết nối" cho tới khi agent
-        // gửi gói đầu tiên. Đó là tín hiệu để người dùng biết cấu hình agent sai.
+        // Chưa có LastSeenAt: thẻ sẽ hiện "Chưa từng kết nối" cho tới khi agent gửi gói đầu tiên.
         return CreatedAtAction(nameof(Get), new { code = bench.Code }, BenchDto.From(bench));
     }
 
@@ -195,11 +178,6 @@ public class BenchesController(
             .FirstOrDefaultAsync(b => b.Code == code, ct);
         if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
 
-        // ---- dựng TRẠNG THÁI SAU rồi mới kiểm, chưa gán gì vào bench
-        //
-        // Kiểm từng trường một là thủng: đổi `loai` thành ecu trong khi thiết bị
-        // đang chứa ECU khác thì mỗi trường nhìn riêng đều hợp lệ, chỉ tổ hợp
-        // mới sai. Phải nhìn cả trạng thái cuối.
         var loaiMoi = bench.Loai;
         if (req.Loai is not null)
         {
@@ -216,9 +194,7 @@ public class BenchesController(
         var doiCha = req.ThuocVe is not null;
         if (doiCha)
         {
-            // Chuoi rong = thao thiet bi ra, khong con nam trong gi ca. Phai
-            // phan biet voi null (khong gui truong nay = khong doi), nen dung
-            // `is not null` chu khong dung IsNullOrWhiteSpace o vong ngoai.
+            // Chuoi rong = thao thiet bi ra, khong con nam trong gi ca.
             if (req.ThuocVe!.Trim().Length == 0)
             {
                 chaMoi = null;
@@ -235,7 +211,6 @@ public class BenchesController(
             }
         }
 
-        // ---- kiểm trạng thái cuối
         var loiModelSua = LoiThieuModel(remoteMoi, modelMoi);
         if (loiModelSua is not null) return BadRequest(new { error = loiModelSua });
 
@@ -245,8 +220,7 @@ public class BenchesController(
             if (loiLoai is not null) return BadRequest(new { error = loiLoai });
         }
 
-        // Đổi thành ECU trong khi đang chứa thiết bị khác thì phải chặn, nếu
-        // không sẽ có một ECU chứa ECU mà chẳng ai kiểm.
+        // Đổi thành ECU trong khi đang chứa thiết bị khác thì phải chặn, nếu không sẽ có một ECU chứa ECU mà chẳng ai kiểm.
         if (bench.ChuaNhung.Count > 0)
         {
             var loiChua = MaLoaiThietBi.LyDoKhongChuaDuoc(loaiMoi, LoaiThietBi.Ecu);
@@ -257,17 +231,11 @@ public class BenchesController(
                 });
         }
 
-        // ---- tới đây mới gán
         bench.Loai = loaiMoi;
         bench.HoTroRemote = remoteMoi;
         if (doiCha) bench.ThuocVeId = chaMoi?.Id;
 
-        // Code thì KHÔNG cho đổi — nó là danh tính bench, đổi là mồ côi toàn bộ
-        // lịch sử chạy.
-        //
-        // Model thì CHO đổi: thay MHU trong bench là đổi dòng xe, mà bench vẫn
-        // giữ nguyên id. Đổi model phải dựng lại TopicPrefix theo, nếu không
-        // chiều gửi lệnh xuống sẽ trỏ vào topic cũ.
+        // Code thì KHÔNG cho đổi — nó là danh tính bench, đổi là mồ côi toàn bộ lịch sử chạy.
         if (modelMoi != bench.Model)
         {
             bench.Model = modelMoi;
@@ -289,16 +257,14 @@ public class BenchesController(
             var (duAns, thieu) = await TimDuAnAsync(req.DuAns, ct);
             if (thieu is not null) return BadRequest(new { error = thieu });
 
-            // Thay ca danh sach chu khong them vao: giao dien gui len tap du an
-            // sau khi nguoi dung tich chon, nen bo tich phai co tac dung.
+            // Thay ca danh sach chu khong them vao: giao dien gui len tap du an sau khi nguoi dung tich chon, nen bo tich phai co tac dung.
             bench.DuAns.Clear();
             foreach (var d in duAns) bench.DuAns.Add(new ThietBiDuAn { BenchId = bench.Id, DuAnId = d.Id });
         }
 
         await db.SaveChangesAsync(ct);
 
-        // Doc lai de BenchDto co ThuocVe va ten du an vua gan. Khong doc lai thi
-        // phan hoi thieu dung nhung truong nguoi dung vua sua.
+        // Doc lai de BenchDto co ThuocVe va ten du an vua gan.
         await db.Entry(bench).Reference(b => b.ThuocVe).LoadAsync(ct);
         foreach (var x in bench.DuAns) await db.Entry(x).Reference(y => y.DuAn).LoadAsync(ct);
         return BenchDto.From(bench);
@@ -311,11 +277,7 @@ public class BenchesController(
         using var locked = await jobGate.Lock.LayAsync(ct);
         if (await db.TestJobs.AnyAsync(x => x.Device == code && (x.ActiveDevice != null || x.State == "queued"), ct))
             return Conflict(new { error = "Thiết bị đang có việc. Huỷ hoặc xử lý việc trước khi xoá." });
-        // Nạp kèm thiết bị con. Khoá ngoại tự tham chiếu dùng ClientSetNull
-        // (SQL Server từ chối ON DELETE SET NULL trên quan hệ tự tham chiếu —
-        // lỗi 1785), nghĩa là việc gỡ liên kết do EF làm chứ không do database.
-        // Không nạp thì EF không biết có con nào để gỡ, và database chặn lệnh
-        // xoá bằng lỗi khoá ngoại.
+        // Nạp kèm thiết bị con.
         var bench = await db.Benches
             .Include(b => b.ChuaNhung)
             .FirstOrDefaultAsync(b => b.Code == code, ct);
@@ -324,8 +286,7 @@ public class BenchesController(
         if (bench.State == BenchState.Running)
             return Conflict(new { error = "Thiết bị đang chạy test. Dừng test trước khi xoá." });
 
-        // Thiết bị con ĐỨNG RIÊNG chứ không xoá theo: tháo bench đi thì con MHU
-        // vẫn còn ngoài đời, và lịch sử chạy của nó phải giữ nguyên.
+        // Thiết bị con ĐỨNG RIÊNG chứ không xoá theo: tháo bench đi thì con MHU vẫn còn ngoài đời, và lịch sử chạy của nó phải giữ nguyên.
         foreach (var con in bench.ChuaNhung) con.ThuocVeId = null;
 
         db.Benches.Remove(bench);
@@ -333,34 +294,21 @@ public class BenchesController(
         return NoContent();
     }
 
-    // ------------------------------------------------------------ dung chung
 
-    /// <summary>
-    /// Dòng xe chỉ bắt buộc khi thiết bị có agent, vì nó nằm trong topic MQTT
-    /// (`bench/{model}/{mã}/...`). ECU rời thì không gắn dòng xe nào.
-    ///
-    /// Thiếu chốt này thì bật `HoTroRemote` cho một thiết bị không có dòng xe
-    /// sẽ dựng ra prefix thiếu khúc giữa, lệnh rơi vào topic không ai nghe, và
-    /// Console báo "bench không phản hồi" — sai nguyên nhân hoàn toàn.
-    /// </summary>
+    /// <summary>Dòng xe chỉ bắt buộc khi thiết bị có agent, vì nó nằm trong topic MQTT (`bench/{model}/{mã}/...`).</summary>
     private static string? LoiThieuModel(bool hoTroRemote, string model)
         => hoTroRemote && string.IsNullOrWhiteSpace(model)
             ? "Thiết bị chạy từ xa phải khai dòng xe, vì dòng xe nằm trong topic MQTT. "
               + "Thiết bị không có agent thì bỏ trống được."
             : null;
 
-    /// <summary>
-    /// Doi ma du an ra ban ghi. KHONG tu tao du an moi: go sai mot ky tu la
-    /// sinh du an rac, giong dung ly do agent khong duoc tu tao bench.
-    /// </summary>
+    /// <summary>Doi ma du an ra ban ghi.</summary>
     private async Task<(List<DuAn> DuAns, string? Loi)> TimDuAnAsync(
         List<string>? ma, CancellationToken ct)
     {
         if (ma is null || ma.Count == 0) return (new List<DuAn>(), null);
 
-        // Chuan hoa chu in y nhu luc tao du an. Khong chuan hoa thi phai trong
-        // vao collation cua database de so khong phan biet hoa thuong — dung
-        // duoc tren SQL Server nhung hong ngay tren provider khac.
+        // Chuan hoa chu in y nhu luc tao du an.
         var can = ma.Where(x => !string.IsNullOrWhiteSpace(x))
                     .Select(x => x.Trim().ToUpperInvariant())
                     .Distinct()
@@ -386,8 +334,7 @@ public class BenchesController(
     {
         if (conId == chaId) return "Thiet bi khong the nam trong chinh no";
 
-        // Chan them theo so buoc: du lieu hong san tu truoc (vong da ton tai
-        // trong DB) thi vong lap nay cung phai thoat duoc.
+        // Chan them theo so buoc: du lieu hong san tu truoc (vong da ton tai trong DB) thi vong lap nay cung phai thoat duoc.
         var hienTai = (int?)chaId;
         for (var buoc = 0; buoc < 64 && hienTai is not null; buoc++)
         {
@@ -398,14 +345,11 @@ public class BenchesController(
         return null;
     }
 
-    // ------------------------------------------------------------ ra lệnh
 
     [HttpPost("{code}/start")]
     [HasPermission(MaQuyen.BenchRun)]
     public Task<ActionResult<CommandAcceptedDto>> Start(string code, StartTestRequest req, CancellationToken ct)
-        // Gắn sẵn địa chỉ nộp báo cáo vào lệnh, để máy bench không phải cấu
-        // hình thêm một URL nữa — nó chỉ cần biết broker. Console vốn đã biết
-        // địa chỉ mà máy bench với tới được (GoiTestCase:BaseUrlChoAgent).
+        // Gắn sẵn địa chỉ nộp báo cáo vào lệnh, để máy bench không phải cấu hình thêm một URL nữa — nó chỉ cần biết broker.
         => Dispatch(code, "start_test", req.TestCase, req.Plan, req.IssuedBy, ct,
             UrlBaoCao() is { } url ? new Dictionary<string, object?> { ["report_url"] = url } : null);
 
@@ -426,14 +370,7 @@ public class BenchesController(
     public Task<ActionResult<CommandAcceptedDto>> Reset(string code, [FromQuery] string? by, CancellationToken ct)
         => Dispatch(code, "reset_bench", null, null, by, ct);
 
-    /// <summary>
-    /// Đẩy một gói test case đã tải lên xuống máy bench.
-    ///
-    /// Lệnh chỉ mang **đường dẫn tải và sha256**, không mang nội dung gói. Agent
-    /// tự tải file về qua REST rồi bung vào `AutoTests/`. Đây là lệnh duy nhất
-    /// agent hiện nhận, vì nó chỉ động tới file — không cần điều khiển Qauto,
-    /// nên không vướng câu hỏi còn treo về chạy test từ xa.
-    /// </summary>
+    /// <summary>Đẩy một gói test case đã tải lên xuống máy bench.</summary>
     [HttpPost("{code}/deploy")]
     public async Task<ActionResult<CommandAcceptedDto>> TrienKhai(
         string code, TrienKhaiGoiRequest req, CancellationToken ct)
@@ -448,9 +385,7 @@ public class BenchesController(
         if (goi.KieuTest == "manual")
             return BadRequest(new { error = "Gói Excel manual chỉ dùng cho kiểm thử thủ công, không triển khai tới agent tự động." });
 
-        // Agent nằm ở máy khác nên URL phải là địa chỉ nó với tới được. Cấu hình
-        // tường minh, vì Request.Host ở đây thường là 'localhost' — agent tải
-        // 'localhost' là tự tải chính nó.
+        // Agent nằm ở máy khác nên URL phải là địa chỉ nó với tới được.
         var goc = cfg["GoiTestCase:BaseUrlChoAgent"]?.TrimEnd('/');
         if (string.IsNullOrWhiteSpace(goc))
             return StatusCode(StatusCodes.Status500InternalServerError, new
@@ -472,8 +407,7 @@ public class BenchesController(
             },
         };
 
-        // Hai loại gói đi hai action khác nhau, để agent khỏi phải đoán từ nội
-        // dung gói — đoán sai là bung vào sai thư mục trên máy bench.
+        // Hai loại gói đi hai action khác nhau, để agent khỏi phải đoán từ nội dung gói — đoán sai là bung vào sai thư mục trên máy bench.
         return await Dispatch(code, LoaiGoi.Action(goi.Loai), goi.Ten, null,
                               req.IssuedBy, ct, them);
     }
@@ -488,9 +422,7 @@ public class BenchesController(
         var bench = await db.Benches.FirstOrDefaultAsync(b => b.Code == code, ct);
         if (bench is null) return NotFound(new { error = $"Không có thiết bị {code}" });
 
-        // Chặn TRƯỚC mọi kiểm tra khác: thiết bị không có agent thì lệnh gửi đi
-        // sẽ rơi vào một topic không ai nghe, và Console báo "bench không phản
-        // hồi" sau khi hết hạn chờ ack — sai nguyên nhân hoàn toàn.
+        // Chặn TRƯỚC mọi kiểm tra khác: thiết bị không có agent thì lệnh gửi đi sẽ rơi vào một topic không ai nghe, và Console báo "bench không phản hồi" sau khi hết hạn chờ ack — sai nguyên nhân hoàn toàn.
         if (!bench.HoTroRemote)
             return Conflict(new
             {
@@ -503,8 +435,7 @@ public class BenchesController(
             if (string.IsNullOrWhiteSpace(testCase))
                 return BadRequest(new { error = "Thiếu tên test case" });
 
-            // Chặn ở đây để khỏi làm rối bench, nhưng agent vẫn phải tự kiểm tra
-            // lại — trạng thái trong DB có thể trễ vài giây so với thực tế.
+            // Chặn ở đây để khỏi làm rối bench, nhưng agent vẫn phải tự kiểm tra lại — trạng thái trong DB có thể trễ vài giây so với thực tế.
             if (bench.State == BenchState.Running)
                 return Conflict(new { error = $"Thiết bị đang chạy {bench.CurrentTestCase}" });
             if (bench.State is BenchState.Offline or BenchState.Unknown)
@@ -515,15 +446,12 @@ public class BenchesController(
 
         try
         {
-            // Danh tính lấy TỪ TOKEN. Tham số `by` người gọi tự khai chỉ còn là
-            // đường lui khi token không mang email, giữ để không ghi rỗng vào
-            // lịch sử.
+            // Danh tính lấy TỪ TOKEN.
             var nguoiRaLenh = User.Email() ?? by;
             var cmd = await publisher.SendAsync(bench, action, testCase, plan,
                                                 nguoiRaLenh, them, ct);
 
-            // 202 chứ không phải 200: lệnh đã gửi, bench chưa xác nhận. Giao diện
-            // theo tiếp bằng cmdId qua SignalR, không giữ HTTP request chờ test xong.
+            // 202 chứ không phải 200: lệnh đã gửi, bench chưa xác nhận.
             return Accepted(new CommandAcceptedDto(cmd.CmdId, "pending", cmd.IssuedAt));
         }
         catch (CommandNotSentException ex)
@@ -532,7 +460,6 @@ public class BenchesController(
         }
     }
 
-    // ---------------------------------------------------------- dữ liệu đo
 
     [HttpGet("{code}/telemetry")]
     [HasPermission(MaQuyen.BenchView)]

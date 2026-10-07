@@ -10,17 +10,7 @@ public enum BenchState
     Maintenance = 5, // Bảo trì
 }
 
-/// <summary>
-/// Loại thiết bị. Ba loại nằm CHUNG một bảng, không tách ba bảng.
-///
-/// Lý do không tách: bốn bảng `Runs`, `Commands`, `Alerts`, `BaoCaoChays` đều
-/// trỏ vào thiết bị. Tách ba bảng thì chúng phải hoặc mang ba cột nullable
-/// (mỗi hàng đúng một cột có giá trị, không gì ngăn được hàng rỗng cả ba),
-/// hoặc mang cặp loại+id và MẤT HẲN KHOÁ NGOẠI — xoá thiết bị là bỏ lại lịch
-/// sử trỏ vào hư không.
-///
-/// Trùng cột chỉ phiền. Mất toàn vẹn tham chiếu mới là hỏng.
-/// </summary>
+/// <summary>Loại thiết bị.</summary>
 public enum LoaiThietBi
 {
     /// <summary>Giá test, thường chứa MHU và vài ECU khác. Mặc định.</summary>
@@ -61,27 +51,14 @@ public class Bench
     /// </summary>
     public LoaiThietBi Loai { get; set; } = LoaiThietBi.Bench;
 
-    /// <summary>
-    /// Thiết bị này đang nằm trong thiết bị nào — MHU trỏ vào bench đang cắm.
-    ///
-    /// Tự trỏ về chính bảng thay vì bảng nối, vì **một ECU tại một thời điểm
-    /// chỉ cắm vào một chỗ**. Rút sang bench khác thì chỉ đổi cột này, và mã
-    /// bench giữ nguyên nên lịch sử chạy không bị mồ côi.
-    /// </summary>
+    /// <summary>Thiết bị này đang nằm trong thiết bị nào — MHU trỏ vào bench đang cắm.</summary>
     public int? ThuocVeId { get; set; }
     public Bench? ThuocVe { get; set; }
 
     /// <summary>Thiết bị nằm bên trong thiết bị này.</summary>
     public List<Bench> ChuaNhung { get; set; } = new();
 
-    /// <summary>
-    /// Có agent nối về Console không.
-    ///
-    /// `false` thì thiết bị KHÔNG BAO GIỜ gửi gì về, nên không được đánh dấu
-    /// mất kết nối và không được sinh cảnh báo. Thiếu chỗ này là mỗi con ECU
-    /// đơn đẻ một cảnh báo mỗi ngày, người ta tắt cảnh báo đi, rồi lúc bench
-    /// thật hỏng thì không ai nhìn nữa.
-    /// </summary>
+    /// <summary>Có agent nối về Console không.</summary>
     public bool HoTroRemote { get; set; } = true;
 
     /// <summary>Robot di chuyển tới kiểm thử được không. Để dành cho sau này.</summary>
@@ -106,14 +83,7 @@ public class Bench
     public string? Firmware { get; set; }            // "2.14.1"
     public string TopicPrefix { get; set; } = "";    // bench/vf6/HIL-A02
 
-    /// <summary>
-    /// Tên máy tính được gán cố định cho bench này. Để trống thì không kiểm.
-    ///
-    /// Dựa trên cam kết vận hành "mỗi bench một máy tính riêng" — khi đó tên
-    /// máy và mã bench là cặp 1-1. Khai ở đây để backend đối chiếu với tên máy
-    /// agent tự báo: lệch nghĩa là có người mang máy sang bench khác mà quên
-    /// đổi cấu hình, và lượt test sẽ vào nhầm lịch sử của bench này.
-    /// </summary>
+    /// <summary>Tên máy tính được gán cố định cho bench này.</summary>
     public string? TenMay { get; set; }
 
     public BenchState State { get; set; } = BenchState.Unknown;
@@ -135,11 +105,7 @@ public class Bench
     public List<ThietBiDuAn> DuAns { get; set; } = new();
 }
 
-/// <summary>
-/// Dự án dùng thiết bị. Quan hệ NHIỀU-NHIỀU thật: một bench dùng cho nhiều dự
-/// án, một dự án dùng nhiều bench — khác hẳn quan hệ chứa nhau ở trên nên
-/// không gộp chung được.
-/// </summary>
+/// <summary>Dự án dùng thiết bị.</summary>
 public class DuAn
 {
     public int Id { get; set; }
@@ -154,13 +120,7 @@ public class DuAn
     public List<ThietBiDuAn> ThietBis { get; set; } = new();
 }
 
-/// <summary>
-/// Một ngăn trong kho dữ liệu dùng chung. Quản trị tự thêm được.
-///
-/// Tách thành bảng riêng thay vì hằng số trong code (đổi 02/10): các mục chỉ
-/// khác nhau cái tên, nên bắt sửa code để thêm một ngăn là chặn người dùng ở
-/// chỗ không đáng chặn.
-/// </summary>
+/// <summary>Một ngăn trong kho dữ liệu dùng chung.</summary>
 public class MucDuLieuChung
 {
     public int Id { get; set; }
@@ -174,13 +134,7 @@ public class MucDuLieuChung
     /// <summary>Thứ tự hiện trên giao diện. Nhỏ hơn thì đứng trước.</summary>
     public int ThuTu { get; set; }
 
-    /// <summary>
-    /// Mục dựng sẵn. **Không xoá được.**
-    ///
-    /// Riêng `khac` là chỗ file rơi vào khi tải lên không chọn mục; xoá nó là
-    /// để lại những file trỏ vào một mã không tồn tại. Ba mục còn lại giữ cờ
-    /// này vì chúng là thứ hệ thống hứa có sẵn — vẫn đổi được tên hiển thị.
-    /// </summary>
+    /// <summary>Mục dựng sẵn.</summary>
     public bool MacDinh { get; set; }
 
     public DateTimeOffset TaoLuc { get; set; }
@@ -329,19 +283,12 @@ public class GoiTestCase
     /// <summary>Tên file gốc người dùng tải lên, chỉ để hiển thị.</summary>
     public string TenFileGoc { get; set; } = "";
 
-    /// <summary>
-    /// Vừa là khoá tra file trên đĩa, vừa là thứ agent dùng để kiểm gói tải về
-    /// có nguyên vẹn không. Tải dở giữa chừng mà vẫn bung là rải file hỏng vào
-    /// `AutoTests/`, rồi Qauto chạy một bài không còn đúng nữa.
-    /// </summary>
+    /// <summary>Vừa là khoá tra file trên đĩa, vừa là thứ agent dùng để kiểm gói tải về có nguyên vẹn không.</summary>
     public string Sha256 { get; set; } = "";
 
     public long KichThuoc { get; set; }
 
-    /// <summary>
-    /// Số file .tc/.mtc đếm được lúc tải lên. Gói testcase mà 0 bài là gói
-    /// sai nên bị từ chối; gói config thì bình thường bằng 0.
-    /// </summary>
+    /// <summary>Số file .tc/.mtc đếm được lúc tải lên.</summary>
     public int SoTestCase { get; set; }
 
     public string? NguoiTaiLen { get; set; }
@@ -374,22 +321,12 @@ public class BaoCaoChay
     public DateTimeOffset NhanLuc { get; set; }
 }
 
-/// <summary>
-/// Một file trong kho riêng của người dùng.
-///
-/// Chứa gì thì CHƯA CHỐT — hiện chỉ dựng sẵn chỗ chứa. Vì vậy không có trường
-/// nào mô tả loại nội dung: thêm bây giờ là đoán, mà đoán sai thì sau phải đổi
-/// schema.
-/// </summary>
+/// <summary>Một file trong kho riêng của người dùng.</summary>
 public class TepNguoiDung
 {
     public int Id { get; set; }
 
-    /// <summary>
-    /// Người sở hữu file. Hiện là chuỗi bên gọi TỰ KHAI — backend chưa có xác
-    /// thực nên đây KHÔNG phải ranh giới bảo mật, chỉ là nhãn phân loại. Ai
-    /// cũng đọc và ghi được kho của người khác. Phải siết lại khi có đăng nhập.
-    /// </summary>
+    /// <summary>Người sở hữu file.</summary>
     public string NguoiDung { get; set; } = "";
 
     public string TenFile { get; set; } = "";

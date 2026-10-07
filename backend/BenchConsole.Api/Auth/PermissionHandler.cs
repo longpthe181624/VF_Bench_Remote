@@ -28,8 +28,7 @@ public class PermissionHandler : AuthorizationHandler<PermissionRequirement>
         if (QuyenTruyCap.ChoPhep(quyen, vaiTro, requirement.Permission))
             context.Succeed(requirement);
 
-        // Không gọi Fail(): để requirement khác (nếu có) còn cơ hội. Không
-        // Succeed thì mặc định đã là từ chối.
+        // Không gọi Fail(): để requirement khác (nếu có) còn cơ hội.
         return Task.CompletedTask;
     }
 }

@@ -99,9 +99,7 @@ public class TestCasesController(
         if (kieu is not ("auto" or "manual")) return BadRequest(new { error = "Loại kiểm thử phải là auto hoặc manual." });
         if (loai == LoaiGoi.Config) kieu = "auto";
 
-        // Quyền ở đây phụ thuộc DỮ LIỆU chứ không phụ thuộc endpoint, nên
-        // không gắn [HasPermission] được: chỉ biết cần quyền nào sau khi đọc
-        // request. Gói test case và gói cấu hình là hai việc khác nhau.
+        // Quyền ở đây phụ thuộc DỮ LIỆU chứ không phụ thuộc endpoint, nên không gắn [HasPermission] được: chỉ biết cần quyền nào sau khi đọc request.
         var quyenCan = loai == LoaiGoi.Config ? MaQuyen.ConfigUpload : MaQuyen.TestCaseUpload;
         if (!User.CoQuyen(quyenCan))
             return Forbid();
@@ -109,8 +107,7 @@ public class TestCasesController(
         ten = ten.Trim();
         using var khoa = await kho.Khoa.LayAsync(ct);
 
-        // Chặn trùng trước khi tốn công đọc hết file lên đĩa. Trùng theo cặp
-        // (loại, tên) — gói testcase và gói config cùng tên là hai thứ khác nhau.
+        // Chặn trùng trước khi tốn công đọc hết file lên đĩa.
         if (await db.GoiTestCases.AnyAsync(g => g.Loai == loai && g.Ten == ten, ct))
             return Conflict(new { error = $"Đã có gói {loai} tên '{ten}'. Xoá gói cũ hoặc dùng tên khác." });
 
@@ -135,9 +132,7 @@ public class TestCasesController(
             Sha256 = luu.Sha256,
             KichThuoc = luu.KichThuoc,
             SoTestCase = luu.SoTestCase,
-            // Lấy từ token, KHÔNG lấy tham số người gọi tự khai. Trước khi có
-            // xác thực, trường này là chuỗi bất kỳ ai cũng điền được nên
-            // không truy trách nhiệm được.
+            // Lấy từ token, KHÔNG lấy tham số người gọi tự khai.
             NguoiTaiLen = User.Email() ?? nguoiTaiLen,
             TaiLenLuc = DateTimeOffset.UtcNow,
         };
@@ -158,14 +153,8 @@ public class TestCasesController(
         return goi is null ? NotFound() : GoiTestCaseDto.From(goi);
     }
 
-    /// <summary>
-    /// Agent trên máy bench tải gói về từ đây.
-    ///
-    /// Không đặt dưới xác thực vì backend hiện chưa có xác thực nào cả — xem
-    /// ghi chú ở `Program.cs` về việc mở Kestrel ra ngoài localhost.
-    /// </summary>
-    // ĐỂ MỞ CÓ CHỦ Ý. Qauto tải gói test case về từ đây và Qauto KHÔNG
-    // xác thực. Gắn [Authorize] vào đây là gãy luồng đẩy gói xuống bench.
+    /// <summary>Agent trên máy bench tải gói về từ đây.</summary>
+    // Giữ anonymous để tương thích luồng tải gói của agent Qauto hiện tại.
     [AllowAnonymous]
     [HttpGet("{id:int}/download")]
     public async Task<IActionResult> Tai(int id, CancellationToken ct)
@@ -176,8 +165,7 @@ public class TestCasesController(
         var duongDan = kho.DuongDan(goi.Sha256);
         if (!System.IO.File.Exists(duongDan))
         {
-            // Bản ghi còn mà file mất — thà nói thẳng còn hơn để agent tải về
-            // một trang lỗi HTML rồi báo "gói không phải ZIP".
+            // Bản ghi còn mà file mất — thà nói thẳng còn hơn để agent tải về một trang lỗi HTML rồi báo "gói không phải ZIP".
             log.LogError("Gói {Id} ({Ten}) mất file {Sha}", goi.Id, goi.Ten, goi.Sha256);
             return NotFound(new { error = "Bản ghi còn nhưng file gói đã mất trên đĩa." });
         }
@@ -196,8 +184,7 @@ public class TestCasesController(
         db.GoiTestCases.Remove(goi);
         await db.SaveChangesAsync(ct);
 
-        // Hai gói khác tên mà cùng nội dung dùng chung một file, nên chỉ xoá
-        // file khi không còn bản ghi nào trỏ vào sha đó.
+        // Hai gói khác tên mà cùng nội dung dùng chung một file, nên chỉ xoá file khi không còn bản ghi nào trỏ vào sha đó.
         var conDung = await db.GoiTestCases.AnyAsync(g => g.Sha256 == goi.Sha256, ct);
         if (!conDung && !await db.TestRequestFiles.AnyAsync(f => f.Kind == "package" && f.Sha256 == goi.Sha256, ct))
             kho.XoaFile(goi.Sha256);

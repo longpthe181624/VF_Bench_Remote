@@ -153,22 +153,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Tang).HasMaxLength(32);
             e.Property(x => x.Ten).HasMaxLength(128);
 
-            // Lọc theo loại là truy vấn thường xuyên nhất sau khi có ba loại
-            // thiết bị trong cùng một bảng.
+            // Lọc theo loại là truy vấn thường xuyên nhất sau khi có ba loại thiết bị trong cùng một bảng.
             e.HasIndex(x => x.Loai);
 
-            // Xoá thiết bị chứa thì thiết bị con thành ĐỨNG RIÊNG, không bị
-            // xoá theo: tháo bench đi thì con MHU vẫn còn ngoài đời. Cascade ở
-            // đây là âm thầm xoá mất cả lịch sử chạy của con MHU đó.
-            //
-            // ClientSetNull chứ KHÔNG phải SetNull. SQL Server từ chối
-            // ON DELETE SET NULL trên khoá ngoại TỰ THAM CHIẾU — lỗi 1785
-            // "may cause cycles or multiple cascade paths" — migration đổ
-            // ngay lúc áp và backend chết lặp. ClientSetNull giữ nguyên ý đồ
-            // trên: EF gỡ liên kết cho thiết bị con ĐÃ NẠP, còn phía database
-            // khai NO ACTION nên SQL Server chấp nhận. Hệ quả phải nhớ: muốn
-            // xoá thiết bị chứa thì phải nạp kèm danh sách con, không thì
-            // database chặn vì còn ràng buộc.
+            // SQL Server từ chối SET NULL trên FK tự tham chiếu (1785).
+            // ClientSetNull yêu cầu nạp thiết bị con trước khi xoá để EF gỡ liên kết.
             e.HasOne(x => x.ThuocVe).WithMany(x => x.ChuaNhung)
                 .HasForeignKey(x => x.ThuocVeId)
                 .OnDelete(DeleteBehavior.ClientSetNull);
@@ -189,8 +178,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<ThietBiDuAn>(e =>
         {
             e.HasKey(x => new { x.BenchId, x.DuAnId });
-            // Xoá thiết bị hay xoá dự án thì gỡ luôn dòng nối. Để lại là danh
-            // sách dự án của thiết bị hiện ra một cái tên không còn tồn tại.
+            // Xoá thiết bị hay xoá dự án thì gỡ luôn dòng nối.
             e.HasOne(x => x.Bench).WithMany(x => x.DuAns)
                 .HasForeignKey(x => x.BenchId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.DuAn).WithMany(x => x.ThietBis)
@@ -201,8 +189,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.Property(x => x.Hash).HasMaxLength(100).IsRequired();
             e.HasIndex(x => x.UserId);
-            // Xoá người dùng thì mã khôi phục đi theo — giữ lại là để sót một
-            // nắm hash trỏ vào tài khoản không còn tồn tại.
+            // Xoá người dùng thì mã khôi phục đi theo — giữ lại là để sót một nắm hash trỏ vào tài khoản không còn tồn tại.
             e.HasOne(x => x.User).WithMany(x => x.MaKhoiPhucs)
                 .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -235,9 +222,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // Lọc theo loại là truy vấn duy nhất của màn này.
             e.HasIndex(x => x.Loai);
 
-            // Trùng tên trong cùng một loại là chặn: hai file "NP_11.6.4" trong
-            // mục DBC thì không ai biết bản nào đang dùng. Khác loại trùng tên
-            // thì không sao, chúng là hai thứ khác nhau.
+            // Trùng tên trong cùng một loại là chặn: hai file "NP_11.6.4" trong mục DBC thì không ai biết bản nào đang dùng.
             e.HasIndex(x => new { x.Loai, x.Ten }).IsUnique();
         });
 
@@ -282,10 +267,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<GoiTestCase>(e =>
         {
-            // Tên gói là tên thư mục agent bung ra trên máy bench. Trùng tên là
-            // gói sau đè lên gói trước, nên chặn ngay từ đây. Duy nhất theo
-            // (loại, tên): gói testcase và gói config cùng tên là hai thứ khác
-            // nhau, bung vào hai thư mục khác nhau, không đè nhau.
+            // Tên gói là tên thư mục agent bung ra trên máy bench.
             e.HasIndex(x => new { x.Loai, x.Ten }).IsUnique();
             e.Property(x => x.Loai).HasMaxLength(16).IsRequired();
             e.Property(x => x.KieuTest).HasMaxLength(16).HasDefaultValue("auto").IsRequired();
@@ -297,9 +279,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<BaoCaoChay>(e =>
         {
-            // Truy vấn chính: lấy mọi file của một lệnh. Và chống trùng khi máy
-            // bench gửi lại sau khi mạng đứt — cùng lệnh, cùng tên file, cùng
-            // nội dung thì chỉ giữ một bản.
+            // Truy vấn chính: lấy mọi file của một lệnh.
             e.HasIndex(x => new { x.CmdId, x.TenFile, x.Sha256 }).IsUnique();
             e.Property(x => x.CmdId).HasMaxLength(64).IsRequired();
             e.Property(x => x.BenchCode).HasMaxLength(64).IsRequired();
@@ -310,8 +290,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<TepNguoiDung>(e =>
         {
-            // Truy vấn chính: lấy kho của một người. Và chống trùng khi tải lại
-            // đúng file cũ — cùng người, cùng tên, cùng nội dung thì một bản ghi.
+            // Truy vấn chính: lấy kho của một người.
             e.HasIndex(x => new { x.NguoiDung, x.TenFile, x.Sha256 }).IsUnique();
             e.Property(x => x.NguoiDung).HasMaxLength(128).IsRequired();
             e.Property(x => x.TenFile).HasMaxLength(260).IsRequired();
@@ -319,14 +298,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.MoTa).HasMaxLength(512);
         });
 
-        // ------------------------------------------------ xác thực, phân quyền
 
         b.Entity<User>(e =>
         {
             e.Property(x => x.TotpBiMat).HasMaxLength(64);
-            // Đăng nhập bằng email nên nó phải duy nhất. Không có index này
-            // thì hai tài khoản cùng email, và đăng nhập trả về cái nào là
-            // tuỳ thứ tự trong bảng.
+            // Đăng nhập bằng email nên nó phải duy nhất.
             e.HasIndex(x => x.Email).IsUnique();
             e.Property(x => x.Email).HasMaxLength(256).IsRequired();
             e.Property(x => x.HoTen).HasMaxLength(128).IsRequired();
@@ -354,8 +330,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<UserRole>(e =>
         {
             e.HasKey(x => new { x.UserId, x.RoleId });
-            // Xoá user thì gỡ luôn vai trò đã gán. Để lại dòng mồ côi thì lần
-            // sau tạo user trùng Id sẽ thừa hưởng quyền của người cũ.
+            // Xoá user thì gỡ luôn vai trò đã gán.
             e.HasOne(x => x.User).WithMany(x => x.UserRoles)
                 .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Role).WithMany(x => x.UserRoles)

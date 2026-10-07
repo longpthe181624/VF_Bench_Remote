@@ -3,17 +3,7 @@ namespace BenchConsole.Core.Auth;
 /// <summary>Một quyền, dùng để seed vào database và hiển thị trên màn quản trị.</summary>
 public record MoTaQuyen(string Ma, string Module, string Action, string Ten);
 
-/// <summary>
-/// Danh mục quyền của Console, theo chuẩn `MODULE.ACTION`.
-///
-/// Khai thành hằng số chứ không rải chuỗi trần khắp controller: gõ
-/// `[HasPermission("BENCH.RUNN")]` thì trình biên dịch không kêu gì cả, mà
-/// hậu quả là **mọi người đều bị từ chối** vì không ai có quyền tên đó. Dùng
-/// hằng số thì sai chính tả thành lỗi biên dịch.
-///
-/// PHẠM VI: quyền truy cập API Console từ web và các API ghi của Client.
-/// Quyền nghiệp vụ bên trong Qauto vẫn do Qauto quản lý.
-/// </summary>
+/// <summary>Danh mục quyền của Console, theo chuẩn `MODULE.ACTION`.</summary>
 public static class MaQuyen
 {
     public const string RequestView = "REQUEST.VIEW";
@@ -40,10 +30,7 @@ public static class MaQuyen
     public const string ConfigUpload = "CONFIG.UPLOAD";
     public const string ConfigDeploy = "CONFIG.DEPLOY";
 
-    /// <summary>
-    /// Chỉ có VIEW. Không có `REPORT.UPLOAD` vì việc nộp báo cáo là của Qauto,
-    /// mà Qauto cố ý KHÔNG xác thực — endpoint đó để mở.
-    /// </summary>
+    /// <summary>Chỉ có VIEW.</summary>
     public const string ReportView = "REPORT.VIEW";
 
     public const string DuLieuView = "DULIEU.VIEW";
@@ -53,23 +40,14 @@ public static class MaQuyen
     public const string ClientJobsExecute = "CLIENT.JOBS.EXECUTE";
     public const string ClientCatalogCreate = "CLIENT.CATALOG.CREATE";
 
-    /// <summary>
-    /// Thêm, sửa, xoá MỤC trong kho dữ liệu chung — khác với thêm file vào mục.
-    ///
-    /// Cố ý KHÔNG cấp cho Engineer: đổi danh mục là đổi cách cả nhóm sắp xếp
-    /// tài liệu, không phải việc thường ngày. Vai trò tự tạo vẫn tích được.
-    /// </summary>
+    /// <summary>Thêm, sửa, xoá MỤC trong kho dữ liệu chung — khác với thêm file vào mục.</summary>
     public const string DuLieuMuc = "DULIEU.MUC";
 
     public const string KhoView = "KHO.VIEW";
     public const string KhoUpload = "KHO.UPLOAD";
     public const string KhoDelete = "KHO.DELETE";
 
-    /// <summary>
-    /// Xem kho của NGƯỜI KHÁC. Cần quyền riêng vì RBAC thuần không diễn tả
-    /// được "chỉ của tôi" — `KHO.VIEW` chỉ nói được là có xem kho hay không,
-    /// không nói được xem kho của ai.
-    /// </summary>
+    /// <summary>Xem kho của NGƯỜI KHÁC.</summary>
 
     public const string UserView = "USER.VIEW";
     public const string UserCreate = "USER.CREATE";

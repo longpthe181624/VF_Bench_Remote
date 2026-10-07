@@ -4,16 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BenchConsole.Api.Data;
 
-/// <summary>
-/// Đăng ký sẵn 5 bench khớp với bench_simulator.py.
-///
-/// Luồng ingest CỐ Ý từ chối dữ liệu của bench chưa đăng ký — nếu không có
-/// bước này, chạy simulator lên sẽ chỉ thấy log "bench chưa đăng ký" và
-/// giao diện trống, dễ tưởng là hỏng. Chỉ chạy ở môi trường Development.
-///
-/// Mã bench, dòng xe và kênh chính ở đây phải khớp đúng với simulator; TopicPrefix
-/// dựng từ model + code, sai một ký tự là không nhận được gói nào.
-/// </summary>
+/// <summary>Đăng ký sẵn 5 bench khớp với bench_simulator.py.</summary>
 public static class DevSeed
 {
     private record Seed(string Code, string Model, string Workshop, string Rack,
@@ -44,8 +35,7 @@ public static class DevSeed
                 TopicPrefix = MaModel.TopicPrefix(s.Model, s.Code),
                 PrimaryChannel = s.Channel,
                 PrimaryUnit = s.Unit,
-                // Unknown, không phải Idle: chưa nghe thấy gì từ bench thì đừng
-                // vẽ nó là sẵn sàng.
+                // Unknown, không phải Idle: chưa nghe thấy gì từ bench thì đừng vẽ nó là sẵn sàng.
                 State = BenchState.Unknown,
             });
         }

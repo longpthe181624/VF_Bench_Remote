@@ -92,7 +92,7 @@ export default function RequestsPage() {
     if(devices.isLoading||projects.isLoading||packages.isLoading||software.isLoading)return <div className="empty">Đang tải dữ liệu tạo Request…</div>
     const target=devices.data?.find(d=>d.code===params.get('device'))
     const initial=selected?editableRequest(selected):{code:'',name:'',requester:user.email,project:'',mode:target&&!target.hoTroRemote?'manual':'auto',device:target?.code||'',description:'',flash:false,softwareId:'',packageIds:[],timing:'now',scheduledAt:'',createdAt:''}
-    // Dùng snapshot đã lưu để sửa nháp không tự đổi sang bytes mới của file nguồn.
+    // Sửa nháp giữ snapshot, tránh lấy nội dung file nguồn đã thay đổi.
     const pinnedPackages=(selected?.files||[]).filter(f=>f.kind==='package').map(f=>({id:f.sourceId,ten:f.name,tenFileGoc:f.fileName,sha256:f.sha256,kieuTest:f.mode}))
     const pinnedSoftware=(selected?.files||[]).filter(f=>f.kind==='software').map(f=>({id:f.sourceId,ten:f.name,tenFile:f.fileName,sha256:f.sha256}))
     const choices=[...pinnedPackages,...(packages.data||[]).filter(p=>!pinnedPackages.some(f=>f.id===p.id))]

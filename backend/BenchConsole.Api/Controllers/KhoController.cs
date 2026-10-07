@@ -10,24 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BenchConsole.Api.Controllers;
 
-/// <summary>
-/// Kho file riêng của từng người dùng.
-///
-/// **Chưa chốt sẽ chứa gì** — đây là chỗ chứa và đường vận chuyển dựng trước,
-/// nội dung định sau. Nên endpoint nhận file bất kỳ, không kiểm định dạng.
-///
-/// **Kho là chỗ riêng tuyệt đối: không ai xem được kho người khác, kể cả
-/// Admin.** Chốt 01/10. Vì vậy không có đường dẫn nào mang tên người khác —
-/// danh tính luôn lấy từ token. Còn một đường để trỏ tới kho người khác là sớm
-/// muộn có chỗ quên kiểm.
-///
-/// Admin vẫn xoá được tài khoản kèm toàn bộ file của tài khoản đó. Xoá là việc
-/// quản trị; đọc nội dung thì không.
-///
-/// RBAC thuần không diễn tả được quyền sở hữu — `KHO.VIEW` chỉ nói được là có
-/// xem kho hay không, không nói được xem kho của AI. Nên phần này kiểm trong
-/// thân hàm chứ không gắn [HasPermission] ở đầu.
-/// </summary>
+/// <summary>Kho file riêng của từng người dùng.</summary>
 [ApiController]
 [Route("api/storage")]
 [Authorize]
@@ -36,12 +19,7 @@ public class KhoController(
     KhoNguoiDung kho,
     ILogger<KhoController> log) : ControllerBase
 {
-    /// <summary>
-    /// Kho của CHÍNH MÌNH. Không cần nêu tên ai — danh tính lấy từ token.
-    ///
-    /// Có đường riêng thay vì bắt giao diện tự ghép email vào URL: ghép tay là
-    /// sớm muộn có chỗ ghép nhầm, mà nhầm ở đây nghĩa là xem kho người khác.
-    /// </summary>
+    /// <summary>Kho của CHÍNH MÌNH.</summary>
     [HttpGet]
     public async Task<ActionResult<List<TepNguoiDungDto>>> KhoCuaToi(CancellationToken ct, [FromQuery] string? q = null)
     {
@@ -104,8 +82,7 @@ public class KhoController(
             var luu = await kho.LuuAsync(s, ct);
             var tenFile = KiemTraTep.TenGoc(f.FileName);
 
-            // Chống trùng theo (người, tên file, nội dung): tải lại đúng file cũ
-            // thì trả bản ghi cũ chứ không đẻ thêm dòng.
+            // Chống trùng theo (người, tên file, nội dung): tải lại đúng file cũ thì trả bản ghi cũ chứ không đẻ thêm dòng.
             var da = await db.TepNguoiDungs.FirstOrDefaultAsync(
                 t => t.NguoiDung == nguoiDung && t.TenFile == tenFile
                      && t.Sha256 == luu.Sha256, ct);
@@ -125,8 +102,7 @@ public class KhoController(
             rows.Add(tep);
         }
 
-        // Lưu TRƯỚC rồi mới dựng DTO: trước SaveChanges thì Id vẫn là 0, trả ra
-        // ngoài là ai dùng nó để tải file sẽ tải hụt.
+        // Lưu TRƯỚC rồi mới dựng DTO: trước SaveChanges thì Id vẫn là 0, trả ra ngoài là ai dùng nó để tải file sẽ tải hụt.
         await db.SaveChangesAsync(ct);
         log.LogInformation("Kho {Nguoi}: nhận {So} file", nguoiDung, rows.Count);
 
@@ -139,8 +115,7 @@ public class KhoController(
         var tep = await db.TepNguoiDungs.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
         if (tep is null) return NotFound();
 
-        // Kiểm theo CHỦ của file, không theo tham số nào trên đường dẫn — id
-        // là số tuần tự nên đoán được, không kiểm là ai cũng tải file người khác.
+        // Kiểm theo CHỦ của file, không theo tham số nào trên đường dẫn — id là số tuần tự nên đoán được, không kiểm là ai cũng tải file người khác.
         if (!QuyenTruyCap.XemDuocKho(User.Quyen(), User.VaiTro(), User.Email(), tep.NguoiDung))
             return Forbid();
 
@@ -181,9 +156,7 @@ public class KhoController(
 
         if (!User.CoQuyen(MaQuyen.KhoDelete)) return Forbid();
 
-        // Chỉ file của mình, không có ngoại lệ cho Admin. Admin đã không xem
-        // được kho người khác thì xoá cũng thành xoá mò theo id đoán được —
-        // vừa vô dụng vừa nguy hiểm.
+        // Chỉ file của mình, không có ngoại lệ cho Admin.
         var laCuaMinh = string.Equals(User.Email(), tep.NguoiDung,
                                       StringComparison.OrdinalIgnoreCase);
         if (!laCuaMinh) return Forbid();
@@ -191,8 +164,7 @@ public class KhoController(
         db.TepNguoiDungs.Remove(tep);
         await db.SaveChangesAsync(ct);
 
-        // Hai bản ghi khác nhau có thể trỏ cùng một file, nên chỉ xoá file khi
-        // không còn ai dùng tới nó nữa.
+        // Hai bản ghi khác nhau có thể trỏ cùng một file, nên chỉ xoá file khi không còn ai dùng tới nó nữa.
         var conDung = await db.TepNguoiDungs.AnyAsync(t => t.Sha256 == tep.Sha256, ct);
         if (!conDung) kho.XoaFile(tep.Sha256);
 

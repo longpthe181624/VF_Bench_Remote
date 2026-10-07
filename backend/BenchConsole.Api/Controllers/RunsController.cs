@@ -90,14 +90,12 @@ public class RunsController(
         return new
         {
             run = RunDto.From(run, run.Bench?.Code ?? "?"),
-            // Trả nguyên văn JSON bench gửi. Mỗi test case có cấu trúc detail
-            // khác nhau, backend không nên đoán hình dạng của nó.
+            // Trả nguyên văn JSON bench gửi.
             detail = run.DetailJson,
             cmdId = run.CmdId,
         };
     }
 
-    // ------------------------------------------------- bằng chứng của lượt chạy
 
     /// <summary>
     /// Máy bench tải file bằng chứng lên: log từng bước, trace CAN, ảnh chụp.
@@ -110,9 +108,7 @@ public class RunsController(
     /// gửi lại sau khi mạng đứt, lúc đó thứ tự về không còn bảo đảm. Thà giữ
     /// file mồ côi còn hơn vứt bằng chứng đi.
     /// </summary>
-    // ĐỂ MỞ CÓ CHỦ Ý. Qauto nộp báo cáo vào đây và Qauto KHÔNG xác thực —
-    // xác thực của dự án này là của web Console, quyền bên trong Qauto do
-    // chính Qauto lo. Đừng gắn [Authorize] vào đây, gắn là gãy luồng kết quả.
+    // Giữ anonymous cho báo cáo Qauto legacy; job REST dùng API key và lease riêng.
     [AllowAnonymous]
     [HttpPost("{cmdId}/report")]
     [RequestSizeLimit(KiemTraTep.TranYeuCau)]
@@ -133,9 +129,7 @@ public class RunsController(
 
         var benchCode = lenh?.Bench?.Code ?? form.BenchCode ?? "?";
 
-        // Giữ ENTITY chứ không dựng DTO ngay: trước SaveChanges thì Id vẫn là 0,
-        // nên DTO dựng sớm sẽ trả id=0 ra ngoài và ai dùng nó để tải file sẽ
-        // tải hụt. Dựng DTO sau khi lưu, lúc DB đã cấp Id thật.
+        // Giữ ENTITY chứ không dựng DTO ngay: trước SaveChanges thì Id vẫn là 0, nên DTO dựng sớm sẽ trả id=0 ra ngoài và ai dùng nó để tải file sẽ tải hụt.
         var rows = new List<BaoCaoChay>();
 
         foreach (var f in form.File)
@@ -147,8 +141,7 @@ public class RunsController(
 
             var tenFile = KiemTraTep.TenGoc(f.FileName);
 
-            // Chống trùng theo (lệnh, tên file, nội dung). Gửi lại y hệt thì
-            // trả về bản ghi cũ chứ không đẻ thêm dòng.
+            // Chống trùng theo (lệnh, tên file, nội dung).
             var da = await db.BaoCaoChays.FirstOrDefaultAsync(
                 b => b.CmdId == cmdId && b.TenFile == tenFile && b.Sha256 == luu.Sha256, ct);
             da ??= rows.FirstOrDefault(b => b.TenFile == tenFile && b.Sha256 == luu.Sha256);

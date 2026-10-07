@@ -37,13 +37,7 @@ public class RolesController(AppDbContext db, ILogger<RolesController> log) : Co
         )).ToList();
     }
 
-    /// <summary>
-    /// Danh mục quyền, để màn quản trị dựng danh sách chọn.
-    ///
-    /// Đọc từ database chứ không từ hằng số trong code: nếu hai bên lệch nhau
-    /// thì màn hình phải hiện đúng cái đang có trong database, vì đó mới là
-    /// thứ gán được cho vai trò.
-    /// </summary>
+    /// <summary>Danh mục quyền, để màn quản trị dựng danh sách chọn.</summary>
     [HttpGet("/api/permissions")]
     [HasPermission(MaQuyen.RoleView)]
     public async Task<ActionResult<List<QuyenDto>>> DanhMucQuyen(CancellationToken ct)
@@ -87,8 +81,7 @@ public class RolesController(AppDbContext db, ILogger<RolesController> log) : Co
         var role = await db.Roles.FirstOrDefaultAsync(r => r.Id == id, ct);
         if (role is null) return NotFound();
 
-        // Vai trò Admin vốn đã bỏ qua mọi kiểm tra quyền, nên sửa bộ quyền của
-        // nó chỉ tạo ảo giác là đã hạn chế được gì đó.
+        // Vai trò Admin vốn đã bỏ qua mọi kiểm tra quyền, nên sửa bộ quyền của nó chỉ tạo ảo giác là đã hạn chế được gì đó.
         if (string.Equals(role.Ma, AuthSeed.RoleAdmin, StringComparison.OrdinalIgnoreCase))
             return BadRequest(new
             {

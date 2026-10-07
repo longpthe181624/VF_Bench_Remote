@@ -17,10 +17,7 @@ namespace BenchConsole.Core.Messaging;
 /// </summary>
 public static class MaModel
 {
-    /// <summary>
-    /// `VF8New ME` → `vf8new-me`. Không có gì hợp lệ thì trả chuỗi rỗng, để
-    /// nơi gọi tự quyết là từ chối hay dùng mặc định — hàm này không đoán hộ.
-    /// </summary>
+    /// <summary>`VF8New ME` → `vf8new-me`.</summary>
     public static string Ma(string? ten)
     {
         if (string.IsNullOrWhiteSpace(ten)) return "";

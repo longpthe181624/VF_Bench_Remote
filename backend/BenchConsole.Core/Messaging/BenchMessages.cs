@@ -77,10 +77,7 @@ public static class BenchMessageParser
     private static readonly HashSet<string> TelemetryReserved =
         new(StringComparer.OrdinalIgnoreCase) { "ts", "test_case", "step", "plan", "cmd_id" };
 
-    /// <summary>
-    /// Parse một thông điệp MQTT. Trả về null nếu topic không thuộc hệ thống bench.
-    /// Không bao giờ ném exception: ingest chạy nền, một gói rác không được làm chết nó.
-    /// </summary>
+    /// <summary>Parse một thông điệp MQTT.</summary>
     public static BenchMessage? Parse(string topic, string payload)
     {
         if (!BenchTopic.TryParse(topic, out var t)) return null;

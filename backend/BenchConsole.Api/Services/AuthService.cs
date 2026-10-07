@@ -14,31 +14,19 @@ namespace BenchConsole.Api.Services;
 /// <summary>Đăng nhập không thành, kèm câu giải thích đưa thẳng cho người dùng.</summary>
 public class DangNhapThatBai(string message) : Exception(message);
 
-/// <summary>
-/// Cấu hình ký token. Đọc từ `Jwt:*`.
-///
-/// Khoá ký KHÔNG có giá trị mặc định trong mã nguồn. Khoá mặc định nghĩa là
-/// ai đọc được repo cũng tự ký được token làm admin.
-/// </summary>
+/// <summary>Cấu hình ký token.</summary>
 public class JwtOptions
 {
     public string? Key { get; set; }
     public string Issuer { get; set; } = "BenchConsole";
     public string Audience { get; set; } = "BenchConsole";
 
-    /// <summary>
-    /// Access token sống ngắn vì QUYỀN NẰM TRONG TOKEN: gỡ quyền của ai đó thì
-    /// họ vẫn giữ quyền cũ cho tới khi token hết hạn. Mà quyền ở đây gác việc
-    /// ra lệnh chạy test trên bench thật.
-    /// </summary>
+    /// <summary>Access token sống ngắn vì QUYỀN NẰM TRONG TOKEN: gỡ quyền của ai đó thì họ vẫn giữ quyền cũ cho tới khi token hết hạn.</summary>
     public int AccessTokenPhut { get; set; } = 30;
 
     public int RefreshTokenNgay { get; set; } = 7;
 
-    /// <summary>
-    /// Token tạm cho màn ghi danh hai lớp. Ngắn vì nó được cấp khi mới qua MỘT
-    /// lớp xác thực — đủ để quét mã và gõ một mã sáu số, không hơn.
-    /// </summary>
+    /// <summary>Token tạm cho màn ghi danh hai lớp.</summary>
     public int TokenGhiDanhPhut { get; set; } = 10;
 }
 
@@ -59,8 +47,7 @@ public class AuthService(
 
         var user = await repo.TheoEmailKemMaKhoiPhucAsync(email.Trim(), ct);
 
-        // Cùng một câu cho "không có email này" và "sai mật khẩu". Phân biệt
-        // hai trường hợp là để lộ email nào có tài khoản.
+        // Cùng một câu cho "không có email này" và "sai mật khẩu".
         if (user is null)
             throw new DangNhapThatBai("Email hoặc mật khẩu không đúng.");
 
@@ -82,10 +69,7 @@ public class AuthService(
             throw new DangNhapThatBai("Email hoặc mật khẩu không đúng.");
         }
 
-        // ---- tài khoản bắt buộc hai lớp mà chưa ghi danh: chưa cho vào
-        //
-        // Cấp token TẠM chứ không phải token thật. Phát token thật ở đây thì chỉ
-        // cần không bấm tiếp là bỏ qua được cả lớp thứ hai.
+        // Chưa ghi danh MFA chỉ được cấp token tạm, chưa được vào ứng dụng.
         if (user.TotpBatLuc is null && user.TotpBatBuoc)
         {
             user.SoLanSai = 0;
@@ -94,15 +78,10 @@ public class AuthService(
             return DangNhapResponse.DoiGhiDanhTotp(TaoTokenGhiDanh(user));
         }
 
-        // ---- bước hai: mã trên điện thoại
         int? conLai = null;
         if (user.TotpBatLuc is not null)
         {
-            // Mật khẩu đúng nhưng chưa gõ mã: KHÔNG cấp token, cũng không coi
-            // là sai. Báo cho client biết để hiện ô nhập mã.
-            //
-            // Chỗ này để lộ "mật khẩu đã đúng" — chấp nhận được và không tránh
-            // được: phải nói cho người ta biết là cần gõ mã tiếp.
+            // Mật khẩu đúng nhưng chưa gõ mã: KHÔNG cấp token, cũng không coi là sai.
             if (string.IsNullOrWhiteSpace(maTotp) && string.IsNullOrWhiteSpace(maKhoiPhuc))
                 return DangNhapResponse.DoiMaTotp();
 
@@ -123,9 +102,7 @@ public class AuthService(
 
             if (!xong)
             {
-                // Mã sai phải tính vào bộ đếm khoá y như mật khẩu sai. Không
-                // đếm thì sáu chữ số thành thứ dò được thoải mái, mà dò xong
-                // là bỏ qua luôn lớp thứ hai.
+                // Mã sai phải tính vào bộ đếm khoá y như mật khẩu sai.
                 await GhiNhanSaiAsync(user, "mã xác thực", ct);
                 throw new DangNhapThatBai("Mã xác thực không đúng hoặc đã sử dụng.");
             }
@@ -139,23 +116,19 @@ public class AuthService(
         return conLai is null ? token : token with { MaKhoiPhucConLai = conLai };
     }
 
-    /// <summary>
-    /// Tiêu một mã khôi phục. Trả về số mã còn lại, hoặc null nếu không khớp.
-    /// </summary>
+    /// <summary>Tiêu một mã khôi phục.</summary>
     private int? DungMaKhoiPhuc(User user, string go)
     {
         var sach = ChuanHoaMaKhoiPhuc(go);
 
-        // Phải duyệt hết thay vì tra bảng: mã lưu dạng băm BCrypt, mỗi hàng một
-        // muối khác nhau nên không tra theo giá trị được.
+        // Phải duyệt hết thay vì tra bảng: mã lưu dạng băm BCrypt, mỗi hàng một muối khác nhau nên không tra theo giá trị được.
         foreach (var m in user.MaKhoiPhucs.Where(x => x.DaDungLuc is null))
         {
             if (!BCrypt.Net.BCrypt.Verify(sach, m.Hash)) continue;
 
             m.DaDungLuc = DateTimeOffset.UtcNow;
             log.LogWarning("{Email} đăng nhập bằng mã khôi phục", user.Email);
-            // Mã vừa dùng đã được đánh dấu ngay trên, nên phép đếm này KHÔNG
-            // còn tính nó — không trừ thêm một lần nữa.
+            // Mã vừa dùng đã được đánh dấu ngay trên, nên phép đếm này KHÔNG còn tính nó — không trừ thêm một lần nữa.
             return user.MaKhoiPhucs.Count(x => x.DaDungLuc is null);
         }
         return null;
@@ -175,7 +148,6 @@ public class AuthService(
         await repo.LuuAsync(ct);
     }
 
-    // ---------------------------------------------------------- ghi danh TOTP
 
     /// <summary>
     /// Token tạm mang đúng mã người dùng, không mang vai trò và quyền.
@@ -202,10 +174,7 @@ public class AuthService(
             signingCredentials: new SigningCredentials(khoa, SecurityAlgorithms.HmacSha256)));
     }
 
-    /// <summary>
-    /// Cấp bí mật mới nhưng CHƯA bật. Bật ngay là tự khoá mình ra ngoài nếu
-    /// điện thoại quét hỏng — phải gõ đúng một mã mới coi là xong.
-    /// </summary>
+    /// <summary>Cấp bí mật mới nhưng CHƯA bật.</summary>
     public async Task<GhiDanhTotpResponse> BatDauGhiDanhAsync(int userId, CancellationToken ct)
     {
         var user = await repo.TheoIdAsync(userId, ct)
@@ -214,10 +183,6 @@ public class AuthService(
             throw new DangNhapThatBai("Tài khoản đã bật xác thực hai lớp. Tắt trước khi ghi danh lại.");
 
         // Đang ghi danh dở thì DÙNG LẠI bí mật cũ, đừng sinh mới.
-        //
-        // Người dùng quét mã xong, lỡ tải lại trang hoặc mở tab khác, mà máy chủ
-        // sinh bí mật mới thì mã trên điện thoại thành vô dụng và họ không hiểu
-        // vì sao gõ mãi không đúng. Học từ AQC.
         var biMat = string.IsNullOrWhiteSpace(user.TotpBiMat) ? Totp.SinhBiMat() : user.TotpBiMat;
         if (user.TotpBiMat != biMat)
         {
@@ -230,9 +195,7 @@ public class AuthService(
         return new GhiDanhTotpResponse(biMat, Totp.ChiaNhom(biMat), uri, AnhQr(uri));
     }
 
-    /// <summary>
-    /// Gõ đúng một mã thì bật, và trả về mã khôi phục ĐÚNG MỘT LẦN.
-    /// </summary>
+    /// <summary>Gõ đúng một mã thì bật, và trả về mã khôi phục ĐÚNG MỘT LẦN.</summary>
     public async Task<XacNhanTotpResponse> XacNhanGhiDanhAsync(int userId, string? ma, CancellationToken ct)
     {
         var user = await repo.TheoIdAsync(userId, ct)
@@ -258,10 +221,7 @@ public class AuthService(
             repo.ThemMaKhoiPhuc(new MaKhoiPhuc
             {
                 UserId = user.Id,
-                // Băm bản ĐÃ CHUẨN HOÁ, vì lúc đăng nhập cũng chuẩn hoá trước
-                // khi so. Băm bản có gạch rồi so bản không gạch thì không bao
-                // giờ khớp — và hỏng kiểu đó chỉ lộ ra đúng lúc ai đó mất điện
-                // thoại và cần tới mã khôi phục, tức lúc tệ nhất.
+                // Băm bản ĐÃ CHUẨN HOÁ, vì lúc đăng nhập cũng chuẩn hoá trước khi so.
                 Hash = BCrypt.Net.BCrypt.HashPassword(ChuanHoaMaKhoiPhuc(ma1)),
                 TaoLuc = DateTimeOffset.UtcNow,
             });
@@ -270,8 +230,7 @@ public class AuthService(
 
         log.LogInformation("{Email} đã bật xác thực hai lớp", user.Email);
 
-        // Cấp luôn phiên thật. Người vừa bị bắt ghi danh ở màn đăng nhập mà
-        // phải đăng nhập lại từ đầu thì vừa thừa vừa dễ tưởng là hỏng.
+        // Cấp luôn phiên thật.
         return new XacNhanTotpResponse(tho, await CapTokenAsync(user, ct));
     }
 
@@ -284,8 +243,7 @@ public class AuthService(
         if (string.IsNullOrWhiteSpace(matKhau) || !BCrypt.Net.BCrypt.Verify(matKhau, user.MatKhauHash))
             throw new DangNhapThatBai("Mật khẩu không đúng.");
 
-        // Không có chốt này thì bắt buộc thành vô nghĩa: ghi danh xong tắt ngay
-        // là vào được mãi mãi mà chỉ còn một lớp.
+        // Không có chốt này thì bắt buộc thành vô nghĩa: ghi danh xong tắt ngay là vào được mãi mãi mà chỉ còn một lớp.
         if (user.TotpBatBuoc)
             throw new DangNhapThatBai(
                 "Tài khoản này bắt buộc xác thực hai lớp. Liên hệ quản trị nếu cần gỡ.");
@@ -298,10 +256,7 @@ public class AuthService(
         log.LogWarning("{Email} đã TẮT xác thực hai lớp", user.Email);
     }
 
-    /// <summary>
-    /// Quản trị gỡ TOTP cho người khác — dùng khi họ mất cả điện thoại lẫn mã
-    /// khôi phục. Không có đường này thì tài khoản đó khoá vĩnh viễn.
-    /// </summary>
+    /// <summary>Quản trị gỡ TOTP cho người khác — dùng khi họ mất cả điện thoại lẫn mã khôi phục.</summary>
     public async Task GoChoNguoiKhacAsync(int userId, CancellationToken ct)
     {
         var user = await repo.TheoIdAsync(userId, ct)
@@ -338,14 +293,7 @@ public class AuthService(
 
     private const int SoMaKhoiPhuc = 8;
 
-    /// <summary>
-    /// Mã khôi phục dạng `XXXX-XXXX`. Bỏ hẳn các ký tự dễ đọc nhầm khi chép tay
-    /// từ giấy: 0/O, 1/I/L, 8/B.
-    /// </summary>
-    /// <summary>
-    /// Bỏ gạch nối, khoảng trắng và đưa về chữ in. Người ta chép mã từ giấy nên
-    /// gõ thiếu gạch hay gõ chữ thường là chuyện thường.
-    /// </summary>
+    /// <summary>Mã khôi phục dạng `XXXX-XXXX`.</summary>
     private static string ChuanHoaMaKhoiPhuc(string s)
         => s.Replace(" ", "").Replace("-", "").Trim().ToUpperInvariant();
 
@@ -369,18 +317,10 @@ public class AuthService(
             throw new DangNhapThatBai("Phiên đăng nhập đã hết hạn.");
 
         // Cấp token mới thì refresh token cũ mất hiệu lực luôn (xoay vòng).
-        // Dùng lại một refresh token đã tiêu là dấu hiệu nó bị lộ.
         return await CapTokenAsync(user, ct);
     }
 
-    /// <summary>
-    /// Người dùng tự đổi mật khẩu của mình. Phải nhập đúng mật khẩu cũ.
-    ///
-    /// Trả về CẶP TOKEN MỚI chứ không chỉ báo thành công. Lý do: đổi mật khẩu
-    /// làm refresh token cũ mất hiệu lực, nên thiết bị khác bị đăng xuất —
-    /// đúng ý muốn. Nhưng chính người vừa đổi thì không nên bị đá ra, họ vừa
-    /// chứng minh biết mật khẩu cũ rồi.
-    /// </summary>
+    /// <summary>Người dùng tự đổi mật khẩu của mình.</summary>
     public async Task<DangNhapResponse> DoiMatKhauAsync(
         int userId, string? cu, string? moi, CancellationToken ct)
     {
@@ -431,8 +371,7 @@ public class AuthService(
             new(AuthConstants.TokenUseClaimType, AuthConstants.TokenUseAccess),
         };
 
-        // Vai trò và quyền mỗi thứ một claim riêng. Admin bypass suy từ vai
-        // trò thật ở đây, không từ trường chữ nào trên bảng User.
+        // Vai trò và quyền mỗi thứ một claim riêng.
         claims.AddRange(vaiTro.Select(v => new Claim(ClaimTypes.Role, v)));
         claims.AddRange(quyen.Select(q => new Claim(AuthConstants.PermissionClaimType, q)));
 

@@ -11,10 +11,7 @@ using Microsoft.Extensions.Logging;
 
 if (args.Contains("--serve-ui")) return await StorageUiServer.Run();
 
-// Không dùng framework test nào, giống BenchConsole.Core.SmokeTest — chạy bằng
-// `dotnet run` là xong, không phải cài thêm gì.
-//
-//     dotnet run --project BenchConsole.Api.Tests
+// Không dùng framework test nào, giống BenchConsole.Core.SmokeTest — chạy bằng `dotnet run` là xong, không phải cài thêm gì.
 
 var loi = new List<string>();
 var soPhep = 0;
@@ -36,9 +33,7 @@ const string MatKhauAdmin = "Admin@12345";
 using var may = new MayChuThu();
 var http = may.CreateClient();
 
-// AuthSeed đã tạo tài khoản quản trị với mật khẩu ngẫu nhiên, nhưng phép kiểm
-// cần biết trước mật khẩu. Đặt lại thẳng trong database — đây là database
-// trong bộ nhớ, sống đúng một lượt chạy.
+// AuthSeed đã tạo tài khoản quản trị với mật khẩu ngẫu nhiên, nhưng phép kiểm cần biết trước mật khẩu.
 using (var scope = may.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -79,23 +74,14 @@ async Task<string> DangNhap(string email, string matKhau)
     if (ma != HttpStatusCode.OK)
         throw new Exception($"đăng nhập {email} hỏng: {ma} {than}");
 
-    // Đăng nhập trả 200 mà KHÔNG kèm token là chuyện có thật: tài khoản bắt
-    // buộc hai lớp thì bước này chỉ trả token tạm. Không kêu ở đây thì phép
-    // kiểm chạy tiếp với chuỗi rỗng rồi hỏng ở tận đâu, với một thông báo
-    // chẳng liên quan gì.
+    // Đăng nhập trả 200 mà KHÔNG kèm token là chuyện có thật: tài khoản bắt buộc hai lớp thì bước này chỉ trả token tạm.
     var token = than.GetProperty("accessToken").GetString()!;
     if (token.Length == 0)
         throw new Exception($"đăng nhập {email} không trả token: {than}");
     return token;
 }
 
-/// <summary>
-/// Tắt cờ bắt buộc hai lớp cho một tài khoản thử.
-///
-/// Mọi tài khoản tạo qua API đều mặc định bắt buộc, nên không tắt thì mục nào
-/// cũng phải quét mã QR trước khi kiểm được thứ nó định kiểm. Luồng bắt buộc
-/// có mục riêng lo, ở đó mới là chỗ kiểm nó.
-/// </summary>
+/// <summary>Tắt cờ bắt buộc hai lớp cho một tài khoản thử.</summary>
 void BoBatBuocTotp(string email)
 {
     using var scope = may.Services.CreateScope();
@@ -107,7 +93,6 @@ void BoBatBuocTotp(string email)
 
 Console.WriteLine("Phép kiểm tầng Api — dựng backend thật trong bộ nhớ");
 
-// ---------------------------------------------------------------- seed
 Nhom("AuthSeed chạy lúc khởi động");
 
 using (var scope = may.Services.CreateScope())
@@ -121,7 +106,6 @@ using (var scope = may.Services.CreateScope())
           "tài khoản đầu tiên phải được gán vai trò Admin");
 }
 
-// ---------------------------------------------------------------- đăng nhập
 Nhom("Đăng nhập");
 
 var (maDN, thanDN) = await Goi(HttpMethod.Post, "/api/auth/login",
@@ -143,7 +127,6 @@ var (maLa, thanLa) = await Goi(HttpMethod.Post, "/api/auth/login",
 Check(thanSai.GetProperty("error").GetString() == thanLa.GetProperty("error").GetString(),
       "sai mật khẩu và email không tồn tại phải trả CÙNG một câu lỗi");
 
-// ---------------------------------------------------------------- chặn
 Nhom("Endpoint có khoá thì phải chặn");
 
 foreach (var duong in new[] { "/api/devices", "/api/test-cases", "/api/users", "/api/roles" })
@@ -158,11 +141,9 @@ Check(maBia == HttpStatusCode.Unauthorized, "token bịa phải trả 401");
 var (maCoToken, _) = await Goi(HttpMethod.Get, "/api/devices", token: tokenAdmin);
 Check(maCoToken == HttpStatusCode.OK, $"admin gọi /api/devices phải được, nhận {maCoToken}");
 
-// ---------------------------------------------------------------- để mở
 Nhom("Hai endpoint của Qauto phải ĐỂ MỞ");
 
-// Đây là phép kiểm canh chuyện siết bảo mật làm gãy luồng kết quả: hai đường
-// này Qauto gọi, mà Qauto cố ý không xác thực.
+// Đây là phép kiểm canh chuyện siết bảo mật làm gãy luồng kết quả: hai đường này Qauto gọi, mà Qauto cố ý không xác thực.
 var (maTai, _) = await Goi(HttpMethod.Get, "/api/test-cases/999999/download");
 Check(maTai == HttpStatusCode.NotFound,
       $"tải gói không token phải tới được controller (404 vì không có gói), nhận {maTai}");
@@ -177,7 +158,6 @@ var resNop = await http.PostAsync("/api/runs/thu-001/report", multipart);
 Check(resNop.StatusCode == HttpStatusCode.OK,
       $"nộp báo cáo không token phải được, nhận {resNop.StatusCode}");
 
-// ---------------------------------------------------------------- phân quyền
 Nhom("Phân quyền thật sự chặn, không chỉ ẩn nút");
 
 var (maTaoUser, thanUser) = await Goi(HttpMethod.Post, "/api/users", new
@@ -219,13 +199,9 @@ var (maViewerChay, _) = await Goi(HttpMethod.Post, "/api/devices/THU-01/start", 
 Check(maViewerChay == HttpStatusCode.Forbidden,
       $"Viewer KHÔNG được ra lệnh chạy test, nhận {maViewerChay}");
 
-// ---------------------------------------------------------------- kho riêng
 Nhom("Kho riêng của từng người");
 
-// Dùng Engineer chứ không dùng Viewer: Viewer cố ý KHÔNG có KHO.UPLOAD, nên
-// nó không dựng được tình huống "có kho của mình mà không xem được kho người
-// khác" — mà đó mới là thứ cần kiểm. Engineer có KHO.UPLOAD nhưng không có
-// kho người khác, đúng hình dạng cần.
+// Dùng Engineer chứ không dùng Viewer: Viewer cố ý KHÔNG có KHO.UPLOAD, nên nó không dựng được tình huống "có kho của mình mà không xem được kho người khác" — mà đó mới là thứ cần kiểm.
 var (maTaoKs, _) = await Goi(HttpMethod.Post, "/api/users", new
 {
     email = "kysu@thu.local", hoTen = "Kỹ sư test",
@@ -250,9 +226,7 @@ var (maKhoToi, thanKhoToi) = await Goi(HttpMethod.Get, "/api/storage", token: to
 Check(maKhoToi == HttpStatusCode.OK && thanKhoToi.GetArrayLength() == 1,
       "kỹ sư phải thấy đúng file của mình");
 
-// Chỗ quan trọng nhất của mục này. 404 chứ không phải 403: đường dẫn mang tên
-// người khác đã bị gỡ hẳn, nên không có gì để từ chối. Bịt bằng cách xoá đường
-// chắc hơn bịt bằng một câu lệnh kiểm trong thân hàm.
+// Chỗ quan trọng nhất của mục này.
 var (maTrom, _) = await Goi(HttpMethod.Get, "/api/storage/admin@benchconsole.local",
     token: tokenKySu);
 Check(maTrom == HttpStatusCode.NotFound,
@@ -269,15 +243,13 @@ var resChiXem = await http.SendAsync(reqChiXem);
 Check(resChiXem.StatusCode == HttpStatusCode.Forbidden,
       $"Viewer KHÔNG được tải file lên, nhận {resChiXem.StatusCode}");
 
-// Kho là chỗ riêng tuyệt đối: không còn đường dẫn nào mang tên người khác,
-// nên gọi tới là 404 chứ không phải 403. Không có gì để từ chối cả.
+// Kho là chỗ riêng tuyệt đối: không còn đường dẫn nào mang tên người khác, nên gọi tới là 404 chứ không phải 403.
 var (maAdminXem, _) = await Goi(HttpMethod.Get, "/api/storage/kysu@thu.local",
     token: tokenAdmin);
 Check(maAdminXem == HttpStatusCode.NotFound,
       $"không còn đường dẫn xem kho người khác, nhận {maAdminXem}");
 
-// Đường còn lại là tải thẳng theo id file. Id là số tuần tự nên đoán được —
-// đây mới là chỗ dễ hở.
+// Đường còn lại là tải thẳng theo id file.
 var idTepKySu = thanKhoToi[0].GetProperty("id").GetInt32();
 var (maAdminTai, _) = await Goi(HttpMethod.Get,
     $"/api/storage/files/{idTepKySu}/download", token: tokenAdmin);
@@ -299,7 +271,6 @@ Check(await resTaiMinh.Content.ReadAsStringAsync() == "cua ky su",
 Check(maTaiCuaMinh == HttpStatusCode.OK,
       $"chủ kho vẫn tải được file của mình, nhận {maTaiCuaMinh}");
 
-// ---------------------------------------------------------------- chốt chặn
 Nhom("Chốt chặn chống tự khoá mình ra ngoài");
 
 int idAdmin;
@@ -318,10 +289,8 @@ var (maTuGo, _) = await Goi(HttpMethod.Put, $"/api/users/{idAdmin}/roles",
 Check(maTuGo == HttpStatusCode.BadRequest,
       $"không được tự gỡ vai trò Admin của mình, nhận {maTuGo}");
 
-// ---------------------------------------------------------------- thiết bị chung
 Nhom("Thiết bị chung: loại, dự án, quan hệ chứa nhau");
 
-// ---- dự án phải có trước khi gán thiết bị vào
 var (maTaoDuAn, thanDuAn) = await Goi(HttpMethod.Post, "/api/projects",
     new { ma = "vf8-vn", ten = "VF8 thị trường Việt Nam" }, tokenAdmin);
 Check(maTaoDuAn == HttpStatusCode.Created, $"tạo dự án, nhận {maTaoDuAn}");
@@ -332,7 +301,6 @@ var (maTrungDuAn, _) = await Goi(HttpMethod.Post, "/api/projects",
     new { ma = "VF8-VN", ten = "trùng" }, tokenAdmin);
 Check(maTrungDuAn == HttpStatusCode.Conflict, $"dự án trùng mã phải bị chặn, nhận {maTrungDuAn}");
 
-// ---- gán thiết bị vào dự án chưa tồn tại phải bị từ chối, KHÔNG tự tạo
 var (maDuAnLa, thanDuAnLa) = await Goi(HttpMethod.Post, "/api/devices",
     new { code = "BENCH-DA", model = "VF8", duAns = new[] { "KHONG-CO" } }, tokenAdmin);
 Check(maDuAnLa == HttpStatusCode.BadRequest,
@@ -340,7 +308,6 @@ Check(maDuAnLa == HttpStatusCode.BadRequest,
 Check(thanDuAnLa.GetProperty("error").GetString()!.Contains("KHONG-CO"),
       "thông báo lỗi phải nêu đúng mã dự án nào thiếu");
 
-// ---- tạo bench với đầy đủ trường mới
 var (maTaoBench, thanBench) = await Goi(HttpMethod.Post, "/api/devices",
     new
     {
@@ -355,7 +322,6 @@ Check(thanBench.GetProperty("hoTroRemote").GetBoolean(),
 Check(thanBench.GetProperty("duAns").EnumerateArray().Any(x => x.GetString() == "VF8-VN"),
       "bench vừa tạo phải mang dự án đã gán");
 
-// ---- ECU nằm trong bench, không có agent
 var (maTaoEcu, thanEcu) = await Goi(HttpMethod.Post, "/api/devices",
     new
     {
@@ -375,9 +341,6 @@ var (maLoaiLa, _) = await Goi(HttpMethod.Post, "/api/devices",
     new { code = "LOAI-LA", model = "VF8", loai = "robot" }, tokenAdmin);
 Check(maLoaiLa == HttpStatusCode.BadRequest, $"loại lạ phải 400, nhận {maLoaiLa}");
 
-// ---- đây là cái chốt quan trọng nhất của đợt này: thiết bị không có agent thì
-// lệnh chạy phải bị chặn NGAY, chứ không gửi vào một topic không ai nghe rồi
-// báo "bench không phản hồi" — sai nguyên nhân hoàn toàn.
 var (maChayEcu, thanChayEcu) = await Goi(HttpMethod.Post, "/api/devices/MHU-TB1/start",
     new { testCase = "Disable_VF6_7_v2", issuedBy = "thu" }, tokenAdmin);
 Check(maChayEcu == HttpStatusCode.Conflict,
@@ -385,12 +348,10 @@ Check(maChayEcu == HttpStatusCode.Conflict,
 Check(thanChayEcu.GetProperty("error").GetString()!.Contains("MHU-TB1"),
       "thông báo phải nêu mã thiết bị để người dùng biết chặn ở đâu");
 
-// ---- xem chi tiết phải kèm mã thiết bị cha
 var (maXemEcu, thanXemEcu) = await Goi(HttpMethod.Get, "/api/devices/MHU-TB1", token: tokenAdmin);
 Check(maXemEcu == HttpStatusCode.OK && thanXemEcu.GetProperty("thuocVeCode").GetString() == "BENCH-TB1",
       "xem chi tiết phải nêu mã thiết bị đang chứa nó");
 
-// ---- lọc theo loại và theo dự án
 var (_, thanLocEcu) = await Goi(HttpMethod.Get, "/api/devices?loai=ecu", token: tokenAdmin);
 Check(thanLocEcu.EnumerateArray().All(x => x.GetProperty("loai").GetString() == "ecu")
       && thanLocEcu.EnumerateArray().Any(x => x.GetProperty("code").GetString() == "MHU-TB1"),
@@ -404,7 +365,6 @@ Check(thanLocDuAn.EnumerateArray().Any(x => x.GetProperty("code").GetString() ==
       && thanLocDuAn.EnumerateArray().All(x => x.GetProperty("code").GetString() != "MHU-TB1"),
       "lọc theo dự án chỉ trả thiết bị thuộc dự án đó");
 
-// ---- chặn vòng: BENCH-TB1 đang chứa MHU-TB1, giờ bảo nó nằm trong MHU-TB1
 var (maVong, _) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-TB1",
     new { thuocVe = "MHU-TB1" }, tokenAdmin);
 Check(maVong == HttpStatusCode.BadRequest,
@@ -415,7 +375,6 @@ var (maTuChua, _) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-TB1",
 Check(maTuChua == HttpStatusCode.BadRequest,
       $"thiết bị nằm trong chính nó phải bị chặn, nhận {maTuChua}");
 
-// ---- chuỗi rỗng = tháo ra, khác null = không đổi
 var (_, thanThao) = await Goi(HttpMethod.Patch, "/api/devices/MHU-TB1",
     new { thuocVe = "" }, tokenAdmin);
 Check(thanThao.GetProperty("thuocVeId").ValueKind == JsonValueKind.Null,
@@ -428,13 +387,11 @@ Check(thanGiuNguyen.GetProperty("tang").GetString() == "T3",
 Check(!thanGiuNguyen.GetProperty("hoTroRemote").GetBoolean(),
       "không gửi hoTroRemote thì giữ nguyên giá trị cũ");
 
-// ---- PATCH danh sách dự án là THAY CẢ TẬP, bỏ tích phải có tác dụng
 var (_, thanBoDuAn) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-TB1",
     new { duAns = Array.Empty<string>() }, tokenAdmin);
 Check(thanBoDuAn.GetProperty("duAns").GetArrayLength() == 0,
       "gửi danh sách rỗng phải gỡ hết dự án, không phải bỏ qua");
 
-// ---- xoá dự án còn thiết bị thì chặn
 await Goi(HttpMethod.Patch, "/api/devices/BENCH-TB1", new { duAns = new[] { "VF8-VN" } }, tokenAdmin);
 var (maXoaDuAnBan, _) = await Goi(HttpMethod.Delete, "/api/projects/VF8-VN", token: tokenAdmin);
 Check(maXoaDuAnBan == HttpStatusCode.Conflict,
@@ -446,13 +403,11 @@ Check(thanDsDuAn.EnumerateArray()
         .GetProperty("soThietBi").GetInt32() == 1,
       "danh sách dự án phải đếm đúng số thiết bị");
 
-// ---- Viewer không được tạo dự án
 var (maViewerTaoDuAn, _) = await Goi(HttpMethod.Post, "/api/projects",
     new { ma = "LAU", ten = "lậu" }, tokenViewer);
 Check(maViewerTaoDuAn == HttpStatusCode.Forbidden,
       $"Viewer không được tạo dự án, nhận {maViewerTaoDuAn}");
 
-// ---- vòng quét mất kết nối phải bỏ qua thiết bị không có agent
 using (var scope = may.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -461,18 +416,13 @@ using (var scope = may.Services.CreateScope())
           "thiết bị không agent phải giữ cờ hoTroRemote = false trong database");
 }
 
-// ---- ECU rời: đăng ký được mà KHÔNG cần dòng xe
-//
-// Dòng xe chỉ bắt buộc với thiết bị có agent, vì nó nằm trong topic MQTT.
-// Trước đây bắt buộc cho mọi loại nên ECU rời không đăng ký nổi.
 var (maEcuRoi, thanEcuRoi) = await Goi(HttpMethod.Post, "/api/devices",
     new { code = "ECU-ROI", loai = "ecu", hoTroRemote = false, ten = "Cảm biến áp suất" }, tokenAdmin);
 Check(maEcuRoi == HttpStatusCode.Created, $"ECU rời không cần dòng xe, nhận {maEcuRoi}");
 Check(thanEcuRoi.GetProperty("ten").GetString() == "Cảm biến áp suất",
       "tên hiển thị phải lưu và trả về");
 
-// Nhưng thiết bị CÓ agent thì vẫn bắt buộc: thiếu dòng xe là prefix thiếu khúc
-// giữa, lệnh rơi vào topic không ai nghe mà Console báo "bench không phản hồi".
+// Nhưng thiết bị CÓ agent thì vẫn bắt buộc: thiếu dòng xe là prefix thiếu khúc giữa, lệnh rơi vào topic không ai nghe mà Console báo "bench không phản hồi".
 var (maThieuModel, thanThieuModel) = await Goi(HttpMethod.Post, "/api/devices",
     new { code = "HONG-01", hoTroRemote = true }, tokenAdmin);
 Check(maThieuModel == HttpStatusCode.BadRequest,
@@ -486,7 +436,6 @@ var (maBatRemote, _) = await Goi(HttpMethod.Patch, "/api/devices/ECU-ROI",
 Check(maBatRemote == HttpStatusCode.BadRequest,
       $"bật agent cho thiết bị không có dòng xe phải bị chặn, nhận {maBatRemote}");
 
-// ---- luật quan hệ chứa: ECU là thứ nằm trong, bench và xe là thứ chứa
 await Goi(HttpMethod.Post, "/api/devices", new { code = "BENCH-LUAT", model = "VF8" }, tokenAdmin);
 await Goi(HttpMethod.Post, "/api/devices", new { code = "BENCH-LUAT2", model = "VF8" }, tokenAdmin);
 
@@ -527,7 +476,6 @@ var (maDoiSauKhiThao, _) = await Goi(HttpMethod.Patch, "/api/devices/BENCH-LUAT"
 Check(maDoiSauKhiThao == HttpStatusCode.OK,
       $"thao hết con ra rồi thì đổi loại được, nhận {maDoiSauKhiThao}");
 
-// ---- API phải trả danh sách thiết bị con, không chỉ chiều con -> cha
 await Goi(HttpMethod.Post, "/api/devices", new { code = "BENCH-CAY", model = "VF8" }, tokenAdmin);
 await Goi(HttpMethod.Post, "/api/devices",
     new { code = "MHU-CAY", loai = "ecu", hoTroRemote = false, thuocVe = "BENCH-CAY", ten = "MHU chính" }, tokenAdmin);
@@ -540,12 +488,6 @@ Check(con[0].GetProperty("ten").GetString() == "MHU chính"
       && con[0].GetProperty("loai").GetString() == "ecu",
       "thiết bị con phải kèm tên hiển thị và loại");
 
-// ---- xoá thiết bị CHỨA thì con phải đứng riêng, không xoá theo và không chặn
-//
-// Khoá ngoại tự tham chiếu dùng ClientSetNull, nghĩa là EF phải tự gỡ liên kết.
-// Quên nạp thiết bị con thì SQL Server chặn lệnh xoá bằng lỗi khoá ngoại —
-// mà InMemory không ép khoá ngoại nên phép kiểm này chỉ canh được phần hành vi:
-// con còn sống và đã rời khỏi thiết bị cha.
 await Goi(HttpMethod.Post, "/api/devices",
     new { code = "BENCH-XOA", model = "VF8" }, tokenAdmin);
 await Goi(HttpMethod.Post, "/api/devices",
@@ -559,11 +501,9 @@ Check(maConConSong == HttpStatusCode.OK, "thiết bị con KHÔNG được xoá 
 Check(thanCon.GetProperty("thuocVeId").ValueKind == JsonValueKind.Null,
       "thiết bị con phải đứng riêng sau khi xoá thiết bị chứa nó");
 
-// ---------------------------------------------------------------- đường dẫn cũ
 Nhom("Đường dẫn cũ phải chết hẳn");
 
-// Đổi tên trong code lẫn trong phép kiểm thì phép kiểm vẫn xanh dù đường cũ
-// còn sống. Gọi thẳng đường cũ mới chứng minh được là đã cắt thật.
+// Đổi tên trong code lẫn trong phép kiểm thì phép kiểm vẫn xanh dù đường cũ còn sống.
 foreach (var cu in new[]{
     "/api/benches", "/api/du-an", "/api/kho",
     "/api/test-cases/1/tai", "/api/runs/bao-cao/gan-day" })
@@ -572,11 +512,9 @@ foreach (var cu in new[]{
     Check(ma == HttpStatusCode.NotFound, $"{cu} phải trả 404, nhận {ma}");
 }
 
-// ---------------------------------------------------------------- TOTP
 Nhom("Xác thực hai lớp (TOTP)");
 
-// Tài khoản riêng cho mục này: bật TOTP lên tài khoản mà các mục khác còn dùng
-// thì chúng sẽ không đăng nhập lại được.
+// Tài khoản riêng cho mục này: bật TOTP lên tài khoản mà các mục khác còn dùng thì chúng sẽ không đăng nhập lại được.
 await Goi(HttpMethod.Post, "/api/users", new
 {
     email = "haibuoc@thu.local", hoTen = "Người thử hai lớp",
@@ -593,7 +531,6 @@ var (maTt0, thanTt0) = await Goi(HttpMethod.Get, "/api/auth/totp", token: tokenH
 Check(maTt0 == HttpStatusCode.OK && !thanTt0.GetProperty("daBat").GetBoolean(),
       "tài khoản mới phải chưa bật hai lớp");
 
-// ---- ghi danh
 var (maGd, thanGd) = await Goi(HttpMethod.Post, "/api/auth/totp/ghi-danh", null, tokenHai);
 Check(maGd == HttpStatusCode.OK, $"bắt đầu ghi danh, nhận {maGd}");
 var biMatThu = thanGd.GetProperty("biMat").GetString()!;
@@ -603,8 +540,7 @@ Check(thanGd.GetProperty("uri").GetString()!.StartsWith("otpauth://totp/"),
 Check(thanGd.GetProperty("biMatChiaNhom").GetString()!.Contains(' '),
       "phải có bản chia nhóm để gõ tay vào điện thoại");
 
-// Cấp bí mật rồi NHƯNG CHƯA BẬT: người dùng có thể quét hỏng, bật ngay là khoá
-// họ ra ngoài. Đăng nhập lúc này vẫn chỉ cần mật khẩu.
+// Cấp bí mật rồi NHƯNG CHƯA BẬT: người dùng có thể quét hỏng, bật ngay là khoá họ ra ngoài.
 var (_, thanChuaBat) = await Goi(HttpMethod.Post, "/api/auth/login",
     new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345" });
 Check(thanChuaBat.GetProperty("accessToken").GetString()!.Length > 50,
@@ -627,7 +563,6 @@ Check(maKhoiPhuc.All(m => m.Length == 9 && m[4] == '-'),
 Check(maKhoiPhuc.All(m => !m.Any(c => c is '0' or 'O' or '1' or 'I' or 'L' or '8' or 'B')),
       "mã khôi phục không được chứa ký tự dễ nhìn nhầm");
 
-// ---- từ giờ đăng nhập phải hai bước
 var (maB1, thanB1) = await Goi(HttpMethod.Post, "/api/auth/login",
     new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345" });
 Check(maB1 == HttpStatusCode.OK && thanB1.GetProperty("canMaTotp").GetBoolean(),
@@ -635,17 +570,14 @@ Check(maB1 == HttpStatusCode.OK && thanB1.GetProperty("canMaTotp").GetBoolean(),
 Check(thanB1.GetProperty("accessToken").GetString() == "",
       "bước một TUYỆT ĐỐI không được kèm token — kèm là lớp thứ hai thành trang trí");
 
-// Lấy mã của nhịp KẾ TIẾP: mã vừa dùng để xác nhận ghi danh đã tiêu mất nhịp
-// hiện tại, đúng theo chốt chống dùng lại. Đây cũng là hành vi người dùng thật
-// gặp — bật xong phải chờ mã mới hiện ra mới đăng nhập được.
+// Lấy mã của nhịp KẾ TIẾP: mã vừa dùng để xác nhận ghi danh đã tiêu mất nhịp hiện tại, đúng theo chốt chống dùng lại.
 var maLanDau = MaBayGio(biMatThu, 1);
 var (maB2, thanB2) = await Goi(HttpMethod.Post, "/api/auth/login",
     new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345", maTotp = maLanDau });
 Check(maB2 == HttpStatusCode.OK && thanB2.GetProperty("accessToken").GetString()!.Length > 50,
       $"mật khẩu + mã đúng phải cấp token, nhận {maB2}");
 
-// Chống dùng lại: cửa sổ rộng 90 giây nên thiếu chốt này là mã nhìn trộm được
-// vẫn vào được sau khi chủ nhân đã dùng. Gửi LẠI ĐÚNG mã vừa thành công.
+// Chống dùng lại: cửa sổ rộng 90 giây nên thiếu chốt này là mã nhìn trộm được vẫn vào được sau khi chủ nhân đã dùng.
 var (maLai, _) = await Goi(HttpMethod.Post, "/api/auth/login",
     new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345", maTotp = maLanDau });
 Check(maLai == HttpStatusCode.Unauthorized,
@@ -655,7 +587,6 @@ var (maSaiMk, _) = await Goi(HttpMethod.Post, "/api/auth/login",
     new { email = "haibuoc@thu.local", matKhau = "SAI", maTotp = MaBayGio(biMatThu, 1) });
 Check(maSaiMk == HttpStatusCode.Unauthorized, "sai mật khẩu thì mã đúng cũng không vào được");
 
-// ---- mã khôi phục
 var (maKp, thanKp) = await Goi(HttpMethod.Post, "/api/auth/login",
     new { email = "haibuoc@thu.local", matKhau = "Haibuoc@12345", maKhoiPhuc = maKhoiPhuc[0] });
 Check(maKp == HttpStatusCode.OK && thanKp.GetProperty("accessToken").GetString()!.Length > 50,
@@ -673,12 +604,10 @@ Check(thanTt1.GetProperty("daBat").GetBoolean()
       && thanTt1.GetProperty("maKhoiPhucConLai").GetInt32() == 6,
       "tình trạng phải nói đúng đã bật và còn 6 mã");
 
-// ---- tắt phải nhập lại mật khẩu, không thì ai mượn máy đang mở cũng gỡ được
 var (maTatSai, _) = await Goi(HttpMethod.Delete, "/api/auth/totp",
     new { matKhau = "SAI" }, tokenHai2);
 Check(maTatSai == HttpStatusCode.Unauthorized, $"tắt bằng mật khẩu sai phải bị chặn, nhận {maTatSai}");
 
-// ---- quản trị gỡ hộ: đường thoát duy nhất khi mất cả điện thoại lẫn mã giấy
 int idHai;
 using (var scope = may.Services.CreateScope())
 {
@@ -696,15 +625,13 @@ var (_, thanSauGo) = await Goi(HttpMethod.Post, "/api/auth/login",
 Check(thanSauGo.GetProperty("accessToken").GetString()!.Length > 50,
       "gỡ xong thì đăng nhập lại chỉ cần mật khẩu");
 
-// Người dùng cũ chưa bật gì thì KHÔNG được đụng tới — đây là thứ sẽ xảy ra với
-// mọi tài khoản đang có trên máy A sau khi áp migration.
+// Người dùng cũ chưa bật gì thì KHÔNG được đụng tới — đây là thứ sẽ xảy ra với mọi tài khoản đang có trên máy A sau khi áp migration.
 var (_, thanAdminVanOk) = await Goi(HttpMethod.Post, "/api/auth/login",
     new { email = "admin@benchconsole.local", matKhau = MatKhauAdmin });
 Check(thanAdminVanOk.GetProperty("accessToken").GetString()!.Length > 50
       && !thanAdminVanOk.GetProperty("canMaTotp").GetBoolean(),
       "tài khoản chưa bật hai lớp phải đăng nhập y như cũ");
 
-// ---------------------------------------------------------------- dữ liệu chung
 Nhom("Dữ liệu chung chia theo mục");
 
 var (maMuc, thanMuc) = await Goi(HttpMethod.Get, "/api/du-lieu-chung/muc", token: tokenAdmin);
@@ -774,8 +701,7 @@ Check(thanMuc2.EnumerateArray().First(x => x.GetProperty("ma").GetString() == "d
         .GetProperty("soFile").GetInt32() == 1,
       "danh mục phải đếm đúng số file từng mục");
 
-// Đây là chỗ cốt lõi: dữ liệu CHUNG thì ai có quyền cũng xem được, khác hẳn
-// kho cá nhân vừa chốt là riêng tuyệt đối.
+// Đây là chỗ cốt lõi: dữ liệu CHUNG thì ai có quyền cũng xem được, khác hẳn kho cá nhân vừa chốt là riêng tuyệt đối.
 var (maKySuXem, thanKySuXem) = await Goi(HttpMethod.Get, "/api/du-lieu-chung", token: tokenKySu);
 Check(maKySuXem == HttpStatusCode.OK && thanKySuXem.GetArrayLength() >= 1,
       $"người khác vẫn xem được dữ liệu chung, nhận {maKySuXem}");
@@ -799,7 +725,6 @@ Check(maViewerXem == HttpStatusCode.OK, $"Viewer vẫn xem được, nhận {maV
 var (maXoaDlc, _) = await Goi(HttpMethod.Delete, $"/api/du-lieu-chung/{idDlc}", token: tokenAdmin);
 Check(maXoaDlc == HttpStatusCode.NoContent, $"xoá được, nhận {maXoaDlc}");
 
-// ---------------------------------------------------------------- mục tự thêm
 Nhom("Quản trị tự thêm mục dữ liệu chung");
 
 var (_, thanMucSeed) = await Goi(HttpMethod.Get, "/api/du-lieu-chung/muc", token: tokenAdmin);
@@ -846,8 +771,7 @@ Check(thanLocMucMoi.GetArrayLength() == 1
       && thanLocMucMoi[0].GetProperty("tenLoai").GetString() == "Sơ đồ mạch",
       "lọc theo mục mới phải chạy, và tên mục lấy từ database");
 
-// Xoá mục còn file thì chặn: để file lại là chúng trỏ vào một mã không tồn
-// tại, không hiện ở mục nào mà cũng không ai biết để dọn.
+// Xoá mục còn file thì chặn: để file lại là chúng trỏ vào một mã không tồn tại, không hiện ở mục nào mà cũng không ai biết để dọn.
 var (maXoaConFile, _) = await Goi(HttpMethod.Delete,
     $"/api/du-lieu-chung/muc/{maMucMoi}", token: tokenAdmin);
 Check(maXoaConFile == HttpStatusCode.Conflict,
@@ -858,8 +782,7 @@ var (maXoaMacDinh, _) = await Goi(HttpMethod.Delete,
 Check(maXoaMacDinh == HttpStatusCode.Conflict,
       $"mục dựng sẵn không xoá được, nhận {maXoaMacDinh}");
 
-// Đổi tên hiển thị được, nhưng MÃ thì không: mã nằm trong cột Loai của mọi
-// file thuộc mục đó, đổi là mồ côi hết.
+// Đổi tên hiển thị được, nhưng MÃ thì không: mã nằm trong cột Loai của mọi file thuộc mục đó, đổi là mồ côi hết.
 var (maSuaMuc, thanSuaMuc) = await Goi(HttpMethod.Patch,
     $"/api/du-lieu-chung/muc/{maMucMoi}", new { ten = "Sơ đồ mạch điện" }, tokenAdmin);
 Check(maSuaMuc == HttpStatusCode.OK && thanSuaMuc.GetProperty("ten").GetString() == "Sơ đồ mạch điện",
@@ -872,7 +795,6 @@ var (maKySuTaoMuc, _) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
 Check(maKySuTaoMuc == HttpStatusCode.Forbidden,
       $"Engineer không được thêm mục, nhận {maKySuTaoMuc}");
 
-// ---- xoá giữa dãy thì số thứ tự phải được đánh lại liên tiếp
 await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc", new { ten = "Tam mot" }, tokenAdmin);
 var (_, thanTamHai) = await Goi(HttpMethod.Post, "/api/du-lieu-chung/muc",
     new { ten = "Tam hai" }, tokenAdmin);
@@ -905,13 +827,9 @@ var (maTaiMucDaXoa, _) = await TaiLenDuLieu(maMucMoi, "x", "x.txt", "x", tokenAd
 Check(maTaiMucDaXoa == HttpStatusCode.BadRequest,
       $"mục đã xoá thì không tải vào được nữa, nhận {maTaiMucDaXoa}");
 
-// ---------------------------------------------------------------- seed vai trò
 Nhom("Vai trò dựng sẵn tự đồng bộ lại");
 
-// Đây là cơ chế sẽ ĐỔI DỮ LIỆU trên máy A, nên phải có phép kiểm riêng. Bản
-// trước thấy vai trò đã tồn tại là bỏ qua, nên thêm mã quyền mới thì mọi vai
-// trò trên máy A đều thiếu, còn bộ lọc quyền sửa trong code thì không bao giờ
-// tới nơi.
+// Đây là cơ chế sẽ ĐỔI DỮ LIỆU trên máy A, nên phải có phép kiểm riêng.
 using (var scope = may.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -954,7 +872,6 @@ using (var scope = may.Services.CreateScope())
           "vai trò tự tạo KHÔNG bị đồng bộ ghi đè");
 }
 
-// ---------------------------------------------------------------- bắt buộc 2FA
 Nhom("Tài khoản mới bắt buộc ghi danh hai lớp");
 
 await Goi(HttpMethod.Post, "/api/users", new
@@ -969,8 +886,7 @@ Check(maVaoDau == HttpStatusCode.OK, $"đăng nhập lần đầu, nhận {maVao
 Check(thanLanDau.GetProperty("canGhiDanhTotp").GetBoolean(),
       "tài khoản mới phải bị bắt ghi danh ngay lần đăng nhập đầu");
 
-// Đây là chốt quan trọng nhất của mục này. Phát token thật ở bước này thì chỉ
-// cần KHÔNG bấm tiếp là bỏ qua được cả lớp thứ hai.
+// Đây là chốt quan trọng nhất của mục này.
 Check(thanLanDau.GetProperty("accessToken").GetString() == "",
       "bước ghi danh TUYỆT ĐỐI không được kèm token thật");
 var tokenTam = thanLanDau.GetProperty("tokenGhiDanh").GetString()!;
@@ -984,7 +900,6 @@ foreach (var duong in new[]{ "/api/devices", "/api/auth/me", "/api/storage", "/a
           $"token tạm không được mở {duong}, nhận {ma}");
 }
 
-// ---- ghi danh: phải có ảnh QR, đây là thứ người dùng báo thiếu
 var (maGd2, thanGd2) = await Goi(HttpMethod.Post, "/api/auth/totp/ghi-danh", null, tokenTam);
 Check(maGd2 == HttpStatusCode.OK, $"token tạm phải mở được endpoint ghi danh, nhận {maGd2}");
 var anhQr = thanGd2.GetProperty("anhQr").GetString()!;
@@ -995,13 +910,11 @@ var biMat2 = thanGd2.GetProperty("biMat").GetString()!;
 Check(thanGd2.GetProperty("uri").GetString()!.Contains(biMat2),
       "chuỗi otpauth phải mang đúng bí mật vừa cấp");
 
-// Gọi lại lần hai phải trả ĐÚNG bí mật cũ. Sinh mới là mã QR người dùng vừa
-// quét thành vô dụng mà họ không hiểu vì sao gõ mãi không đúng. Học từ AQC.
+// Gọi lại lần hai phải trả ĐÚNG bí mật cũ.
 var (_, thanGdLai) = await Goi(HttpMethod.Post, "/api/auth/totp/ghi-danh", null, tokenTam);
 Check(thanGdLai.GetProperty("biMat").GetString() == biMat2,
       "ghi danh dở mà tải lại trang thì phải giữ nguyên bí mật cũ");
 
-// ---- xác nhận: vừa trả mã khôi phục vừa cấp phiên thật
 var (maXn2, thanXn2) = await Goi(HttpMethod.Post, "/api/auth/totp/xac-nhan",
     new { ma = MaBayGio(biMat2) }, tokenTam);
 Check(maXn2 == HttpStatusCode.OK, $"xác nhận bằng mã đúng, nhận {maXn2}");
@@ -1013,14 +926,12 @@ Check(tokenThat.Length > 50,
 var (maDungThat, _) = await Goi(HttpMethod.Get, "/api/auth/me", token: tokenThat);
 Check(maDungThat == HttpStatusCode.OK, $"token sau khi ghi danh phải dùng được, nhận {maDungThat}");
 
-// ---- lần sau đăng nhập thì đòi mã, không đòi ghi danh nữa
 var (_, thanLanSau) = await Goi(HttpMethod.Post, "/api/auth/login",
     new { email = "moi@thu.local", matKhau = "Nguoimoi@123" });
 Check(!thanLanSau.GetProperty("canGhiDanhTotp").GetBoolean()
       && thanLanSau.GetProperty("canMaTotp").GetBoolean(),
       "ghi danh xong thì lần sau chỉ đòi mã, không bắt ghi danh lại");
 
-// ---- bắt buộc thì KHÔNG tự tắt được, nếu không bắt buộc thành trang trí
 var (maTatBb, thanTatBb) = await Goi(HttpMethod.Delete, "/api/auth/totp",
     new { matKhau = "Nguoimoi@123" }, tokenThat);
 Check(maTatBb == HttpStatusCode.Unauthorized,
@@ -1028,26 +939,22 @@ Check(maTatBb == HttpStatusCode.Unauthorized,
 Check(thanTatBb.GetProperty("error").GetString()!.Contains("bắt buộc"),
       "phải nói rõ lý do từ chối");
 
-// ---- tài khoản CŨ không bị ép, để bản nâng cấp không khoá người đang trực
 var (_, thanAdminCu) = await Goi(HttpMethod.Post, "/api/auth/login",
     new { email = "admin@benchconsole.local", matKhau = MatKhauAdmin });
 Check(!thanAdminCu.GetProperty("canGhiDanhTotp").GetBoolean()
       && thanAdminCu.GetProperty("accessToken").GetString()!.Length > 50,
       "tài khoản có từ trước vẫn đăng nhập bình thường, không bị ép ghi danh");
 
-// ---------------------------------------------------------------- /health
 Nhom("/health phải kiểm thật");
 
 var resHealth = await http.GetAsync("/health");
 var thanHealth = JsonDocument.Parse(await resHealth.Content.ReadAsStringAsync()).RootElement;
-// MQTT bị gỡ trong phép kiểm nên health PHẢI báo hỏng. Nếu nó vẫn trả ok thì
-// tức là nó không kiểm gì cả — đúng lỗi vừa sửa.
+// MQTT bị gỡ trong phép kiểm nên health PHẢI báo hỏng.
 Check(resHealth.StatusCode == HttpStatusCode.ServiceUnavailable,
       $"MQTT không chạy thì /health phải trả 503, nhận {resHealth.StatusCode}");
 Check(thanHealth.GetProperty("sql").GetBoolean(), "health phải báo SQL đang tốt");
 Check(!thanHealth.GetProperty("mqtt").GetBoolean(), "health phải báo MQTT đang hỏng");
 
-// ---------------------------------------------------------------- kết quả
 Console.WriteLine();
 Console.WriteLine(new string('=', 51));
 Nhom("Lưu trữ file: dữ liệu thật, sửa / chuyển mục, manual và phân quyền");
@@ -1071,6 +978,8 @@ using (var scope = may.Services.CreateScope())
     Check(pending.Any(x => x.Action == "status") && pending.Any(x => x.Action == "delete") && pending.Any(x => x.Action == "lookups"),
         "Database: broker mất kết nối vẫn giữ outbox trạng thái/xoá/danh mục để gửi lại");
 }
+
+await ApiErrorChecks.Run(may.Services, Check);
 
 if (loi.Count == 0)
 {

@@ -10,14 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BenchConsole.Api.Controllers;
 
-/// <summary>
-/// Quản trị người dùng.
-///
-/// Có mấy chốt chặn chống tự khoá mình ra ngoài: không xoá được chính mình,
-/// không gỡ được vai trò Admin của chính mình, và không xoá được người Admin
-/// cuối cùng. Đây không phải lo xa — công cụ nội bộ mà mất hết đường vào thì
-/// phải sửa thẳng trong database.
-/// </summary>
+/// <summary>Quản trị người dùng.</summary>
 [ApiController]
 [Route("api/users")]
 [Authorize]
@@ -34,8 +27,7 @@ public class UsersController(
             .OrderBy(u => u.Email)
             .ToListAsync(ct);
 
-        // Lấy vai trò của TẤT CẢ trong một truy vấn thay vì hỏi từng người:
-        // danh sách 50 user mà hỏi vòng là 51 lần đi database.
+        // Lấy vai trò của TẤT CẢ trong một truy vấn thay vì hỏi từng người: danh sách 50 user mà hỏi vòng là 51 lần đi database.
         var vaiTro = await db.UserRoles.AsNoTracking()
             .Select(ur => new { ur.UserId, Ma = ur.Role!.Ma })
             .ToListAsync(ct);
@@ -96,8 +88,7 @@ public class UsersController(
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user is null) return NotFound();
 
-        // Tự gỡ vai trò Admin của chính mình là tự khoá mình ra ngoài ngay lập
-        // tức, mà không có màn nào để sửa lại.
+        // Tự gỡ vai trò Admin của chính mình là tự khoá mình ra ngoài ngay lập tức, mà không có màn nào để sửa lại.
         var toiLaAdmin = User.LaAdmin();
         var laChinhToi = string.Equals(user.Email, User.Email(),
                                        StringComparison.OrdinalIgnoreCase);
@@ -127,14 +118,7 @@ public class UsersController(
     public Task<IActionResult> MoKhoa(int id, CancellationToken ct)
         => DoiKhoaAsync(id, null, ct);
 
-    /// <summary>
-    /// Quản trị gỡ xác thực hai lớp của người khác.
-    ///
-    /// Đây là **đường thoát duy nhất** khi ai đó mất cả điện thoại lẫn mã khôi
-    /// phục — không có nó thì tài khoản khoá vĩnh viễn. Đổi lại, nó cũng là
-    /// đường vòng qua lớp bảo vệ thứ hai, nên đi kèm quyền USER.UPDATE và được
-    /// ghi log cảnh báo.
-    /// </summary>
+    /// <summary>Quản trị gỡ xác thực hai lớp của người khác.</summary>
     [HttpDelete("{id:int}/totp")]
     [HasPermission(MaQuyen.UserUpdate)]
     public async Task<IActionResult> GoTotp(int id, [FromServices] AuthService auth, CancellationToken ct)
@@ -158,8 +142,7 @@ public class UsersController(
         user.MatKhauHash = BCrypt.Net.BCrypt.HashPassword(req.MatKhauMoi);
         user.SoLanSai = 0;
         user.KhoaDenLuc = null;
-        // Vô hiệu refresh token: đổi mật khẩu mà phiên cũ vẫn sống thì người
-        // bị chiếm tài khoản vẫn đang đăng nhập.
+        // Vô hiệu refresh token: đổi mật khẩu mà phiên cũ vẫn sống thì người bị chiếm tài khoản vẫn đang đăng nhập.
         user.RefreshToken = null;
         user.RefreshTokenHetHan = null;
         user.SuaLuc = DateTimeOffset.UtcNow;
@@ -179,8 +162,7 @@ public class UsersController(
         if (string.Equals(user.Email, User.Email(), StringComparison.OrdinalIgnoreCase))
             return BadRequest(new { error = "Không xoá được chính mình." });
 
-        // Xoá người Admin cuối cùng là mất hẳn đường quản trị, phải vào tận
-        // database mới sửa được.
+        // Xoá người Admin cuối cùng là mất hẳn đường quản trị, phải vào tận database mới sửa được.
         var laAdmin = await db.UserRoles
             .AnyAsync(ur => ur.UserId == id && ur.Role!.Ma == AuthSeed.RoleAdmin, ct);
         if (laAdmin)
@@ -191,14 +173,7 @@ public class UsersController(
                 return BadRequest(new { error = "Đây là tài khoản Admin cuối cùng, không xoá được." });
         }
 
-        // Dọn kho của người này. Bảng TepNguoiDungs KHÔNG có khoá ngoại tới
-        // Users — chủ kho chỉ là chuỗi email — nên database không tự dọn hộ.
-        // Không làm ở đây thì bản ghi trỏ vào một email không còn ai, và file
-        // nằm lại trên đĩa vĩnh viễn.
-        //
-        // Chưa thêm khoá ngoại vì kho CHƯA CHỐT sẽ chứa gì; đổi schema trước
-        // khi biết nó giữ thứ gì là làm sớm. Khi chốt xong thì thay bằng khoá
-        // ngoại cascade và bỏ đoạn này.
+        // Dọn kho của người này.
         using var khoaKho = await kho.Khoa.LayAsync(ct);
         var tepCuaHo = await db.TepNguoiDungs
             .Where(t => t.NguoiDung == user.Email).ToListAsync(ct);
@@ -207,8 +182,7 @@ public class UsersController(
         db.Users.Remove(user);
         await db.SaveChangesAsync(ct);
 
-        // Xoá file trên đĩa SAU khi lưu, và chỉ những file không còn ai dùng —
-        // hai người tải lên cùng một nội dung thì dùng chung một file.
+        // Xoá file trên đĩa SAU khi lưu, và chỉ những file không còn ai dùng — hai người tải lên cùng một nội dung thì dùng chung một file.
         foreach (var sha in tepCuaHo.Select(t => t.Sha256).Distinct())
             if (!await db.TepNguoiDungs.AnyAsync(t => t.Sha256 == sha, ct))
                 kho.XoaFile(sha);

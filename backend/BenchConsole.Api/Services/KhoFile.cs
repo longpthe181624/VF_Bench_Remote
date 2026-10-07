@@ -21,11 +21,7 @@ public record KetQuaLuuFile(string Sha256, long KichThuoc);
 public class KhoFile
 {
     public KhoaKho Khoa { get; } = new();
-    /// <summary>
-    /// Trần cho MỘT file. Trace CAN một lượt 40 giây đã 2 MB, lượt 20 phút
-    /// (828.726 frame) thì hàng chục MB. Để 256 MB là rộng rãi mà vẫn chặn
-    /// được cú gửi nhầm cả ổ đĩa.
-    /// </summary>
+    /// <summary>Trần cho MỘT file.</summary>
     public const long KichThuocToiDa = 256L * 1024 * 1024;
 
     private readonly string _thuMuc;
@@ -42,8 +38,7 @@ public class KhoFile
 
     public async Task<KetQuaLuuFile> LuuAsync(Stream nguon, CancellationToken ct)
     {
-        // Ghi ra file tạm rồi mới đổi tên: chưa đọc hết thì chưa biết băm là gì,
-        // mà đặt tên theo băm là điều kiện để chống trùng.
+        // Ghi ra file tạm rồi mới đổi tên: chưa đọc hết thì chưa biết băm là gì, mà đặt tên theo băm là điều kiện để chống trùng.
         var tam = Path.Combine(_thuMuc, "tam-" + Guid.NewGuid().ToString("N") + ".part");
         try
         {
@@ -68,8 +63,7 @@ public class KhoFile
                 sha = Convert.ToHexString(await SHA256.HashDataAsync(f, ct)).ToLowerInvariant();
 
             var dich = DuongDan(sha);
-            // Cùng nội dung thì file cũ đã đúng, không ghi đè. Hai người tải lên
-            // cùng một file cũng chỉ tốn một chỗ.
+            // Cùng nội dung thì file cũ đã đúng, không ghi đè.
             if (File.Exists(dich)) File.Delete(tam);
             else
             {
@@ -132,12 +126,7 @@ public class KhoBaoCao(IConfiguration cfg, IHostEnvironment env)
 public class KhoNguoiDung(IConfiguration cfg, IHostEnvironment env)
     : KhoFile(cfg, env, "KhoNguoiDung:ThuMuc", "nguoi-dung");
 
-/// <summary>
-/// Dữ liệu dùng chung của cả hệ thống: file DBC, phiên bản phần mềm, tài liệu.
-///
-/// Khác kho cá nhân ở chỗ **ai có quyền cũng xem được** — đây là tài sản chung,
-/// không phải file riêng của ai.
-/// </summary>
+/// <summary>Dữ liệu dùng chung của cả hệ thống: file DBC, phiên bản phần mềm, tài liệu.</summary>
 public class KhoDuLieuChung(IConfiguration cfg, IHostEnvironment env)
     : KhoFile(cfg, env, "DuLieuChung:ThuMuc", "du-lieu-chung");
 

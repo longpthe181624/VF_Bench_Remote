@@ -184,8 +184,6 @@
     <form class="addbench" id="add-form">
       <div class="field"><label>Mã thiết bị *</label><input name="code" required placeholder="HIL-A05"></div>
       <div class="field"><label>Tên</label><input name="ten" placeholder="Bench tầng 2" style="width:160px"></div>
-      <!-- Dòng xe KHÔNG còn bắt buộc: ECU rời không gắn dòng xe nào. Máy chủ
-           vẫn đòi khi thiết bị có agent, vì dòng xe nằm trong topic MQTT. -->
       <div class="field"><label>Dòng xe</label><input name="model" placeholder="vf6"></div>
       <div class="field"><label>Loại</label>
         <select name="loai">
@@ -365,9 +363,7 @@
 <script>
 const API = "";
 
-// Phiên đăng nhập. Giữ trong localStorage để F5 không phải đăng nhập lại.
-// Đây là giao diện TẠM — bản thật nên dùng cookie HttpOnly, localStorage đọc
-// được bằng JavaScript nên kịch bản XSS lấy được token.
+// Phiên đăng nhập.
 const KHOA_PHIEN = "benchconsole.phien";
 let phien = null;
 let manHienTai = "man-dang-nhap";
@@ -379,20 +375,14 @@ function luuPhien(p){
           : localStorage.removeItem(KHOA_PHIEN); } catch {}
 }
 
-/// Người đang đăng nhập có quyền này không.
-///
-/// CHỈ để ẩn/hiện cho đỡ rối mắt. KHÔNG phải bảo vệ — mở DevTools là gọi
-/// thẳng API được. Chỗ chặn thật là [HasPermission] phía server.
+// Ẩn/hiện theo quyền chỉ phục vụ giao diện; server vẫn kiểm quyền độc lập.
 function coQuyen(ma){
   if (!phien?.nguoiDung) return false;
   if ((phien.nguoiDung.vaiTro || []).includes("Admin")) return true;
   return (phien.nguoiDung.quyen || []).includes(ma);
 }
 
-// Một lần làm mới dùng chung cho mọi lời gọi đang chờ. Trang tự làm mới mỗi
-// 5 giây và bắn nhiều request song song — token hết hạn là cả nhóm cùng nhận
-// 401, mỗi cái gọi refresh một lần thì cái sau tiêu mất token cái trước vừa
-// cấp (refresh token xoay vòng), và tất cả cùng hỏng.
+// Dùng chung một lần refresh để tránh tiêu refresh token xoay vòng đồng thời.
 let dangLamMoi = null;
 
 async function thuLamMoiToken(){
@@ -423,14 +413,12 @@ const STATE_LABEL = {
   idle: "Sẵn sàng", running: "Đang chạy", error: "Lỗi",
   offline: "Mất kết nối", maintenance: "Bảo trì", unknown: "Chưa rõ"
 };
-// Giữ giá trị ô nhập test case qua các lần load() tự động (mỗi 5s), vì
-// dựng lại toàn bộ bảng sẽ tạo input mới và xoá mất chữ người dùng đang gõ.
+// Giữ giá trị ô nhập test case qua các lần load() tự động (mỗi 5s), vì dựng lại toàn bộ bảng sẽ tạo input mới và xoá mất chữ người dùng đang gõ.
 const pendingTestCase = {};
 // Danh sách bench của lượt load gần nhất, dùng cho ô chọn bench khi đẩy gói.
 let benchesHienTai = [];
 
-// Danh sách vai trò và danh mục quyền của lượt load gần nhất. Dùng để dựng ô
-// chọn vai trò cho từng người và bảng tick quyền cho từng vai trò.
+// Danh sách vai trò và danh mục quyền của lượt load gần nhất.
 let dsVaiTro = [];
 let dsQuyen = [];
 let vaiTroDangSua = null;
@@ -473,9 +461,7 @@ async function api(path, opts, daThuLamMoi){
   });
 
   if (res.status === 401){
-    // Access token sống 30 phút còn refresh token sống 7 ngày. Không thử làm
-    // mới ở đây thì cứ nửa tiếng là người dùng bị đá ra đăng nhập lại, dù vẫn
-    // còn quyền.
+    // Access token sống 30 phút còn refresh token sống 7 ngày.
     if (!daThuLamMoi && await thuLamMoiToken()) return api(path, opts, true);
     luuPhien(null); veManDangNhap();
     throw new Error("Phiên đăng nhập đã hết hạn.");
@@ -491,21 +477,11 @@ async function api(path, opts, daThuLamMoi){
   return text ? JSON.parse(text) : null;
 }
 
-/// Tải file về bằng fetch có gắn token, KHÔNG dùng thẻ `<a href>` trơn.
-///
-/// Trình duyệt điều hướng theo `href` thì **không gửi header Authorization** —
-/// token nằm trong JS chứ không phải cookie — nên mọi endpoint tải file có
-/// [Authorize] đều trả 401. Đây đúng là lỗi hai nút "Tải về" đã hỏng âm thầm
-/// từ lúc thêm xác thực 28/09: thẻ `<a>` viết trước đó, khoá endpoint xong
-/// không ai thử lại.
-///
-/// Riêng `/api/test-cases/{id}/download` vẫn mở cho Qauto nên tải kiểu nào
-/// cũng được; dùng chung một đường ở đây cho khỏi phải nhớ chỗ nào khác chỗ nào.
+// Tải bằng fetch để gửi Authorization; điều hướng href không gửi header này.
 async function taiFile(duong, tenFile, daThuLamMoi){
   const res = await fetch(API + duong, {headers: headerAuth()});
 
-  // Lặp lại cách xử lý 401 của api(): token sống 30 phút, không làm mới thì cứ
-  // nửa tiếng lại đá người dùng ra màn đăng nhập ngay giữa lúc bấm tải.
+  // Lặp lại cách xử lý 401 của api(): token sống 30 phút, không làm mới thì cứ nửa tiếng lại đá người dùng ra màn đăng nhập ngay giữa lúc bấm tải.
   if (res.status === 401){
     if (!daThuLamMoi && await thuLamMoiToken()) return taiFile(duong, tenFile, true);
     luuPhien(null); veManDangNhap();
@@ -524,9 +500,7 @@ async function taiFile(duong, tenFile, daThuLamMoi){
   a.click();
   a.remove();
 
-  // Thu hồi trễ chứ không ngay sau click: có trình duyệt huỷ luôn lượt tải nếu
-  // blob biến mất cùng nhịp. Giữ mãi cũng không được — file trace CAN vài chục
-  // MB, tải dăm lần là bộ nhớ tab phình lên thấy rõ.
+  // Thu hồi trễ chứ không ngay sau click: có trình duyệt huỷ luôn lượt tải nếu blob biến mất cùng nhịp.
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
@@ -604,10 +578,6 @@ function benchRow(b){
   }}, "Xoá");
 
   // Không có quyền chạy thì giấu luôn cả ô nhập, để khỏi gõ xong mới biết.
-  //
-  // Thiết bị không có agent cũng vậy, và còn nói rõ vì sao: server trả 409 nên
-  // bấm cũng không chạy, nhưng người dùng cần biết đó là do cấu hình thiết bị
-  // chứ không phải bench đang hỏng.
   let dieuKhien = [];
   if (b.hoTroRemote === false){
     dieuKhien = [el("span", {class:"meta"}, "Không có agent")];
@@ -628,8 +598,7 @@ function benchRow(b){
 }
 
 async function load(){
-  // Chưa đăng nhập thì đừng gọi gì cả — gọi là nhận một loạt 401 rồi màn hình
-  // đầy chữ đỏ trong khi lý do thật chỉ là chưa đăng nhập.
+  // Chưa đăng nhập thì đừng gọi gì cả — gọi là nhận một loạt 401 rồi màn hình đầy chữ đỏ trong khi lý do thật chỉ là chưa đăng nhập.
   if (!phien?.accessToken || manHienTai !== "man-chinh") return;
 
   const q = document.getElementById("q").value.trim();
@@ -642,18 +611,13 @@ async function load(){
   if (loai) params.set("loai", loai);
   if (duAnLoc) params.set("duAn", duAnLoc);
 
-  // Mỗi mục gọi độc lập: thiếu quyền thì bỏ qua hẳn, lỗi thì trả mảng rỗng và
-  // ghi tên lại. Trước đây cả chín lời gọi nằm trong một Promise.all, nên MỘT
-  // endpoint trả 403 là toàn bộ trang trắng kèm một dòng đỏ — người dùng mất cả
-  // những mục họ có quyền xem. Vai trò tự tạo mà thiếu một quyền VIEW nào đó là
-  // dính ngay.
+  // Mỗi mục gọi độc lập: thiếu quyền thì bỏ qua hẳn, lỗi thì trả mảng rỗng và ghi tên lại.
   const loiTai = [];
   async function lay(ten, quyen, goi){
     if (quyen && !coQuyen(quyen)) return [];
     try {
       const r = await goi();
-      // Luôn trả mảng: một phản hồi méo cũng chỉ làm rỗng một mục, không ném
-      // "is not iterable" rồi chẹn cả hàm vẽ.
+      // Luôn trả mảng: một phản hồi méo cũng chỉ làm rỗng một mục, không ném "is not iterable" rồi chẹn cả hàm vẽ.
       return Array.isArray(r) ? r : [];
     } catch(e){
       loiTai.push(`${ten} (${e.message})`);
@@ -669,8 +633,7 @@ async function load(){
       lay("cảnh báo", "BENCH.VIEW", () => api("/api/alerts")),
       lay("gói", "TESTCASE.VIEW", () => api("/api/test-cases")),
       lay("báo cáo", "REPORT.VIEW", () => api("/api/runs/reports/recent?limit=20")),
-      // Chỉ có một kho để xem: kho của chính mình. Không ghép email vào URL,
-      // và phía server cũng không còn đường dẫn nào mang tên người khác.
+      // Chỉ có một kho để xem: kho của chính mình.
       lay("kho", "KHO.VIEW", () =>
         api("/api/storage")),
       lay("người dùng", "USER.VIEW", () => api("/api/users")),
@@ -687,8 +650,7 @@ async function load(){
       }),
     ]);
 
-    // Token hết hạn thì api() đã đưa về màn đăng nhập rồi. Vẽ tiếp là rải chín
-    // dòng lỗi lên trên màn hình đó.
+    // Token hết hạn thì api() đã đưa về màn đăng nhập rồi.
     if (!phien?.accessToken || manHienTai !== "man-chinh") return;
 
     showErr(loiTai.length
@@ -696,8 +658,7 @@ async function load(){
       : null);
     benchesHienTai = benches;
     dsDuAn = duAns;
-    // Dựng ô chọn TRƯỚC khi vẽ bảng: ô lọc dự án và ô chọn thiết bị cha đều
-    // lấy dữ liệu từ hai danh sách này.
+    // Dựng ô chọn TRƯỚC khi vẽ bảng: ô lọc dự án và ô chọn thiết bị cha đều lấy dữ liệu từ hai danh sách này.
     dungOChonDuAn();
     dungOChonThuocVe(benches);
     renderDuAn(duAns);
@@ -720,8 +681,7 @@ async function load(){
 }
 
 function renderBenches(rows){
-  // Đang gõ dở trong ô test case thì bỏ qua lượt vẽ lại này — dựng lại bảng
-  // tạo input mới và làm con trỏ nhảy mất, dù chữ đã gõ không còn bị xoá.
+  // Đang gõ dở trong ô test case thì bỏ qua lượt vẽ lại này — dựng lại bảng tạo input mới và làm con trỏ nhảy mất, dù chữ đã gõ không còn bị xoá.
   if (document.activeElement?.closest?.(".actions")) return;
 
   const area = document.getElementById("bench-area");
@@ -739,8 +699,7 @@ function renderBenches(rows){
   area.appendChild(table);
 }
 
-/// Ô lọc dự án. Giữ lại lựa chọn đang có, nếu không thì mỗi lần làm mới 5 giây
-/// là bộ lọc tự nhảy về "Mọi dự án" ngay dưới tay người dùng.
+// Ô lọc dự án.
 function dungOChonDuAn(){
   const o = document.getElementById("filter-duan");
   const dangChon = o.value;
@@ -765,8 +724,7 @@ function dungOChonDuAn(){
   }
 }
 
-/// Ô chọn thiết bị cha. Chỉ liệt kê thiết bị loại bench và xe: cắm MHU vào một
-/// con MHU khác là vô nghĩa, mà bày ra thì người ta chọn.
+// Ô chọn thiết bị cha.
 function dungOChonThuocVe(rows){
   const o = document.getElementById("add-thuocve");
   if (!o) return;
@@ -814,14 +772,11 @@ function renderDuAn(rows){
 let dsMucDuLieu = [];
 let mucDangXem = "";
 
-/// Dãy mục của dữ liệu chung. Danh mục lấy từ server chứ không chép cứng ở đây:
-/// thêm một loại trong Core là nó tự hiện ra, không phải sửa hai chỗ.
+// Dãy mục của dữ liệu chung.
 function renderMucDuLieu(muc){
   dsMucDuLieu = muc;
 
-  // LUÔN có một mục đang chọn. File tải lên đi vào đúng mục đang mở, nên không
-  // có trạng thái "xem tất cả" — không thì người dùng bấm Tải lên mà không biết
-  // file sẽ nằm đâu.
+  // LUÔN có một mục đang chọn.
   if (!muc.some(m => m.ma === mucDangXem)) mucDangXem = muc[0]?.ma || "";
 
   const khung = document.getElementById("dlc-muc");
@@ -844,8 +799,7 @@ function renderBangMuc(){
   if (document.activeElement?.closest?.("#dlc-muc-bang")) return;
 
   const dong = (m) => {
-    // Mục dựng sẵn không xoá được: "khac" là chỗ file rơi vào khi tải lên
-    // không chọn mục, xoá là để lại file trỏ vào một mã không tồn tại.
+    // Mục dựng sẵn không xoá được: "khac" là chỗ file rơi vào khi tải lên không chọn mục, xoá là để lại file trỏ vào một mã không tồn tại.
     const xoa = m.macDinh ? el("span", {class:"meta"}, "dựng sẵn")
       : el("button", {class:"ghost", onclick: async () => {
           if (!confirm(`Xoá mục ${m.ten}?`)) return;
@@ -863,8 +817,7 @@ function renderBangMuc(){
     }}, "Lưu");
 
     return el("tr", {},
-      // Số thứ tự do máy chủ cấp và tự đánh lại khi xoá, nên chỉ hiện chứ
-      // không cho sửa.
+      // Số thứ tự do máy chủ cấp và tự đánh lại khi xoá, nên chỉ hiện chứ không cho sửa.
       el("td", {}, String(m.thuTu)),
       el("td", {}, el("span", {class:"code"}, m.ma)),
       el("td", {}, oTen),
@@ -925,9 +878,7 @@ function kbGon(byte){
 }
 
 function goiRow(g){
-  // Ô chọn bench để đẩy gói xuống. Bench mất kết nối vẫn chọn được: lệnh nằm
-  // lại hàng đợi phía Console, còn từ chối thẳng ở đây thì người dùng không
-  // hiểu vì sao bench vừa thấy trên màn hình lại không chọn được.
+  // Ô chọn bench để đẩy gói xuống.
   const chon = el("select", {});
   chon.appendChild(el("option", {value:""}, "Chọn thiết bị"));
   for (const b of benchesHienTai){
@@ -947,12 +898,7 @@ function goiRow(g){
     } catch(e){ showErr(e.message); }
   }}, "Đẩy xuống");
 
-  // Nút chạy đặt ngay hàng gói: tên bài chính là tên gói, khỏi bắt người dùng
-  // gõ lại thứ vừa đẩy xuống. Gõ tay là sai chính tả, mà sai thì bench từ chối
-  // với lý do "không có bài đó" — mất thời gian mò.
-  //
-  // Gói cấu hình KHÔNG có nút này: chạy một gói cấu hình là vô nghĩa, để nút ở
-  // đó chỉ dẫn người dùng bấm rồi nhận lỗi.
+  // Nút chạy đặt ngay hàng gói: tên bài chính là tên gói, khỏi bắt người dùng gõ lại thứ vừa đẩy xuống.
   const chayBtn = (g.loai === "config" || g.kieuTest === "manual" || !coQuyen("BENCH.RUN")) ? null : el("button", {onclick: async () => {
     if (!chon.value){ showErr("Chưa chọn thiết bị."); return; }
     try {
@@ -1003,8 +949,7 @@ function drawGoi(rows){
 }
 
 function drawKho(rows){
-  // Đang gõ dở trong form thì bỏ qua lượt vẽ lại này, nếu không mỗi 5 giây
-  // người dùng lại mất chữ đang gõ.
+  // Đang gõ dở trong form thì bỏ qua lượt vẽ lại này, nếu không mỗi 5 giây người dùng lại mất chữ đang gõ.
   if (document.activeElement?.closest?.("#kho-form")) return;
 
   const area = document.getElementById("kho-area");
@@ -1051,8 +996,7 @@ function renderUsers(rows){
       el("th", {}, "Người dùng"), el("th", {}, "Vai trò"),
       el("th", {}, "Trạng thái"), el("th", {}, "Tạo lúc"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...rows.map(u => {
-      // Mỗi vai trò một ô tick, đổi là lưu ngay. Ít vai trò nên không cần hộp
-      // thoại riêng.
+      // Mỗi vai trò một ô tick, đổi là lưu ngay.
       const ticks = dsVaiTro.map(r => {
         const box = el("input", {type:"checkbox"});
         box.checked = (u.vaiTro || []).includes(r.ma);
@@ -1119,8 +1063,7 @@ function renderRoles(rows){
       el("th", {}, "Số quyền"), el("th", {}, "Hành động"))),
     el("tbody", {}, ...rows.map(r => {
       const nut = [];
-      // Vai trò Admin bỏ qua mọi kiểm tra quyền nên sửa bộ quyền của nó chỉ
-      // tạo ảo giác là đã hạn chế được gì đó. Server cũng từ chối.
+      // Vai trò Admin bỏ qua mọi kiểm tra quyền nên sửa bộ quyền của nó chỉ tạo ảo giác là đã hạn chế được gì đó.
       if (coQuyen("ROLE.UPDATE") && r.ma !== "Admin"){
         nut.push(el("button", {onclick: () => { vaiTroDangSua = r.id; veBangQuyen(r); }}, "Sửa quyền"));
       }
@@ -1236,9 +1179,7 @@ document.getElementById("add-form").addEventListener("submit", async (ev) => {
   const body = Object.fromEntries(fd.entries());
   for (const k of Object.keys(body)) if (body[k] === "") body[k] = null;
 
-  // Checkbox không có trong FormData khi bỏ tick, nên phải đọc thẳng từ DOM —
-  // để nguyên thì bỏ tick thành "không gửi trường", mà server hiểu đó là
-  // "mặc định có agent". Đúng ngược ý người dùng.
+  // Checkbox không có trong FormData khi bỏ tick, nên phải đọc thẳng từ DOM — để nguyên thì bỏ tick thành "không gửi trường", mà server hiểu đó là "mặc định có agent".
   body.hoTroRemote = ev.target.hoTroRemote.checked;
   body.duAns = [...document.querySelectorAll("#add-duan .duan-tick:checked")].map(x => x.value);
 
@@ -1276,8 +1217,7 @@ dlcMucForm.addEventListener("submit", async (ev) => {
   for (const k of Object.keys(body)) if (body[k] === "") body[k] = null;
   try {
     const m = await api("/api/du-lieu-chung/muc", {method:"POST", body: JSON.stringify(body)});
-    // Mã do máy chủ suy từ tên và bỏ dấu, nên báo lại mã THẬT để người dùng
-    // biết đường dẫn của mục vừa tạo.
+    // Mã do máy chủ suy từ tên và bỏ dấu, nên báo lại mã THẬT để người dùng biết đường dẫn của mục vừa tạo.
     showToast(`Đã tạo mục ${m.ten} (${m.ma}).`);
     ev.target.reset();
     showErr(null);
@@ -1300,12 +1240,10 @@ document.getElementById("dlc-q").addEventListener("input", () => {
 dlcForm.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const fd = new FormData(ev.target);
-  // Đích đến là mục đang mở, không phải một ô chọn riêng: "vào mục nào thì file
-  // lên mục đó".
+  // Đích đến là mục đang mở, không phải một ô chọn riêng: "vào mục nào thì file lên mục đó".
   fd.set("loai", mucDangXem);
   try {
-    // Không dùng api(): thân là multipart, gắn Content-Type: application/json
-    // vào là server đọc hỏng.
+    // Không dùng api(): thân là multipart, gắn Content-Type: application/json vào là server đọc hỏng.
     const body = await uploadFiles("/api/du-lieu-chung", fd, dlcForm, 256*1024*1024);
     document.activeElement?.blur?.();
     showToast(`Đã tải lên ${body.ten}.`);
@@ -1354,8 +1292,7 @@ goiForm.addEventListener("submit", async (ev) => {
   const f = document.getElementById("goi-file").files[0];
   if (!f){ showErr("Chưa chọn file."); return; }
 
-  // Không dùng api() ở đây: nó đặt sẵn Content-Type application/json, mà
-  // multipart cần trình duyệt tự đặt kèm boundary. Đặt tay là hỏng upload.
+  // Không dùng api() ở đây: nó đặt sẵn Content-Type application/json, mà multipart cần trình duyệt tự đặt kèm boundary.
   const fd = new FormData();
   fd.append("file", f);
   fd.append("ten", document.getElementById("goi-ten").value.trim());
@@ -1382,16 +1319,14 @@ khoForm.addEventListener("submit", async (ev) => {
   const files = document.getElementById("kho-file").files;
   if (!files.length){ showErr("Chưa chọn file."); return; }
 
-  // Không dùng api() vì nó đặt sẵn Content-Type application/json, mà multipart
-  // cần trình duyệt tự đặt kèm boundary.
+  // Không dùng api() vì nó đặt sẵn Content-Type application/json, mà multipart cần trình duyệt tự đặt kèm boundary.
   const fd = new FormData();
   for (const f of files) fd.append("file", f);
   const mota = document.getElementById("kho-mota").value.trim();
   if (mota) fd.append("moTa", mota);
 
   try {
-    // Luôn vào kho của chính mình. Không có đường nào đẩy file vào kho
-    // người khác — đó là mạo danh, khác hẳn việc đọc.
+    // Luôn vào kho của chính mình.
     const ds = await uploadFiles("/api/storage", fd, khoForm, 256*1024*1024);
     document.activeElement?.blur?.();
     showToast(`Đã tải lên ${ds.length} file.`);
@@ -1437,10 +1372,7 @@ function veManChinh(){
   napTinhTrangTotp();
 }
 
-/// Ẩn những mục người này không có quyền dùng.
-///
-/// Nhắc lại: đây là chuyện GIAO DIỆN cho đỡ rối, không phải bảo vệ. Server vẫn
-/// kiểm độc lập bằng [HasPermission] — hai lớp, không thay nhau được.
+// Ẩn những mục người này không có quyền dùng.
 function apDungQuyen(){
   const an = (id, co) => {
     const e = document.getElementById(id);
@@ -1493,10 +1425,7 @@ userForm.addEventListener("submit", async (ev) => {
   } catch(e){ showErr(e.message); }
 });
 
-/// Màn ghi danh bắt buộc, hiện ngay sau khi đăng nhập đúng mật khẩu lần đầu.
-///
-/// Dùng token TẠM chứ không phải token thật — lúc này người dùng mới qua một
-/// lớp, chưa được vào ứng dụng. Token tạm chỉ mở được đúng hai endpoint này.
+// Màn ghi danh bắt buộc, hiện ngay sau khi đăng nhập đúng mật khẩu lần đầu.
 async function moManGhiDanh(tokenTam, batBuoc = true){
   luuPhien(null);
   veManDangNhap();
@@ -1603,15 +1532,13 @@ document.getElementById("dn-form").addEventListener("submit", async (ev) => {
     const body = await res.json().catch(() => null);
     if (!res.ok) throw new Error(body?.error || (res.status + " " + res.statusText));
 
-    // Tài khoản bắt buộc hai lớp mà chưa ghi danh: máy chủ trả token TẠM, chỉ
-    // mở được hai endpoint ghi danh. Hiện mã QR để quét rồi dừng ở đây.
+    // Tài khoản bắt buộc hai lớp mà chưa ghi danh: máy chủ trả token TẠM, chỉ mở được hai endpoint ghi danh.
     if (body?.canGhiDanhTotp){
       await moManGhiDanh(body.tokenGhiDanh);
       return;
     }
 
-    // Mật khẩu đúng nhưng còn thiếu mã: máy chủ cố ý trả 200 mà KHÔNG kèm
-    // token. Hiện ô nhập mã rồi dừng ở đây.
+    // Mật khẩu đúng nhưng còn thiếu mã: máy chủ cố ý trả 200 mà KHÔNG kèm token.
     if (body?.canMaTotp){
       luuPhien(null);
       chuyenMan("man-dang-nhap");
@@ -1630,8 +1557,6 @@ document.getElementById("dn-form").addEventListener("submit", async (ev) => {
     showErr(null);
     veManChinh();
     // Vừa tiêu một mã khôi phục thì ĐÓ mới là thứ cần nói, không phải lời chào.
-    // Hiện cả hai thì cái sau đè mất cái trước — và cái bị đè luôn là cái quan
-    // trọng hơn.
     const conLai = body?.maKhoiPhucConLai;
     showToast(conLai === null || conLai === undefined
       ? "Đăng nhập thành công."
@@ -1640,11 +1565,6 @@ document.getElementById("dn-form").addEventListener("submit", async (ev) => {
   } catch(e){ showErr(e.message); }
 });
 
-// ---------------------------------------------------------------- hai lớp
-//
-// Mã sinh theo RFC 6238 nên Microsoft Authenticator, Google Authenticator hay
-// app nào cùng chuẩn đều dùng được. Ảnh QR do máy chủ sinh; khoá chữ là cách
-// nhập dự phòng khi điện thoại không quét được.
 
 async function napTinhTrangTotp(){
   if (!phien?.accessToken) return;
@@ -1656,8 +1576,7 @@ async function napTinhTrangTotp(){
     document.getElementById("totp-bat").style.display = t.daBat ? "none" : "";
     document.getElementById("totp-tat").style.display = t.daBat ? "" : "none";
 
-    // Còn ít mã khôi phục mà không nhắc thì tới lúc hết người ta mới biết, và
-    // lúc đó thường là lúc vừa mất điện thoại.
+    // Còn ít mã khôi phục mà không nhắc thì tới lúc hết người ta mới biết, và lúc đó thường là lúc vừa mất điện thoại.
     if (t.daBat && t.maKhoiPhucConLai <= 2){
       document.getElementById("totp-khung").innerHTML = "";
       document.getElementById("totp-khung").appendChild(el("div", {class:"err show"},
@@ -1671,8 +1590,7 @@ document.getElementById("totp-bat").addEventListener("click", async () => {
   await moManGhiDanh(phien.accessToken, false);
 });
 
-/// Mã khôi phục chỉ hiện ĐÚNG MỘT LẦN — máy chủ chỉ giữ bản băm nên không in
-/// lại được. Nói thẳng điều đó ra, đừng để người dùng đóng đi rồi mới biết.
+// Mã khôi phục chỉ hiện ĐÚNG MỘT LẦN — máy chủ chỉ giữ bản băm nên không in lại được.
 function hienMaKhoiPhuc(ds){
   const khung = document.getElementById("totp-khung");
   khung.innerHTML = "";
@@ -1717,8 +1635,7 @@ document.getElementById("mk-huy").addEventListener("click", () => {
 mkForm.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   try {
-    // Trả về cặp token mới: đổi mật khẩu làm refresh token cũ mất hiệu lực,
-    // nên không lưu lại cái mới là chính mình bị đá ra sau 30 phút.
+    // Trả về cặp token mới: đổi mật khẩu làm refresh token cũ mất hiệu lực, nên không lưu lại cái mới là chính mình bị đá ra sau 30 phút.
     const moi = await api("/api/auth/change-password", {
       method: "POST",
       body: JSON.stringify({
@@ -1746,8 +1663,7 @@ function tickClock(){
 tickClock();
 setInterval(tickClock, 1000);
 
-// Kiểm tra phiên lưu trước khi hiện ứng dụng để tránh lộ màn chính trong lúc
-// token cũ đang bị máy chủ từ chối.
+// Kiểm tra phiên lưu trước khi hiện ứng dụng để tránh lộ màn chính trong lúc token cũ đang bị máy chủ từ chối.
 async function khoiDong(){
   veManDangNhap();
   if (!phien?.accessToken) return;

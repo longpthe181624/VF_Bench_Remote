@@ -9,14 +9,7 @@ namespace BenchConsole.Api.Mqtt;
 /// <summary>Bench chưa đăng ký, hoặc broker đang mất kết nối.</summary>
 public class CommandNotSentException(string message) : Exception(message);
 
-/// <summary>
-/// Chiều đi xuống: ghi lệnh vào DB trước, rồi mới publish lên MQTT.
-///
-/// Thứ tự này quan trọng. Nếu publish trước mà ghi DB lỗi thì bench đã chạy
-/// test nhưng Console không biết mình vừa ra lệnh gì — không ghép được ack,
-/// không ghép được result. Ghi trước thì xấu nhất là có một dòng lệnh trạng
-/// thái Pending rồi tự chuyển TimedOut, xem lại được.
-/// </summary>
+/// <summary>Chiều đi xuống: ghi lệnh vào DB trước, rồi mới publish lên MQTT.</summary>
 public class BenchCommandPublisher(
     AppDbContext db,
     MqttIngestService mqtt,
@@ -39,8 +32,7 @@ public class BenchCommandPublisher(
             throw new CommandNotSentException(
                 "Chưa kết nối được MQTT broker, lệnh không gửi được. Kiểm tra broker rồi thử lại.");
 
-        // cmd_id do backend sinh, không để agent tự đặt — đây là chìa khoá ghép
-        // ack và result về đúng lệnh, phải chắc chắn không trùng.
+        // cmd_id do backend sinh, không để agent tự đặt — đây là chìa khoá ghép ack và result về đúng lệnh, phải chắc chắn không trùng.
         var cmd = new BenchCommand
         {
             TestRequestId = testRequestId,
@@ -63,8 +55,6 @@ public class BenchCommandPublisher(
         if (testCase is not null) body["test_case"] = testCase;
         if (plan is not null) body["plan"] = plan;
         // Trường riêng của từng loại lệnh, ví dụ url + sha256 của gói test case.
-        // Gộp vào payload MQTT chứ không thêm cột: mỗi loại lệnh cần một bộ
-        // trường khác nhau, thêm cột cho từng loại là bảng phình ra toàn null.
         if (themVaoPayload is not null)
             foreach (var (k, v) in themVaoPayload) body[k] = v;
 
@@ -77,8 +67,7 @@ public class BenchCommandPublisher(
         var message = new MqttApplicationMessageBuilder()
             .WithTopic(topic)
             .WithPayload(cmd.PayloadJson)
-            // QoS 1: lệnh phải đến, và agent phải chịu được nhận trùng
-            // (nó lọc bằng cmd_id). QoS 2 nặng hơn mà không cần thiết.
+            // QoS 1 có thể gửi trùng; agent phải khử trùng bằng cmd_id.
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
             // KHÔNG retain: lệnh retain sẽ chạy lại mỗi lần agent kết nối lại.
             .WithRetainFlag(false)

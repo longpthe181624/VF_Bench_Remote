@@ -1,5 +1,6 @@
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Hubs;
+using BenchConsole.Api.Middleware;
 using BenchConsole.Api.Mqtt;
 using System.Security.Cryptography;
 using System.Text;
@@ -15,7 +16,6 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ---------------------------------------------------------------- database
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseSqlServer(builder.Configuration.GetConnectionString("Default")
         ?? throw new InvalidOperationException(
@@ -26,12 +26,9 @@ builder.Services.AddDbContext<AppDbContext>(o =>
             + "trước khi chạy — .NET KHÔNG tự đọc file .env, chỉ docker compose đọc.\n\n"
             + "Xem docs/cai-dat.md.")));
 
-// ---------------------------------------------------------------- MQTT
 builder.Services.Configure<MqttOptions>(builder.Configuration.GetSection("Mqtt"));
 
-// Singleton vì nó giữ một kết nối MQTT duy nhất, và BenchCommandPublisher cần
-// đúng kết nối đó để publish. AddHostedService phải lấy lại cùng instance,
-// không được để DI tạo ra cái thứ hai.
+// Singleton vì nó giữ một kết nối MQTT duy nhất, và BenchCommandPublisher cần đúng kết nối đó để publish.
 builder.Services.AddSingleton<MqttIngestService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttIngestService>());
 
@@ -46,22 +43,14 @@ builder.Services.AddSingleton<KhoDuLieuChung>();
 builder.Services.AddSingleton<KhoDatabase>();
 builder.Services.AddHostedService<DatabaseNotificationService>();
 
-// Dọn báo cáo cũ. Không có nó thì kho phình vô hạn cho tới lúc đầy đĩa, và
-// lúc đó cả SQL Server lẫn backend cùng chết chứ không phải hỏng mỗi báo cáo.
+// Dọn báo cáo cũ.
 builder.Services.AddHostedService<DonBaoCaoService>();
 
-// ------------------------------------------------- xác thực và phân quyền
-//
-// Web và API ghi danh mục của Client dùng JWT của Console. Các endpoint Qauto
-// cũ được đánh [AllowAnonymous] tại chỗ giữ hợp đồng hiện có; API Client mới
-// không tự kế thừa ngoại lệ này. Quyền bên trong Qauto vẫn do Qauto quản lý.
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? new JwtOptions();
 
 if (string.IsNullOrWhiteSpace(jwt.Key))
 {
-    // KHÔNG có khoá mặc định trong mã nguồn: ai đọc được repo là tự ký được
-    // token làm admin. Chưa cấu hình thì sinh ngẫu nhiên — hệ thống vẫn chạy,
-    // đổi lại token mất hiệu lực sau mỗi lần khởi động lại.
+    // KHÔNG có khoá mặc định trong mã nguồn: ai đọc được repo là tự ký được token làm admin.
     jwt.Key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
     Console.WriteLine(
         "[CẢNH BÁO] Chưa đặt Jwt:Key nên khoá ký được sinh ngẫu nhiên. "
@@ -72,6 +61,11 @@ if (string.IsNullOrWhiteSpace(jwt.Key))
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentCaller, HttpCurrentCaller>();
+builder.Services.AddScoped<DuLieuChungService>();
+builder.Services.AddScoped<DatabaseService>();
+builder.Services.AddScoped<RequestService>();
 
 builder.Services.AddAuthentication("ConsoleAuth")
     .AddPolicyScheme("ConsoleAuth", "JWT hoặc client API key", o =>
@@ -89,25 +83,20 @@ builder.Services.AddAuthentication("ConsoleAuth")
             ValidIssuer = jwt.Issuer,
             ValidAudience = jwt.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key!)),
-            // Mặc định .NET cho lệch 5 phút. Token đã hết hạn mà vẫn dùng được
-            // thêm 5 phút là quá rộng khi quyền gác việc chạy test trên bench thật.
+            // Mặc định .NET cho lệch 5 phút.
             ClockSkew = TimeSpan.FromSeconds(30),
         };
     });
 
 builder.Services.AddAuthorization(o =>
 {
-    // Mặc định: phải đăng nhập VÀ token phải là loại `access`. Chặn ngay việc
-    // dùng loại token khác (2FA, đổi mật khẩu...) làm bearer token khi sau này
-    // có thêm chúng.
+    // Mặc định: phải đăng nhập VÀ token phải là loại `access`.
     o.DefaultPolicy = new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .RequireClaim(AuthConstants.TokenUseClaimType, AuthConstants.TokenUseAccess)
         .Build();
 
-    // Hai endpoint ghi danh hai lớp nhận CẢ HAI loại token: token thật (người
-    // đang dùng ứng dụng tự vào bật) và token tạm (bị bắt ghi danh ngay ở màn
-    // đăng nhập, lúc đó chưa có token thật nào).
+    // Hai endpoint ghi danh hai lớp nhận CẢ HAI loại token: token thật (người đang dùng ứng dụng tự vào bật) và token tạm (bị bắt ghi danh ngay ở màn đăng nhập, lúc đó chưa có token thật nào).
     o.AddPolicy(AuthConstants.PolicyGhiDanhTotp, p => p
         .RequireAuthenticatedUser()
         .RequireClaim(AuthConstants.TokenUseClaimType,
@@ -118,12 +107,11 @@ builder.Services.AddAuthorization(o =>
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionHandler>();
 
-// ---------------------------------------------------------------- web
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<JobWriteGate>();
 builder.Services.AddScoped<JobWorkflow>();
 builder.Services.AddHostedService<JobMaintenance>();
-builder.Services.AddControllers(o => o.Filters.Add<JobFlowExceptionFilter>());
+builder.Services.AddControllers();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
     o.MultipartBodyLengthLimit = KiemTraTep.TranYeuCau);
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = KiemTraTep.TranYeuCau);
@@ -132,9 +120,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>
 {
     o.OperationFilter<ClientApiKeyOpenApi>();
-    // Không có phần này thì nút "Try it out" trên Swagger gọi mọi endpoint mà
-    // không kèm token, và endpoint nào có [Authorize] cũng trả 401 — người thử
-    // sẽ tưởng API hỏng. Mà mình đã bảo đội Qauto và bên tích hợp dùng Swagger.
+    // Không có phần này thì nút "Try it out" trên Swagger gọi mọi endpoint mà không kèm token, và endpoint nào có [Authorize] cũng trả 401 — người thử sẽ tưởng API hỏng.
     o.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -165,41 +151,23 @@ const string CorsPolicy = "frontend";
 builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, p => p
     .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
                  ?? ["http://localhost:5173"])
-    // SignalR cần AllowCredentials, và AllowCredentials không đi cùng
-    // AllowAnyOrigin — nên danh sách origin phải khai tường minh.
+    // SignalR cần AllowCredentials, và AllowCredentials không đi cùng AllowAnyOrigin — nên danh sách origin phải khai tường minh.
     .AllowAnyHeader()
     .AllowAnyMethod()
     .AllowCredentials()));
 
 var app = builder.Build();
+app.UseMiddleware<ApiExceptionMiddleware>();
 
-// ---------------------------------------------------------------- khởi tạo DB
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Migrate() thay cho EnsureCreated() từ 28/09. Lý do đổi: EnsureCreated chỉ
-    // tạo database khi nó CHƯA tồn tại, và không bao giờ nâng cấp schema. Ba lần
-    // liên tiếp phải gõ SQL tay trên máy A (bảng GoiTestCases, bảng BaoCaoChays,
-    // rồi thêm cột Loai + đổi index) — lần thứ tư là phần user/role/permission
-    // với 5 bảng và 2 khoá phức hợp, gõ tay là chuốc lỗi.
-    //
-    // Thêm bảng mới về sau:
-    //     dotnet ef migrations add <TenMoTa> --project BenchConsole.Api
-    // rồi chạy lại backend, nó tự áp.
-    //
-    // CẢNH BÁO cho database đã có sẵn: Migrate() sẽ cố CREATE TABLE trên những
-    // bảng đang tồn tại và chết ngay lúc khởi động. Phải GẮN MỐC một lần —
-    // xem mục "Chuyển sang EF migration" trong CLAUDE.md.
-    // Migration sinh ra là SQL Server thuần (IDENTITY, nvarchar...), chạy trên
-    // provider khác sẽ vỡ. Phép kiểm tầng Api dùng SQLite trong bộ nhớ nên ở đó
-    // dựng thẳng schema từ model thay vì chạy migration.
+    // SQL Server áp migration; provider kiểm thử dựng schema trực tiếp từ model.
     if (db.Database.IsSqlServer()) await db.Database.MigrateAsync();
     else await db.Database.EnsureCreatedAsync();
 
-    // Quyền, vai trò và tài khoản quản trị đầu tiên chạy ở MỌI môi trường,
-    // khác DevSeed. Không có nó thì máy thật dựng xong là không ai đăng nhập
-    // được, mà cũng không có cách nào tạo người dùng đầu tiên.
+    // Quyền, vai trò và tài khoản quản trị đầu tiên chạy ở MỌI môi trường, khác DevSeed.
     await MucDuLieuSeed.RunAsync(db);
     await DatabaseSeed.RunAsync(db);
     await SoftwareTypeSeed.RunAsync(db);
@@ -233,10 +201,7 @@ app.UseStaticFiles();
 
 app.UseCors(CorsPolicy);
 
-// Thứ tự BẮT BUỘC: xác thực trước, phân quyền sau. Đảo lại thì lúc kiểm quyền
-// chưa có danh tính, và mọi endpoint có [HasPermission] đều từ chối tất cả.
-// Chặn cả endpoint AllowAnonymous nếu caller mang API key ngoài phạm vi Client.
-// Các endpoint legacy không mang header này giữ hợp đồng hiện có.
+// API key chỉ được gọi các endpoint client, kể cả khi endpoint khác cho phép anonymous.
 app.Use(async (context, next) =>
 {
     if (context.Request.Headers.ContainsKey(ClientKeyAccess.Header)
@@ -248,6 +213,7 @@ app.Use(async (context, next) =>
     }
     await next();
 });
+// Xác thực phải chạy trước phân quyền.
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
@@ -255,12 +221,7 @@ if (reactDaBuild)
     app.MapFallbackToFile("/app/{*path:nonfile}", "app/index.html");
 app.MapHub<BenchHub>("/hub/benches");
 
-// Để dựng docker-compose healthcheck và để biết backend còn sống mà không cần
-// chạm vào database.
-// Kiểm THẬT hai phụ thuộc, không chỉ trả ok.
-//
-// Bản trước trả `ok: true` vô điều kiện, nên giám sát sẽ báo "khoẻ" trong khi
-// broker chết và toàn bộ bench mất kết nối — đúng lúc cần biết nhất thì nó im.
+// Healthcheck kiểm kết nối SQL Server và MQTT broker.
 app.MapGet("/health", async (AppDbContext db, MqttIngestService mqtt, CancellationToken ct) =>
 {
     var sql = false;
@@ -280,8 +241,7 @@ app.MapGet("/health", async (AppDbContext db, MqttIngestService mqtt, Cancellati
         at = DateTimeOffset.UtcNow,
     };
 
-    // 503 khi hỏng, để công cụ giám sát và docker healthcheck bắt được. Trả
-    // 200 kèm `ok:false` thì phần lớn công cụ vẫn coi là khoẻ.
+    // 503 khi hỏng, để công cụ giám sát và docker healthcheck bắt được.
     return ok ? Results.Ok(than) : Results.Json(than, statusCode: 503);
 });
 

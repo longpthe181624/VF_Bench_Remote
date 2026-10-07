@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 namespace BenchConsole.Api.Tests;
 
 // Chạy FE trên trình duyệt với API thật và database / kho tạm của bộ kiểm thử.
-// dotnet run --project backend/BenchConsole.Api.Tests -- --serve-ui
 public static class StorageUiServer
 {
     public static async Task<int> Run()

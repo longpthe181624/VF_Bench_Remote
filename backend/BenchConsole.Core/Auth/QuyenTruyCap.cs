@@ -1,23 +1,9 @@
 namespace BenchConsole.Core.Auth;
 
-/// <summary>
-/// Quyết định một người có được làm một việc hay không.
-///
-/// Hàm THUẦN, nhận chuỗi chứ không nhận `ClaimsPrincipal`. Hai lý do:
-/// `BenchConsole.Core` không được tham chiếu gói ngoài nào, và quan trọng hơn
-/// là **tầng Api hiện không có một phép kiểm tự động nào che** — đặt phần phán
-/// xét quyền ở đây là chỗ duy nhất nó được kiểm.
-/// </summary>
+/// <summary>Quyết định một người có được làm một việc hay không.</summary>
 public static class QuyenTruyCap
 {
-    /// <summary>
-    /// Vai trò được bỏ qua mọi kiểm tra quyền.
-    ///
-    /// Suy từ danh sách vai trò thật (bảng UserRoles), KHÔNG từ một trường chữ
-    /// trong bảng User. Để hai nguồn là sớm muộn cũng lệch: gỡ vai trò Admin
-    /// trong UserRoles mà trường chữ vẫn ghi "Admin" thì người đó vẫn bypass
-    /// toàn bộ, và không có gì báo động.
-    /// </summary>
+    /// <summary>Vai trò được bỏ qua mọi kiểm tra quyền.</summary>
     public const string VaiTroAdmin = "Admin";
 
     /// <summary>
@@ -32,9 +18,7 @@ public static class QuyenTruyCap
         IEnumerable<string>? vaiTro,
         string? quyenCan)
     {
-        // Yêu cầu rỗng thì TỪ CHỐI, không phải cho qua. Gắn
-        // `[HasPermission("")]` do sơ suất mà lại thành mở toang endpoint là
-        // kiểu hỏng tệ nhất — nó trông như đã được bảo vệ.
+        // Yêu cầu rỗng thì TỪ CHỐI, không phải cho qua.
         if (string.IsNullOrWhiteSpace(quyenCan)) return false;
 
         if (LaAdmin(vaiTro)) return true;
@@ -76,11 +60,7 @@ public static class QuyenTruyCap
     {
         if (string.IsNullOrWhiteSpace(chuKho)) return false;
 
-        // KHÔNG có ngoại lệ cho Admin, và không còn quyền nào mở được kho người
-        // khác. Kho là chỗ riêng của từng người; ai cần xem thì chủ kho tự gửi.
-        //
-        // Admin vẫn xoá được tài khoản kèm toàn bộ file của tài khoản đó — xoá
-        // là việc quản trị, đọc nội dung thì không.
+        // KHÔNG có ngoại lệ cho Admin, và không còn quyền nào mở được kho người khác.
         var laKhoCuaMinh = !string.IsNullOrWhiteSpace(nguoiDangDangNhap)
             && string.Equals(nguoiDangDangNhap.Trim(), chuKho.Trim(),
                              StringComparison.OrdinalIgnoreCase);

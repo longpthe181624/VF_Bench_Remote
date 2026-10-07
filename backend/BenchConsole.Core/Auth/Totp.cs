@@ -3,24 +3,7 @@ using System.Text;
 
 namespace BenchConsole.Core.Auth;
 
-/// <summary>
-/// Mã một lần theo thời gian — RFC 6238 (TOTP), chuẩn mà Microsoft
-/// Authenticator và Google Authenticator đều nói được.
-///
-/// **Microsoft không tham gia gì ở đây.** Điện thoại tính mã offline từ chính
-/// bí mật mà máy chủ cấp lúc ghi danh; không gọi Azure, không cần mạng. Nó chỉ
-/// tình cờ là app của Microsoft.
-///
-/// Đặt ở Core thay vì Api, và viết tay thay vì lấy gói ngoài, vì hai lý do:
-/// Core không được phụ thuộc gói nào (xem quy ước), và đây đúng loại code phải
-/// có phép kiểm che — sai một chi tiết nhỏ thì nó vẫn sinh ra sáu chữ số trông
-/// rất thuyết phục mà không khớp với điện thoại, hoặc tệ hơn là khớp với mọi
-/// thứ. `System.Security.Cryptography` nằm trong bộ khung .NET, không phải gói
-/// NuGet, nên dùng được.
-///
-/// Đã đối chiếu với **vector kiểm thử trong phụ lục B của RFC 6238** — xem
-/// BenchConsole.Core.SmokeTest.
-/// </summary>
+/// <summary>Mã một lần theo thời gian — RFC 6238 (TOTP), chuẩn mà Microsoft Authenticator và Google Authenticator đều nói được.</summary>
 public static class Totp
 {
     /// <summary>Độ dài một nhịp, giây. 30 là mặc định của mọi app xác thực.</summary>
@@ -29,22 +12,12 @@ public static class Totp
     /// <summary>Số chữ số của mã. 6 là thứ người dùng quen nhìn.</summary>
     public const int SoChuSo = 6;
 
-    /// <summary>
-    /// Số nhịp chấp nhận lệch về hai phía. 1 nghĩa là nhận cả nhịp trước và
-    /// nhịp sau, tức cửa sổ khoảng 90 giây.
-    ///
-    /// Không để 0: đồng hồ điện thoại và máy chủ luôn lệch chút ít, và người
-    /// dùng cần vài giây để gõ. Cũng không nới rộng hơn — mỗi nhịp thêm là
-    /// thêm một mã còn hiệu lực cho kẻ đứng sau lưng nhìn trộm.
-    /// </summary>
+    /// <summary>Số nhịp chấp nhận lệch về hai phía.</summary>
     public const int CuaSoNhip = 1;
 
     private const string BangBase32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-    /// <summary>
-    /// Sinh bí mật mới, trả về dạng Base32 vì đó là thứ app xác thực đọc được.
-    /// 20 byte = 160 bit, đúng độ dài RFC 4226 khuyến nghị cho HMAC-SHA1.
-    /// </summary>
+    /// <summary>Sinh bí mật mới, trả về dạng Base32 vì đó là thứ app xác thực đọc được.</summary>
     public static string SinhBiMat()
     {
         var tho = RandomNumberGenerator.GetBytes(20);
@@ -61,9 +34,7 @@ public static class Totp
     public static string SinhMa(byte[] khoa, long buoc, int soChuSo = SoChuSo)
     {
         var dem = BitConverter.GetBytes(buoc);
-        // HMAC đọc số đếm theo thứ tự byte lớn trước; BitConverter trên x86 trả
-        // nhỏ trước. Quên đảo là mã vẫn ra sáu chữ số nhưng không bao giờ khớp
-        // với điện thoại.
+        // HMAC đọc số đếm theo thứ tự byte lớn trước; BitConverter trên x86 trả nhỏ trước.
         if (BitConverter.IsLittleEndian) Array.Reverse(dem);
 
         using var hmac = new HMACSHA1(khoa);
@@ -83,15 +54,7 @@ public static class Totp
     /// <summary>Nhịp hiện tại tính từ mốc Unix.</summary>
     public static long NhipTai(DateTimeOffset luc) => luc.ToUnixTimeSeconds() / NhipGiay;
 
-    /// <summary>
-    /// Kiểm một mã người dùng vừa gõ.
-    /// </summary>
-    /// <param name="nhipDaDung">
-    /// Nhịp của lần đăng nhập thành công gần nhất, hoặc <c>null</c> nếu chưa có.
-    /// Mã nào thuộc nhịp này hoặc cũ hơn đều bị từ chối, **kể cả khi nó đúng**
-    /// — nếu không thì một mã nhìn trộm được vẫn dùng lại được suốt 90 giây.
-    /// </param>
-    /// <param name="nhipDung">Nhịp đã khớp, để bên gọi lưu lại cho lần sau.</param>
+    /// <summary>Kiểm một mã người dùng vừa gõ.</summary>
     public static bool HopLe(
         string? biMatBase32,
         string? ma,
@@ -117,8 +80,7 @@ public static class Totp
             var buoc = giua + i;
             if (nhipDaDung is not null && buoc <= nhipDaDung.Value) continue;
 
-            // So theo thời gian cố định: so bằng == thoát sớm ở ký tự đầu lệch,
-            // thời gian trả lời rò ra từng chữ số một.
+            // So theo thời gian cố định: so bằng == thoát sớm ở ký tự đầu lệch, thời gian trả lời rò ra từng chữ số một.
             if (!SoAnToan(sach, SinhMa(khoa, buoc))) continue;
 
             nhipDung = buoc;
@@ -127,12 +89,7 @@ public static class Totp
         return false;
     }
 
-    /// <summary>
-    /// Chuỗi `otpauth://` để app xác thực đọc, qua QR hoặc nhập tay.
-    ///
-    /// `issuer` hiện cả ở đường dẫn lẫn tham số — bản cũ của một số app chỉ đọc
-    /// một trong hai chỗ.
-    /// </summary>
+    /// <summary>Chuỗi `otpauth://` để app xác thực đọc, qua QR hoặc nhập tay.</summary>
     public static string UriGhiDanh(string email, string biMatBase32, string tenHeThong = "Bench Console")
     {
         var nhan = Uri.EscapeDataString($"{tenHeThong}:{email}");
@@ -141,10 +98,7 @@ public static class Totp
              + $"&algorithm=SHA1&digits={SoChuSo}&period={NhipGiay}";
     }
 
-    /// <summary>
-    /// Chia bí mật thành nhóm 4 ký tự để người dùng gõ tay vào điện thoại.
-    /// Một chuỗi 32 ký tự liền nhau thì gõ sai là chắc chắn.
-    /// </summary>
+    /// <summary>Chia bí mật thành nhóm 4 ký tự để người dùng gõ tay vào điện thoại.</summary>
     public static string ChiaNhom(string biMatBase32)
     {
         var khoi = Enumerable.Range(0, (biMatBase32.Length + 3) / 4)
@@ -152,7 +106,6 @@ public static class Totp
         return string.Join(" ", khoi);
     }
 
-    // ---------------------------------------------------------------- Base32
 
     public static string MaHoaBase32(byte[] tho)
     {
@@ -172,10 +125,7 @@ public static class Totp
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Giải Base32. Bỏ qua khoảng trắng và dấu `=` đệm, nhận cả chữ thường —
-    /// người dùng chép từ màn hình sang thì kiểu gì cũng dính một trong ba.
-    /// </summary>
+    /// <summary>Giải Base32.</summary>
     public static byte[] GiaiMaBase32(string s)
     {
         var ra = new List<byte>();

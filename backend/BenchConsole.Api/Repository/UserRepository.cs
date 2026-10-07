@@ -20,15 +20,7 @@ public interface IUserRepository
     Task LuuAsync(CancellationToken ct);
 }
 
-/// <summary>
-/// Truy vấn liên quan tới người dùng.
-///
-/// Đây là tầng Repository DUY NHẤT trong dự án — bốn controller cũ
-/// (Benches, Runs, TestCases, Kho) vẫn gọi thẳng `AppDbContext`. Hai kiểu
-/// trong một codebase là CỐ Ý, không phải lộn xộn: sửa lại bốn controller đang
-/// chạy thật trong khi tầng Api chưa có phép kiểm tự động nào che là rủi ro
-/// không đổi lấy được gì. Gom về một kiểu khi tầng Api có kiểm thử.
-/// </summary>
+/// <summary>Truy vấn liên quan tới người dùng.</summary>
 public class UserRepository(AppDbContext db) : IUserRepository
 {
     public Task<User?> TheoEmailAsync(string email, CancellationToken ct)
@@ -40,10 +32,7 @@ public class UserRepository(AppDbContext db) : IUserRepository
     public Task<User?> TheoRefreshTokenAsync(string token, CancellationToken ct)
         => db.Users.FirstOrDefaultAsync(u => u.RefreshToken == token, ct);
 
-    /// <summary>
-    /// Quyền đi đường UserRoles → RolePermissions → Permission. Không có
-    /// đường nào khác — không đọc trường chữ nào trên bảng User.
-    /// </summary>
+    /// <summary>Quyền đi đường UserRoles → RolePermissions → Permission.</summary>
     public Task<List<string>> MaQuyenCuaAsync(int userId, CancellationToken ct)
         => db.UserRoles
             .Where(ur => ur.UserId == userId)
@@ -58,8 +47,7 @@ public class UserRepository(AppDbContext db) : IUserRepository
             .Select(ur => ur.Role!.Ma)
             .ToListAsync(ct);
 
-    // Chỉ Include ở luồng đăng nhập có TOTP, không gộp vào TheoEmailAsync:
-    // mọi lần đăng nhập thường sẽ phải kéo thêm một bảng mà không dùng tới.
+    // Chỉ Include ở luồng đăng nhập có TOTP, không gộp vào TheoEmailAsync: mọi lần đăng nhập thường sẽ phải kéo thêm một bảng mà không dùng tới.
     public Task<User?> TheoEmailKemMaKhoiPhucAsync(string email, CancellationToken ct)
         => db.Users.Include(u => u.MaKhoiPhucs)
                    .FirstOrDefaultAsync(u => u.Email == email, ct);

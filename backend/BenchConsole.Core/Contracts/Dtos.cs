@@ -1,13 +1,9 @@
 using BenchConsole.Core.Models;
 
-// Đặt ở Core chứ không ở Api: các record này không cần gói ngoài nào, nên để
-// đây thì chúng biên dịch và kiểm thử được độc lập với EF Core và MQTTnet.
+// Đặt ở Core chứ không ở Api: các record này không cần gói ngoài nào, nên để đây thì chúng biên dịch và kiểm thử được độc lập với EF Core và MQTTnet.
 namespace BenchConsole.Core.Contracts;
 
-/// <summary>
-/// Hình dạng dữ liệu một thẻ bench trên giao diện. Tách khỏi entity vì entity
-/// còn mang navigation property — trả thẳng ra JSON sẽ lôi theo cả bảng Runs.
-/// </summary>
+/// <summary>Hình dạng dữ liệu một thẻ bench trên giao diện.</summary>
 public record BenchDto(
     int Id,
     string Code,
@@ -27,8 +23,7 @@ public record BenchDto(
     DateTimeOffset? LastSeenAt,
     int? StaleSeconds,
 
-    // Các trường dưới đây thêm sau, nên xếp ở cuối và đều có mặc định: bản
-    // giao diện cũ chưa biết tới chúng vẫn đọc được JSON như trước.
+    // Các trường dưới đây thêm sau, nên xếp ở cuối và đều có mặc định: bản giao diện cũ chưa biết tới chúng vẫn đọc được JSON như trước.
     string Loai = "bench",
     int? ThuocVeId = null,
     string? ThuocVeCode = null,
@@ -49,7 +44,6 @@ public record BenchDto(
     public static BenchDto From(Bench b)
     {
         // Giao diện cần biết "im lặng bao lâu rồi" để hiện "2 phút trước".
-        // Tính ở backend để mọi trình duyệt cùng một mốc thời gian.
         int? stale = b.LastSeenAt is null
             ? null
             : (int)Math.Max(0, (DateTimeOffset.UtcNow - b.LastSeenAt.Value).TotalSeconds);
@@ -62,8 +56,7 @@ public record BenchDto(
             b.LastSeenAt, stale,
             MaLoaiThietBi.Ghi(b.Loai), b.ThuocVeId, b.ThuocVe?.Code,
             b.HoTroRemote, b.HoTroRobot, b.Tang,
-            // Danh sach du an chi co khi ben goi Include; khong Include thi tra
-            // mang rong chu khong null, de giao dien khong phai kiem tra hai lan.
+            // Danh sach du an chi co khi ben goi Include; khong Include thi tra mang rong chu khong null, de giao dien khong phai kiem tra hai lan.
             b.DuAns.Where(x => x.DuAn != null)
                    .Select(x => x.DuAn!.Ma)
                    .OrderBy(x => x)
@@ -115,19 +108,12 @@ public record TelemetryPointDto(DateTimeOffset At, double Value);
 
 public record TelemetrySeriesDto(string Channel, string? Unit, List<TelemetryPointDto> Points);
 
-// ----------------------------------------------------------------- vào
 
 /// <summary>Đăng ký một bench mới. TopicPrefix suy ra từ Model + Code.</summary>
 public record CreateBenchRequest(
     string Code,
 
-    /// <summary>
-    /// Dòng xe. **Nullable có chủ ý**: ECU rời không gắn dòng xe nào.
-    ///
-    /// Để kiểu `string` không nullable thì ASP.NET tự coi là bắt buộc và trả
-    /// 400 trước khi controller chạy — luật "chỉ bắt buộc khi có agent" trong
-    /// controller sẽ không bao giờ tới lượt.
-    /// </summary>
+    /// <summary>Dòng xe.</summary>
     string? Model,
     string? Workshop,
     string? Rack,
@@ -195,15 +181,10 @@ public record TepDuLieuChungDto(
 public record MucDuLieuChungDto(
     string Ma, string Ten, string? MoTa, int ThuTu, bool MacDinh, int SoFile);
 
-/// <summary>
-/// Tạo mục chỉ cần TÊN. Mã suy ra từ tên, số thứ tự do database cấp.
-/// </summary>
+/// <summary>Tạo mục chỉ cần TÊN.</summary>
 public record TaoMucRequest(string Ten, string? MoTa);
 
-/// <summary>
-/// Mã KHÔNG đổi được: nó nằm trong `Loai` của mọi file thuộc mục đó, đổi là mồ
-/// côi hết. Số thứ tự cũng không sửa tay — nó tự tăng và tự đánh lại.
-/// </summary>
+/// <summary>Mã KHÔNG đổi được: nó nằm trong `Loai` của mọi file thuộc mục đó, đổi là mồ côi hết.</summary>
 public record SuaMucRequest(string? Ten, string? MoTa);
 
 /// <summary>Du an dung thiet bi.</summary>
@@ -226,11 +207,7 @@ public record SuaDuAnRequest(string? Ten, string? MoTa);
 /// <summary>Yêu cầu chạy test. Action mặc định là start_test.</summary>
 public record StartTestRequest(string TestCase, string? Plan, string? IssuedBy);
 
-/// <summary>
-/// Phản hồi cho mọi lệnh gửi xuống bench. Trả ngay sau khi publish, KHÔNG chờ
-/// bench chạy xong — một bài test có thể mất vài phút, giữ HTTP request mở
-/// suốt thời gian đó là sai. Giao diện theo dõi tiếp qua SignalR bằng cmdId.
-/// </summary>
+/// <summary>Phản hồi cho mọi lệnh gửi xuống bench.</summary>
 public record CommandAcceptedDto(string CmdId, string Status, DateTimeOffset IssuedAt);
 
 /// <summary>Một gói test case đã tải lên, hiển thị trên Console.</summary>
@@ -286,7 +263,6 @@ public record TepNguoiDungDto(
         t.Id, t.NguoiDung, t.TenFile, t.KichThuoc, t.MoTa, t.TaiLenLuc);
 }
 
-// --------------------------------------------------------------- xác thực
 
 /// <summary>
 /// <paramref name="MaTotp"/> để trống ở lần gọi đầu. Mật khẩu đúng mà tài khoản
@@ -321,10 +297,7 @@ public record DangNhapResponse(
     DateTimeOffset HetHanLuc,
     NguoiDungDto NguoiDung)
 {
-    /// <summary>
-    /// True nghĩa là mật khẩu đúng nhưng còn thiếu mã trên điện thoại — ba
-    /// trường token ở trên đều rỗng. Client thấy cờ này thì hiện ô nhập mã.
-    /// </summary>
+    /// <summary>True nghĩa là mật khẩu đúng nhưng còn thiếu mã trên điện thoại — ba trường token ở trên đều rỗng.</summary>
     public bool CanMaTotp { get; init; }
 
     /// <summary>Lần đăng nhập này tiêu một mã khôi phục, còn lại bấy nhiêu.</summary>
@@ -359,10 +332,7 @@ public record GhiDanhTotpResponse(string BiMat, string BiMatChiaNhom, string Uri
 
 public record XacNhanTotpRequest(string Ma);
 
-/// <summary>
-/// Xác nhận ghi danh xong thì vừa trả mã khôi phục vừa cấp token thật, để người
-/// dùng vào thẳng ứng dụng chứ không phải đăng nhập lại ngay sau khi quét.
-/// </summary>
+/// <summary>Xác nhận ghi danh xong thì vừa trả mã khôi phục vừa cấp token thật, để người dùng vào thẳng ứng dụng chứ không phải đăng nhập lại ngay sau khi quét.</summary>
 public record XacNhanTotpResponse(List<string> MaKhoiPhuc, DangNhapResponse Phien);
 
 /// <summary>Mã khôi phục trả về đúng MỘT lần, máy chủ chỉ giữ bản băm.</summary>
@@ -373,7 +343,6 @@ public record TatTotpRequest(string MatKhau);
 /// <summary>Tình trạng TOTP của chính mình, để giao diện biết hiện nút gì.</summary>
 public record TinhTrangTotpDto(bool DaBat, DateTimeOffset? BatLuc, int MaKhoiPhucConLai);
 
-// ------------------------------------------------- quản trị người dùng
 
 public record NguoiDungTomTatDto(
     int Id,
@@ -399,7 +368,6 @@ public record GanVaiTroRequest(List<string> VaiTro);
 
 public record DatLaiMatKhauRequest(string MatKhauMoi);
 
-// ------------------------------------------------- vai trò và quyền
 
 public record VaiTroDto(
     int Id,

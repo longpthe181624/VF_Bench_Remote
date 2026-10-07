@@ -3,8 +3,7 @@ using BenchConsole.Core.Auth;
 using BenchConsole.Core.Messaging;
 using BenchConsole.Core.Models;
 
-// Kiểm thử parser bằng payload THẬT mà bench_simulator.py đã phát ra,
-// bắt bằng mosquitto_sub. Không dùng framework test nào để khỏi phụ thuộc NuGet.
+// Kiểm thử parser bằng payload THẬT mà bench_simulator.py đã phát ra, bắt bằng mosquitto_sub.
 
 var failures = new List<string>();
 int checks = 0;
@@ -17,7 +16,6 @@ void Check(bool ok, string what)
 
 void Section(string name) => Console.WriteLine($"\n── {name}");
 
-// ---------------------------------------------------------------- topic
 Section("Tách topic");
 
 Check(BenchTopic.TryParse("bench/vf6/HIL-A02/telemetry", out var t1)
@@ -32,7 +30,6 @@ Check(!BenchTopic.TryParse("", out _), "topic rỗng phải bị từ chối");
 Check(BenchMessageParser.Parse("bench/vf6/HIL-A02/cmd", "{}") is null,
       "topic cmd là chiều đi xuống, ingest phải bỏ qua");
 
-// ---------------------------------------------------------------- status
 Section("Thông điệp status");
 
 var idle = BenchMessageParser.Parse(
@@ -69,7 +66,6 @@ Check(will?.Timestamp is null, "ts null phải cho ra Timestamp null, không ph�
 Check(BenchMessageParser.Parse("bench/vf6/HIL-A02/status", """{"ts":"2026-09-18T02:25:13+00:00"}""")
         is UnparsableMessage, "status thiếu 'state' phải báo không parse được");
 
-// ---------------------------------------------------------------- telemetry
 Section("Thông điệp telemetry");
 
 var tele = BenchMessageParser.Parse(
@@ -104,7 +100,6 @@ Check(teleDrop?.Channels.ContainsKey("T_chamber") == true, "kênh còn số vẫ
 Check(BenchMessageParser.Parse("bench/vf6/HIL-A02/telemetry", "{}") is TelemetryMessage { Channels.Count: 0 },
       "telemetry rỗng là hợp lệ, không phải lỗi");
 
-// ---------------------------------------------------------------- ack
 Section("Thông điệp ack");
 
 var ack = BenchMessageParser.Parse(
@@ -124,7 +119,6 @@ Check(nack?.Reason == "bench dang ban", "phải lấy được lý do từ chố
 Check(BenchMessageParser.Parse("bench/vf6/HIL-A02/ack", """{"status":"accepted"}""")
         is UnparsableMessage, "ack thiếu cmd_id là vô dụng, phải báo lỗi");
 
-// ---------------------------------------------------------------- result
 Section("Thông điệp result");
 
 var pass = BenchMessageParser.Parse(
@@ -144,7 +138,6 @@ Check(fail?.Verdict == Verdict.Fail, "verdict fail phải parse đúng");
 Check(fail?.Reason == "sensor_timeout", "phải lấy được lý do fail");
 Check(fail?.Plan is null, "result không có plan thì để null, không được dựng chuỗi rỗng");
 
-// ---------------------------------------------------------------- rác
 Section("Payload rác không được làm chết ingest");
 
 Check(BenchMessageParser.Parse("bench/vf6/HIL-A02/status", "khong phai json")
@@ -154,7 +147,6 @@ Check(BenchMessageParser.Parse("bench/vf6/HIL-A02/status", "[1,2,3]")
 Check(BenchMessageParser.Parse("bench/vf6/HIL-A02/telemetry", "")
         is TelemetryMessage, "payload rỗng coi như object rỗng");
 
-// ---------------------------------------------------------------- dong ngu canh
 Section("Dòng ngữ cảnh trên thẻ bench");
 
 StatusMessage St(BenchState state, string? tc = null, string? plan = null,
@@ -189,7 +181,6 @@ Check(BenchNote.Describe(St(BenchState.Idle, detail: "Đang dùng tại chỗ �
         == "Đang dùng tại chỗ — Qauto giữ kênh CAN",
       "bench rảnh nhưng có người thao tác tay thì phải hiện, không được báo sẵn sàng");
 
-// ------------------------------------------------------------- mã model
 Section("Đổi tên dòng xe thành mã dùng trong topic");
 
 // Tên thật tester đặt, lấy từ danh sách bench thực tế.
@@ -209,7 +200,6 @@ Check(MaModel.Ma("!!!") == "", "toàn ký tự bỏ đi thì cũng phải ra r�
 Check(MaModel.TopicPrefix("VF8New ME", "hil-a02") == "bench/vf8new-me/HIL-A02",
       "prefix phải viết thường model và VIẾT HOA mã bench, đúng như backend lưu");
 
-// ------------------------------------------------------- đối chiếu tên máy
 Section("Đối chiếu tên máy với bench");
 
 Check(MayCuaBench.Lech("BENCH-PC-01", "BENCH-PC-02"),
@@ -219,8 +209,7 @@ Check(!MayCuaBench.Lech("BENCH-PC-01", "bench-pc-01"),
 Check(!MayCuaBench.Lech("BENCH-PC-01", "  BENCH-PC-01  "),
       "khoảng trắng thừa không được tính là lệch");
 
-// Hai vế thiếu thì im lặng. Cảnh báo lúc này chỉ tạo nhiễu, rồi người ta tắt
-// đi, và lúc lệch thật thì không ai buồn nhìn nữa.
+// Hai vế thiếu thì im lặng.
 Check(!MayCuaBench.Lech(null, "BENCH-PC-02"),
       "bench chưa khai tên máy thì không kiểm, đó là chuyện bình thường");
 Check(!MayCuaBench.Lech("BENCH-PC-01", null),
@@ -242,7 +231,6 @@ var khôngHost = BenchMessageParser.Parse(
 Check(khôngHost is not null && khôngHost.Host is null,
       "agent bản cũ không gửi host thì Host phải là null, không phải lỗi");
 
-// ---------------------------------------------------------------- DTO
 Section("Chuyển entity sang DTO cho giao diện");
 
 var benchIdle = new Bench
@@ -274,7 +262,6 @@ var runDto = RunDto.From(run, "HIL-A05");
 Check(runDto.Verdict == "fail" && runDto.BenchCode == "HIL-A05",
       "RunDto phải mang mã bench và verdict dạng chữ");
 
-// ------------------------------------------------- gói test case đẩy xuống bench
 Console.WriteLine();
 Console.WriteLine("── Nhận dạng gói nén theo byte đầu file");
 
@@ -293,9 +280,7 @@ Check(NhanDangNen.Doan(Dau(0x50, 0x4B)) == DangNen.KhongRo,
       "file ngắn hơn chữ ký không được đọc tràn ra ngoài mảng");
 
 Check(NhanDangNen.LyDoTuChoi(zip) is null, "gói ZIP hợp lệ thì không có lý do từ chối");
-// .mtc có file là ZIP, có file là 7z, cùng một đuôi — nên phải chặn theo byte
-// đầu và nói rõ phải làm gì, chứ để lỗi nổ ở tận máy bench lúc bung gói thì
-// người ở xa chỉ thấy "triển khai thất bại".
+// .mtc có file là ZIP, có file là 7z, cùng một đuôi — nên phải chặn theo byte đầu và nói rõ phải làm gì, chứ để lỗi nổ ở tận máy bench lúc bung gói thì người ở xa chỉ thấy "triển khai thất bại".
 Check(NhanDangNen.LyDoTuChoi(bay)?.Contains("ZIP") == true,
       "từ chối 7z phải nói rõ là cần nén lại bằng ZIP");
 
@@ -343,8 +328,7 @@ Check(LoaiGoi.LyDoTuChoi("cauhinh") is not null,
 Check(LoaiGoi.LyDoTuChoi("cauhinh")?.Contains("config") == true,
       "lý do từ chối phải liệt kê các loại hợp lệ");
 
-// Hai loại đi hai action khác nhau để agent khỏi phải đoán từ nội dung gói —
-// đoán sai là bung vào sai thư mục trên máy bench.
+// Hai loại đi hai action khác nhau để agent khỏi phải đoán từ nội dung gói — đoán sai là bung vào sai thư mục trên máy bench.
 Check(LoaiGoi.Action(LoaiGoi.TestCase) == "deploy_testcase",
       "gói testcase phải ra action deploy_testcase");
 Check(LoaiGoi.Action(LoaiGoi.Config) == "deploy_config",
@@ -373,9 +357,7 @@ Check(QuyenTruyCap.ChoPhep(quyenKySu, khongVaiTro, MaQuyen.BenchRun),
 Check(!QuyenTruyCap.ChoPhep(quyenKySu, khongVaiTro, MaQuyen.BenchDelete),
       "không có quyền thì bị từ chối");
 
-// Đây là phép kiểm quan trọng nhất của cả mục này. Gắn [HasPermission("")] do
-// sơ suất mà lại thành mở toang endpoint là kiểu hỏng tệ nhất — nhìn vào code
-// thấy có thuộc tính bảo vệ, tưởng đã an toàn.
+// Đây là phép kiểm quan trọng nhất của cả mục này.
 Check(!QuyenTruyCap.ChoPhep(quyenKySu, khongVaiTro, null),
       "yêu cầu quyền rỗng phải TỪ CHỐI, tuyệt đối không mặc định cho qua");
 Check(!QuyenTruyCap.ChoPhep(quyenKySu, khongVaiTro, "   "),
@@ -386,8 +368,7 @@ Check(!QuyenTruyCap.ChoPhep(null, null, MaQuyen.BenchView),
 Check(!QuyenTruyCap.ChoPhep([], [], MaQuyen.BenchView),
       "danh sách rỗng thì từ chối");
 
-// Lệch hoa thường giữa lúc seed và lúc khai báo sẽ từ chối im lặng, mà triệu
-// chứng "tôi có quyền mà vẫn bị chặn" rất khó lần ra.
+// Lệch hoa thường giữa lúc seed và lúc khai báo sẽ từ chối im lặng, mà triệu chứng "tôi có quyền mà vẫn bị chặn" rất khó lần ra.
 Check(QuyenTruyCap.ChoPhep(["bench.run"], khongVaiTro, "BENCH.RUN"),
       "so sánh mã quyền không được phân biệt hoa thường");
 Check(QuyenTruyCap.ChoPhep([" BENCH.RUN "], khongVaiTro, MaQuyen.BenchRun),
@@ -421,8 +402,7 @@ Check(QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, "long.pt", "long.pt"),
 Check(!QuyenTruyCap.XemDuocKho(chiKhoView, khongVaiTro, "long.pt", "nguoi.khac"),
       "KHO.VIEW KHÔNG cho xem kho người khác");
 
-// Không có ngoại lệ nào, kể cả Admin. Admin vẫn xoá được tài khoản kèm toàn bộ
-// file của tài khoản đó — xoá là việc quản trị, đọc nội dung thì không.
+// Không có ngoại lệ nào, kể cả Admin.
 Check(!QuyenTruyCap.XemDuocKho([], ["Admin"], "admin", "nguoi.khac"),
       "Admin KHÔNG xem được kho người khác");
 Check(!QuyenTruyCap.XemDuocKho(chiKhoView, ["Admin"], "admin", "nguoi.khac"),
@@ -476,8 +456,7 @@ Check(MaLoaiThietBi.Doc("  ECU  ") == LoaiThietBi.Ecu,
 Check(MaLoaiThietBi.Doc("mhu") == LoaiThietBi.Ecu, "mhu phải hiểu thành ecu");
 Check(MaLoaiThietBi.Doc("xe") == LoaiThietBi.Vehicle, "xe phải hiểu thành vehicle");
 
-// Trả null chứ không ném, và cũng không im lặng đổi thành Bench: bên gọi cần
-// phân biệt "gõ sai" với "không gửi trường này".
+// Trả null chứ không ném, và cũng không im lặng đổi thành Bench: bên gọi cần phân biệt "gõ sai" với "không gửi trường này".
 Check(MaLoaiThietBi.Doc("bênh") is null, "chuỗi lạ phải trả null chứ không ném");
 Check(MaLoaiThietBi.Doc(null) is null && MaLoaiThietBi.Doc("") is null
       && MaLoaiThietBi.Doc("   ") is null,
@@ -487,8 +466,7 @@ Check(MaLoaiThietBi.Ghi(LoaiThietBi.Bench) == "bench"
       && MaLoaiThietBi.Ghi(LoaiThietBi.Ecu) == "ecu"
       && MaLoaiThietBi.Ghi(LoaiThietBi.Vehicle) == "vehicle",
       "ghi ra JSON phải là chữ thường");
-// Đọc lại thứ vừa ghi phải ra đúng cái cũ, nếu không thì PATCH lại hồ sơ
-// thiết bị bằng chính JSON vừa nhận sẽ đổi mất loại.
+// Đọc lại thứ vừa ghi phải ra đúng cái cũ, nếu không thì PATCH lại hồ sơ thiết bị bằng chính JSON vừa nhận sẽ đổi mất loại.
 Check(Enum.GetValues<LoaiThietBi>().All(l => MaLoaiThietBi.Doc(MaLoaiThietBi.Ghi(l)) == l),
       "ghi rồi đọc lại phải ra đúng loại ban đầu");
 
@@ -498,8 +476,7 @@ Console.WriteLine("── BenchDto cho thiết bị chung");
 var thietBiTron = new Bench { Id = 7, Code = "ECU-01", Model = "VF8", Loai = LoaiThietBi.Ecu };
 var dtoTron = BenchDto.From(thietBiTron);
 Check(dtoTron.Loai == "ecu", "BenchDto phải mang loại thiết bị");
-// Không Include thì navigation rỗng — DTO phải trả mảng rỗng chứ không null,
-// để giao diện không phải kiểm tra hai lần.
+// Không Include thì navigation rỗng — DTO phải trả mảng rỗng chứ không null, để giao diện không phải kiểm tra hai lần.
 Check(dtoTron.DuAns is not null && dtoTron.DuAns.Count == 0,
       "không nạp dự án thì trả mảng rỗng, không trả null");
 Check(dtoTron.ThuocVeCode is null, "chưa gắn vào thiết bị nào thì ThuocVeCode null");
@@ -540,8 +517,7 @@ Check(dtoCha.ChuaNhung is not null && dtoCha.ChuaNhung.Count == 1
 Console.WriteLine();
 Console.WriteLine("── Luật quan hệ chứa thiết bị");
 
-// ECU là thứ nằm trong; bench và xe là thứ chứa. Trước đây chỉ chặn vòng, nên
-// lắp kiểu gì cũng được miễn không thành vòng.
+// ECU là thứ nằm trong; bench và xe là thứ chứa.
 Check(MaLoaiThietBi.LyDoKhongChuaDuoc(LoaiThietBi.Bench, LoaiThietBi.Ecu) is null,
       "ECU nằm trong bench thì được");
 Check(MaLoaiThietBi.LyDoKhongChuaDuoc(LoaiThietBi.Vehicle, LoaiThietBi.Ecu) is null,
@@ -567,9 +543,7 @@ Check(MaLoaiThietBi.Ten(LoaiThietBi.Ecu) == "ECU"
 Console.WriteLine();
 Console.WriteLine("── TOTP đối chiếu vector RFC 6238");
 
-// Phụ lục B của RFC 6238 cho sẵn mã đúng tại từng mốc thời gian, với bí mật
-// "12345678901234567890" và 8 chữ số. Đây là chỗ DUY NHẤT có đáp án đúng để
-// so — tự nghĩ ra ca kiểm thử thì chỉ chứng minh code khớp với chính nó.
+// Phụ lục B của RFC 6238 cho sẵn mã đúng tại từng mốc thời gian, với bí mật "12345678901234567890" và 8 chữ số.
 var khoaRfc = System.Text.Encoding.ASCII.GetBytes("12345678901234567890");
 var vector = new (long Giay, string Ma)[]
 {
@@ -589,8 +563,7 @@ foreach (var (giay, maDung) in vector)
 Console.WriteLine();
 Console.WriteLine("── TOTP: Base32 và sinh bí mật");
 
-// Vector Base32 của RFC 4648. Sai bảng mã thì điện thoại nhận bí mật khác hẳn
-// mà vẫn sinh ra sáu chữ số trông bình thường.
+// Vector Base32 của RFC 4648.
 Check(Totp.MaHoaBase32(System.Text.Encoding.ASCII.GetBytes("foobar")) == "MZXW6YTBOI",
       "Base32 phải khớp vector RFC 4648");
 Check(System.Text.Encoding.ASCII.GetString(Totp.GiaiMaBase32("MZXW6YTBOI")) == "foobar",
@@ -637,8 +610,7 @@ Check(Totp.HopLe(khoaThu, Totp.SinhMa(Totp.GiaiMaBase32(khoaThu), nhip - 1), moc
 Check(!Totp.HopLe(khoaThu, Totp.SinhMa(Totp.GiaiMaBase32(khoaThu), nhip - 2), mocThu, null, out _),
       "mã cũ hơn hai nhịp phải bị từ chối, không nới cửa sổ thêm");
 
-// Chống dùng lại: đây là chỗ dễ bỏ sót nhất. Thiếu nó thì một mã nhìn trộm
-// được vẫn đăng nhập được suốt 90 giây sau khi chủ nhân đã dùng.
+// Chống dùng lại: đây là chỗ dễ bỏ sót nhất.
 Check(!Totp.HopLe(khoaThu, maDungBayGio, mocThu, nhip, out _),
       "mã đã dùng rồi thì KHÔNG được nhận lại, dù vẫn còn trong cửa sổ");
 Check(!Totp.HopLe(khoaThu, Totp.SinhMa(Totp.GiaiMaBase32(khoaThu), nhip - 1), mocThu, nhip, out _),
@@ -652,16 +624,14 @@ Check(!Totp.HopLe(khoaThu, null, mocThu, null, out _) && !Totp.HopLe(khoaThu, ""
       "không gõ gì thì từ chối");
 Check(!Totp.HopLe(null, maDungBayGio, mocThu, null, out _),
       "chưa bật TOTP (chưa có bí mật) thì không mã nào hợp lệ");
-// Bí mật hỏng trong database thì phải từ chối đăng nhập, KHÔNG được ném
-// exception — ném là lỗi 500 và không ai đăng nhập được nữa.
+// Bí mật hỏng trong database thì phải từ chối đăng nhập, KHÔNG được ném exception — ném là lỗi 500 và không ai đăng nhập được nữa.
 Check(!Totp.HopLe("khong-phai-base32!!!", maDungBayGio, mocThu, null, out _),
       "bí mật hỏng phải trả false chứ không ném");
 
 Console.WriteLine();
 Console.WriteLine("── Mục dữ liệu chung: luật đặt mã");
 
-// Danh mục nay nằm trong database, quản trị tự thêm. Core chỉ còn giữ luật đặt
-// mã và danh sách mục dựng sẵn để seed — hai thứ kiểm được mà không cần DB.
+// Danh mục nay nằm trong database, quản trị tự thêm.
 
 Check(LoaiDuLieuChung.MacDinh.Length >= 4, "phải có đủ mục dựng sẵn để seed");
 Check(LoaiDuLieuChung.MacDinh.Select(x => x.Ma).Distinct().Count() == LoaiDuLieuChung.MacDinh.Length,
@@ -709,8 +679,7 @@ Check(LoaiDuLieuChung.LyDoMaKhongDung(new string('a', LoaiDuLieuChung.DoDaiMaToi
 
 Console.WriteLine("── Quyền của dữ liệu chung");
 
-// Dữ liệu chung và kho cá nhân là HAI thứ khác nhau: quyền của cái này không
-// được mở cái kia. Gộp nhầm là file riêng tư lọt sang danh sách chung.
+// Dữ liệu chung và kho cá nhân là HAI thứ khác nhau: quyền của cái này không được mở cái kia.
 Check(QuyenTruyCap.ChoPhep([MaQuyen.DuLieuView], null, MaQuyen.DuLieuView),
       "có DULIEU.VIEW thì xem được dữ liệu chung");
 Check(!QuyenTruyCap.ChoPhep([MaQuyen.DuLieuView], null, MaQuyen.KhoView),
@@ -720,7 +689,6 @@ Check(!QuyenTruyCap.XemDuocKho([MaQuyen.DuLieuView], null, "long.pt", "nguoi.kha
 Check(!QuyenTruyCap.ChoPhep([MaQuyen.KhoView], null, MaQuyen.DuLieuView),
       "KHO.VIEW KHÔNG mở được dữ liệu chung");
 
-// ---------------------------------------------------------------- kết quả
 Console.WriteLine($"\n{'='}{new string('=', 50)}");
 if (failures.Count == 0)
 {

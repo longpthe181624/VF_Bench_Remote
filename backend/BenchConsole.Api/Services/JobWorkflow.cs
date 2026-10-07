@@ -2,8 +2,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using BenchConsole.Api.Data;
 using BenchConsole.Core.Models;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 
 namespace BenchConsole.Api.Services;
@@ -11,18 +9,6 @@ namespace BenchConsole.Api.Services;
 public sealed class JobWriteGate { public KhoaKho Lock { get; } = new(); }
 public sealed class JobFlowException(int status, string message) : Exception(message)
 { public int Status { get; } = status; }
-public sealed class JobFlowExceptionFilter : IExceptionFilter
-{
-    public void OnException(ExceptionContext context)
-    {
-        if (context.Exception is JobFlowException e)
-        {
-            context.Result = new ObjectResult(new { error = e.Message }) { StatusCode = e.Status };
-            context.ExceptionHandled = true;
-        }
-    }
-}
-
 public sealed class JobWorkflow(AppDbContext db, TimeProvider clock)
 {
     public DateTimeOffset Now => clock.GetUtcNow();

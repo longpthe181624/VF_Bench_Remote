@@ -1,75 +1,24 @@
-using System.ComponentModel.DataAnnotations;
+using BenchConsole.Api.Auth;
+using BenchConsole.Api.Contracts;
+using BenchConsole.Api.Services;
 using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
-using BenchConsole.Api.Auth;
-using BenchConsole.Api.Data;
-using BenchConsole.Api.Services;
-using BenchConsole.Core.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using BenchConsole.Api.Contracts;
 
 namespace BenchConsole.Api.Controllers;
 
-/// <summary>
-/// Dữ liệu dùng chung, chia theo loại: file DBC, phiên bản phần mềm, tài liệu.
-///
-/// **Khác hẳn kho cá nhân.** Kho cá nhân là chỗ riêng tuyệt đối, không ai xem
-/// được của ai. Chỗ này ngược lại: ai có <c>DULIEU.VIEW</c> cũng xem được, vì
-/// nó là tài sản chung của cả nhóm. Hai thứ cố ý tách thành hai bảng, hai
-/// endpoint, hai mục trên giao diện — gộp lại là sớm muộn có ngày một file
-/// riêng tư lọt sang danh sách chung.
-///
-/// Danh mục mục nằm trong database, **quản trị tự thêm được** (quyền
-/// `DULIEU.MUC`). Bốn mục dựng sẵn do <see cref="MucDuLieuSeed"/> tạo.
-/// </summary>
-[ApiController]
-[Route("api/du-lieu-chung")]
-[Authorize]
-public class DuLieuChungController(
-    AppDbContext db,
-    KhoDuLieuChung kho,
-    ILogger<DuLieuChungController> log) : ControllerBase
+[ApiController, Route("api/du-lieu-chung"), Authorize]
+public class DuLieuChungController(DuLieuChungService service) : ControllerBase
 {
-    /// <summary>
-    /// Danh mục các mục, kèm số file từng mục. Giao diện dựng menu từ đây chứ
-    /// không chép cứng danh sách — thêm một loại trong Core là nó tự hiện ra.
-    /// </summary>
     [AllowClientApiKey, HttpGet("muc")]
     [HasPermission(MaQuyen.DuLieuView)]
     public async Task<ActionResult<List<MucDuLieuChungDto>>> Muc(CancellationToken ct)
-    {
-        var dem = await db.TepDuLieuChungs.AsNoTracking()
-            .GroupBy(t => t.Loai)
-            .Select(g => new { Loai = g.Key, So = g.Count() })
-            .ToListAsync(ct);
-
-        var muc = await db.MucDuLieuChungs.AsNoTracking()
-            .OrderBy(m => m.ThuTu).ThenBy(m => m.Ma)
-            .ToListAsync(ct);
-
-        return muc
-            .Select(m => new MucDuLieuChungDto(
-                m.Ma, m.Ten, m.MoTa, m.ThuTu, m.MacDinh,
-                dem.FirstOrDefault(d => d.Loai == m.Ma)?.So ?? 0))
-            .ToList();
-    }
-
-    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        => await service.Muc(ct);
 
     [AllowClientApiKey, HttpGet("document-lookups"), HasPermission(MaQuyen.DuLieuView)]
     public async Task<object> DocumentLookups(CancellationToken ct)
-    {
-        var docs = db.TepDuLieuChungs.AsNoTracking().Where(x => x.Loai == LoaiDuLieuChung.TaiLieu);
-        return new
-        {
-            documentProgram = await docs.Where(x => x.DocumentProgram != null).Select(x => x.DocumentProgram!).Distinct().OrderBy(x => x).ToListAsync(ct),
-            documentCategory = await docs.Where(x => x.DocumentCategory != null).Select(x => x.DocumentCategory!).Distinct().OrderBy(x => x).ToListAsync(ct),
-            documentFunction = await docs.Where(x => x.DocumentFunction != null).Select(x => x.DocumentFunction!).Distinct().OrderBy(x => x).ToListAsync(ct),
-            documentType = await docs.Where(x => x.DocumentType != null).Select(x => x.DocumentType!).Distinct().OrderBy(x => x).ToListAsync(ct),
-        };
-    }
+        => await service.DocumentLookups(ct);
 
     [AllowClientApiKey, HttpGet]
     [HasPermission(MaQuyen.DuLieuView)]
@@ -77,53 +26,7 @@ public class DuLieuChungController(
         [FromQuery] string? loai, [FromQuery] string? q, CancellationToken ct, [FromQuery] int? softwareTypeId = null,
         [FromQuery] string? documentProgram = null, [FromQuery] string? documentCategory = null,
         [FromQuery] string? documentFunction = null, [FromQuery] string? documentType = null)
-    {
-        var query = db.TepDuLieuChungs.AsNoTracking().Include(t => t.SoftwareType).AsQueryable();
-        if (softwareTypeId.HasValue)
-        {
-            if (softwareTypeId.Value != 0 && !await db.SoftwareTypes.AnyAsync(x => x.Id == softwareTypeId.Value, ct))
-                return BadRequest(new
-                {
-                    error = "Type phần mềm không tồn tại."
-                });
-            query = query.Where(t => t.Loai == LoaiDuLieuChung.PhienBan && t.SoftwareTypeId == (softwareTypeId == 0 ? null : softwareTypeId));
-        }
-        if (!string.IsNullOrWhiteSpace(loai))
-        {
-            // Mục lạ trả 400 chứ không im lặng bỏ qua bộ lọc: bỏ qua thì người
-            // dùng tưởng mục đó rỗng, mà thật ra họ đang xem cả kho.
-            var can = LoaiDuLieuChung.ChuanHoaMa(loai);
-            if (!await db.MucDuLieuChungs.AnyAsync(m => m.Ma == can, ct))
-                return BadRequest(new
-                {
-                    error = await LoiMucLaAsync(loai, ct)
-                });
-            query = query.Where(t => t.Loai == can);
-        }
-        if (new[] { documentProgram, documentCategory, documentFunction, documentType }.Any(x => !string.IsNullOrWhiteSpace(x)))
-        {
-            if (!string.IsNullOrWhiteSpace(loai) && LoaiDuLieuChung.ChuanHoaMa(loai) != LoaiDuLieuChung.TaiLieu)
-                return BadRequest(new { error = "Bộ lọc tài liệu chỉ áp dụng cho mục Tài liệu." });
-            query = query.Where(t => t.Loai == LoaiDuLieuChung.TaiLieu);
-            if (!string.IsNullOrWhiteSpace(documentProgram)) query = query.Where(t => t.DocumentProgram == documentProgram.Trim());
-            if (!string.IsNullOrWhiteSpace(documentCategory)) query = query.Where(t => t.DocumentCategory == documentCategory.Trim());
-            if (!string.IsNullOrWhiteSpace(documentFunction)) query = query.Where(t => t.DocumentFunction == documentFunction.Trim());
-            if (!string.IsNullOrWhiteSpace(documentType)) query = query.Where(t => t.DocumentType == documentType.Trim());
-        }
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var tim = q.Trim();
-            query = query.Where(t => t.Ten.Contains(tim) || t.TenFile.Contains(tim) || (t.MoTa != null && t.MoTa.Contains(tim)) || (t.NguoiTaiLen != null && t.NguoiTaiLen.Contains(tim))
-                || (t.Loai == LoaiDuLieuChung.TaiLieu && ((t.DocumentProgram != null && t.DocumentProgram.Contains(tim))
-                    || (t.DocumentCategory != null && t.DocumentCategory.Contains(tim))
-                    || (t.DocumentFunction != null && t.DocumentFunction.Contains(tim))
-                    || (t.DocumentType != null && t.DocumentType.Contains(tim)))));
-        }
-
-        var rows = await query.OrderByDescending(t => t.TaiLenLuc).Take(500).ToListAsync(ct);
-        var ten = await TenMucAsync(ct);
-        return rows.Select(t => TepDuLieuChungDto.From(t, ten.GetValueOrDefault(t.Loai))).ToList();
-    }
+        => await service.List(loai, q, ct, softwareTypeId, documentProgram, documentCategory, documentFunction, documentType);
 
     [AllowClientApiKey, HttpPost]
     [HasPermission(MaQuyen.DuLieuUpload)]
@@ -131,466 +34,56 @@ public class DuLieuChungController(
     [RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranYeuCau)]
     public async Task<ActionResult<TepDuLieuChungDto>> TaiLen(
         [FromForm] TaiLenDuLieuForm form, CancellationToken ct)
-    {
-        if (form.File is null || form.File.Length == 0)
-            return BadRequest(new
-            {
-                error = "Chưa chọn file."
-            });
-        if (KiemTraTep.Loi([form.File]) is { } loi)
-            return BadRequest(new
-            {
-                error = loi
-            });
-        if (form.MoTa?.Length > 512)
-            return BadRequest(new
-            {
-                error = "Mô tả tối đa 512 ký tự."
-            });
-        if (form.SoftwareTypeId is < 0)
-            return BadRequest(new
-            {
-                error = "Type phần mềm không hợp lệ."
-            });
-        using var khoa = await kho.Khoa.LayAsync(ct);
-
-        // Không chọn mục thì rơi vào "Khác" chứ không từ chối — thiếu chỗ chứa
-        // tạm thì người ta nhét bừa vào mục gần đúng nhất, còn khó dọn hơn.
-        var loai = string.IsNullOrWhiteSpace(form.Loai)
-            ? LoaiDuLieuChung.Khac
-            : LoaiDuLieuChung.ChuanHoaMa(form.Loai);
-
-        var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == loai, ct);
-        if (muc is null)
-            return BadRequest(new
-            {
-                error = await LoiMucLaAsync(form.Loai, ct)
-            });
-        var typeId = form.SoftwareTypeId is > 0 ? form.SoftwareTypeId : null;
-        if (typeId.HasValue && (loai != LoaiDuLieuChung.PhienBan || !await db.SoftwareTypes.AnyAsync(x => x.Id == typeId, ct)))
-            return BadRequest(new
-            {
-                error = "Type chỉ áp dụng cho phiên bản phần mềm và phải có trong danh mục."
-            });
-        if (loai != LoaiDuLieuChung.TaiLieu && new[] { form.DocumentProgram, form.DocumentCategory, form.DocumentFunction, form.DocumentType }.Any(x => !string.IsNullOrWhiteSpace(x)))
-            return BadRequest(new { error = "Chương trình / Category / Function / Type chỉ áp dụng cho Tài liệu." });
-        // Không khai tên thì lấy tên file, để không ai phải gõ hai lần cùng một thứ.
-        var ten = string.IsNullOrWhiteSpace(form.Ten)
-            ? Path.GetFileNameWithoutExtension(KiemTraTep.TenGoc(form.File.FileName))
-            : form.Ten.Trim();
-        if (ten.Length == 0 || ten.Length > 128)
-            return BadRequest(new
-            {
-                error = "Tên cần có từ 1 đến 128 ký tự."
-            });
-
-        if (await db.TepDuLieuChungs.AnyAsync(t => t.Loai == loai && t.Ten == ten, ct))
-            return Conflict(new
-            {
-                error = $"Mục này đã có '{ten}'. Mở Thông tin / sửa để cập nhật bản Draft hoặc dùng tên khác."
-            });
-
-        await using var s = form.File.OpenReadStream();
-        var luu = await kho.LuuAsync(s, ct);
-
-        var tep = new TepDuLieuChung
-        {
-            Loai = loai,
-            DocumentProgram = Clean(form.DocumentProgram),
-            DocumentCategory = Clean(form.DocumentCategory),
-            DocumentFunction = Clean(form.DocumentFunction),
-            DocumentType = Clean(form.DocumentType),
-            SoftwareTypeId = typeId,
-            Ten = ten,
-            TenFile = KiemTraTep.TenGoc(form.File.FileName),
-            Sha256 = luu.Sha256,
-            KichThuoc = luu.KichThuoc,
-            MoTa = form.MoTa,
-            // Lấy từ token, không nhận tham số tự khai — `issuedBy` kiểu cũ đã
-            // bỏ vì ai cũng khai được tên người khác.
-            NguoiTaiLen = User.Email(),
-            TaiLenLuc = DateTimeOffset.UtcNow,
-        };
-
-        db.TepDuLieuChungs.Add(tep);
-        // Lưu TRƯỚC rồi mới dựng DTO: trước SaveChanges thì Id vẫn là 0, trả ra
-        // ngoài là ai dùng nó để tải file sẽ tải hụt.
-        await db.SaveChangesAsync(ct);
-        if (typeId.HasValue)
-            await db.Entry(tep).Reference(x => x.SoftwareType).LoadAsync(ct);
-
-        log.LogInformation("Dữ liệu chung: {Ai} tải lên {Loai}/{Ten} ({KB} KB)",
-            User.Email(), loai, ten, luu.KichThuoc / 1024);
-
-        return TepDuLieuChungDto.From(tep, muc.Ten);
-    }
+        => await service.TaiLen(form, ct);
 
     [AllowClientApiKey, HttpGet("{id:int}/download")]
     [HasPermission(MaQuyen.DuLieuView)]
     public async Task<IActionResult> Tai(int id, CancellationToken ct)
     {
-        var tep = await db.TepDuLieuChungs.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
-        if (tep is null)
-            return NotFound();
-
-        var duongDan = kho.DuongDan(tep.Sha256);
-        if (!System.IO.File.Exists(duongDan))
-            return NotFound(new
-            {
-                error = "Bản ghi còn nhưng file đã mất trên đĩa."
-            });
-
+        var file = await service.Tai(id, ct);
         Response.Headers.CacheControl = "no-store";
-        return FileDownload.Create(duongDan, tep.TenFile, tep.Sha256);
+        return FileDownload.Create(file.Path, file.Name, file.Sha256);
     }
 
     [HttpPatch("{id:int}")]
     [HasPermission(MaQuyen.DuLieuUpload)]
-    public Task<ActionResult<TepDuLieuChungDto>> Sua(int id, SuaDuLieuRequest req, CancellationToken ct)
-        => UpdateDraft(id, req, null, ct);
+    public async Task<ActionResult<TepDuLieuChungDto>> Sua(int id, SuaDuLieuRequest req, CancellationToken ct)
+        => await service.Sua(id, req, ct);
 
     [HttpPost("{id:int}/update"), HasPermission(MaQuyen.DuLieuUpload)]
     [RequestSizeLimit(KiemTraTep.TranYeuCau), RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranYeuCau)]
-    public Task<ActionResult<TepDuLieuChungDto>> Replace(int id, [FromForm] SuaDuLieuForm form, CancellationToken ct)
-        => UpdateDraft(id, new SuaDuLieuRequest(form.Ten, form.Loai, form.MoTa, form.SoftwareTypeId, form.Revision, form.DocumentProgram, form.DocumentCategory, form.DocumentFunction, form.DocumentType), form.File, ct);
-
-    private async Task<ActionResult<TepDuLieuChungDto>> UpdateDraft(int id, SuaDuLieuRequest req, IFormFile? replacement, CancellationToken ct)
-    {
-        using var khoa = await kho.Khoa.LayAsync(ct);
-        var tep = await db.TepDuLieuChungs.Include(t => t.SoftwareType).FirstOrDefaultAsync(t => t.Id == id, ct);
-        if (tep is null)
-            return NotFound();
-        if (tep.Status != "Draft")
-            return Conflict(new
-            {
-                error = "Chuyển về Draft trước khi chỉnh sửa file Release."
-            });
-        if (req.Revision.HasValue && req.Revision != tep.Revision)
-            return Conflict(new
-            {
-                error = "Bản ghi đã thay đổi. Tải lại trước khi sửa."
-            });
-        if (replacement is not null && KiemTraTep.Loi([replacement]) is { } loi)
-            return BadRequest(new
-            {
-                error = loi
-            });
-        var loai = req.Loai is null ? tep.Loai : LoaiDuLieuChung.ChuanHoaMa(req.Loai);
-        var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == loai, ct);
-        if (muc is null)
-            return BadRequest(new
-            {
-                error = await LoiMucLaAsync(req.Loai, ct)
-            });
-        var ten = req.Ten?.Trim() ?? tep.Ten;
-        if (ten.Length == 0 || ten.Length > 128)
-            return BadRequest(new
-            {
-                error = "Tên cần có từ 1 đến 128 ký tự."
-            });
-        if (req.MoTa?.Length > 512)
-            return BadRequest(new
-            {
-                error = "Mô tả tối đa 512 ký tự."
-            });
-        if (req.SoftwareTypeId is < 0)
-            return BadRequest(new
-            {
-                error = "Type phần mềm không hợp lệ."
-            });
-        var typeId = loai != LoaiDuLieuChung.PhienBan ? null : req.SoftwareTypeId.HasValue ? (req.SoftwareTypeId > 0 ? req.SoftwareTypeId : null) : tep.SoftwareTypeId;
-        if (req.SoftwareTypeId is > 0 && loai != LoaiDuLieuChung.PhienBan)
-            return BadRequest(new
-            {
-                error = "Type chỉ áp dụng cho phiên bản phần mềm."
-            });
-        if (typeId.HasValue && !await db.SoftwareTypes.AnyAsync(x => x.Id == typeId, ct))
-            return BadRequest(new
-            {
-                error = "Type phần mềm không tồn tại."
-            });
-        if (await db.TepDuLieuChungs.AnyAsync(t => t.Id != id && t.Loai == loai && t.Ten == ten, ct))
-            return Conflict(new
-            {
-                error = "Mục đích đã có file cùng tên. Hãy dùng tên khác."
-            });
-        if (loai != LoaiDuLieuChung.TaiLieu && new[] { req.DocumentProgram, req.DocumentCategory, req.DocumentFunction, req.DocumentType }.Any(x => !string.IsNullOrWhiteSpace(x)))
-            return BadRequest(new { error = "Các trường phân loại tài liệu chỉ áp dụng cho Tài liệu." });
-        tep.DocumentProgram = loai != LoaiDuLieuChung.TaiLieu ? null : req.DocumentProgram is null ? tep.DocumentProgram : Clean(req.DocumentProgram);
-        tep.DocumentCategory = loai != LoaiDuLieuChung.TaiLieu ? null : req.DocumentCategory is null ? tep.DocumentCategory : Clean(req.DocumentCategory);
-        tep.DocumentFunction = loai != LoaiDuLieuChung.TaiLieu ? null : req.DocumentFunction is null ? tep.DocumentFunction : Clean(req.DocumentFunction);
-        tep.DocumentType = loai != LoaiDuLieuChung.TaiLieu ? null : req.DocumentType is null ? tep.DocumentType : Clean(req.DocumentType);
-        tep.Loai = loai;
-        tep.SoftwareTypeId = typeId;
-        tep.Ten = ten;
-        if (req.MoTa is not null)
-            tep.MoTa = req.MoTa.Trim();
-        if (replacement is not null)
-        {
-            await using var stream = replacement.OpenReadStream();
-            var saved = await kho.LuuAsync(stream, ct);
-            tep.Sha256 = saved.Sha256;
-            tep.KichThuoc = saved.KichThuoc;
-            tep.TenFile = KiemTraTep.TenGoc(replacement.FileName);
-        }
-        tep.Revision++;
-        try
-        {
-            await db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateConcurrencyException) { return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại." }); }
-        catch (DbUpdateException) { return Conflict(new { error = "Mục đích vừa có file cùng tên." }); }
-        db.ChangeTracker.Clear();
-        tep = await db.TepDuLieuChungs.Include(t => t.SoftwareType).FirstAsync(t => t.Id == id, ct);
-        return TepDuLieuChungDto.From(tep, muc.Ten);
-    }
+    public async Task<ActionResult<TepDuLieuChungDto>> Replace(int id, [FromForm] SuaDuLieuForm form, CancellationToken ct)
+        => await service.Replace(id, form, ct);
 
     [HttpDelete("{id:int}")]
     [HasPermission(MaQuyen.DuLieuDelete)]
     public async Task<IActionResult> Xoa(int id, CancellationToken ct, [FromQuery] long? revision = null)
     {
-        using var khoa = await kho.Khoa.LayAsync(ct);
-        var tep = await db.TepDuLieuChungs.FirstOrDefaultAsync(t => t.Id == id, ct);
-        if (tep is null)
-            return NotFound();
-        if (tep.Status != "Draft")
-            return Conflict(new
-            {
-                error = "Chuyển về Draft trước khi xoá file Release."
-            });
-        if (revision.HasValue && revision != tep.Revision)
-            return Conflict(new
-            {
-                error = "Bản ghi đã thay đổi. Tải lại trước khi xoá."
-            });
-
-        db.TepDuLieuChungs.Remove(tep);
-        try
-        {
-            await db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateConcurrencyException) { return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại." }); }
-
-        // Hai bản ghi khác nhau có thể trỏ cùng một file, nên chỉ xoá file khi
-        // không còn ai dùng tới nó nữa — kể cả bản ghi ở loại khác.
-        var conDung = await db.TepDuLieuChungs.AnyAsync(t => t.Sha256 == tep.Sha256, ct);
-        if (!conDung && !await db.TestRequestFiles.AnyAsync(f => f.Kind == "software" && f.Sha256 == tep.Sha256, ct))
-            kho.XoaFile(tep.Sha256);
-
-        log.LogWarning("Dữ liệu chung: {Ai} xoá {Loai}/{Ten}", User.Email(), tep.Loai, tep.Ten);
+        await service.Xoa(id, ct, revision);
         return NoContent();
     }
 
     [HttpPatch("{id:int}/status"), HasPermission(MaQuyen.DatabaseRelease)]
     public async Task<ActionResult<TepDuLieuChungDto>> Status(int id, DatabaseStatusRequest req, CancellationToken ct)
-    {
-        if (!FileWritePolicy.IsValidStatus(req.Status))
-            return BadRequest(new
-            {
-                error = "Status chỉ nhận Release / Draft."
-            });
-        using var guard = await kho.Khoa.LayAsync(ct);
-        var file = await db.TepDuLieuChungs.Include(x => x.SoftwareType).FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (file is null)
-            return NotFound();
-        if (file.Loai != LoaiDuLieuChung.PhienBan)
-            return BadRequest(new
-            {
-                error = "Trạng thái này áp dụng cho phiên bản phần mềm."
-            });
-        if (FileWritePolicy.RevisionError(file.Revision, req.Revision) is { } revisionError)
-            return Conflict(new
-            {
-                error = revisionError
-            });
-        if (file.Status != req.Status)
-        {
-            file.Status = req.Status;
-            file.Revision++;
-            try
-            {
-                await db.SaveChangesAsync(ct);
-            }
-            catch (DbUpdateConcurrencyException) { return Conflict(new { error = "Bản ghi đã thay đổi. Tải lại." }); }
-        }
-        var names = await TenMucAsync(ct);
-        return TepDuLieuChungDto.From(file, names.GetValueOrDefault(file.Loai));
-    }
-
-    // ------------------------------------------------------- quản lý mục
+        => await service.Status(id, req, ct);
 
     [HttpPost("muc")]
     [HasPermission(MaQuyen.DuLieuMuc)]
     public async Task<ActionResult<MucDuLieuChungDto>> TaoMuc(TaoMucRequest req, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(req.Ten))
-            return BadRequest(new
-            {
-                error = "Thiếu tên mục."
-            });
-
-        // Mã suy từ tên, người dùng không phải gõ. Bỏ dấu tiếng Việt vì mã đi
-        // vào URL: "Sơ đồ mạch" ra `so-do-mach`.
-        var ma = LoaiDuLieuChung.ChuanHoaMa(req.Ten);
-        var lyDo = LoaiDuLieuChung.LyDoMaKhongDung(ma);
-        if (lyDo is not null)
-            return BadRequest(new
-            {
-                error = lyDo
-            });
-
-        if (await db.MucDuLieuChungs.AnyAsync(m => m.Ma == ma, ct))
-            return Conflict(new
-            {
-                error = $"Đã có mục tên này (mã '{ma}')."
-            });
-
-        // Số thứ tự nối tiếp mục cuối. Không cho gõ tay: để người dùng tự đặt
-        // thì sớm muộn có hai mục cùng số, và dãy thủng lỗ chỗ.
-        var tiep = await db.MucDuLieuChungs.AnyAsync(ct)
-            ? await db.MucDuLieuChungs.MaxAsync(m => m.ThuTu, ct) + 1
-            : 1;
-
-        var muc = new MucDuLieuChung
-        {
-            Ma = ma,
-            Ten = req.Ten.Trim(),
-            MoTa = req.MoTa,
-            ThuTu = tiep,
-            TaoLuc = DateTimeOffset.UtcNow,
-        };
-        db.MucDuLieuChungs.Add(muc);
-        await db.SaveChangesAsync(ct);
-
-        log.LogInformation("Dữ liệu chung: {Ai} tạo mục {Ma}", User.Email(), ma);
-        return new MucDuLieuChungDto(muc.Ma, muc.Ten, muc.MoTa, muc.ThuTu, muc.MacDinh, 0);
-    }
+        => await service.TaoMuc(req, ct);
 
     [HttpPatch("muc/{ma}")]
     [HasPermission(MaQuyen.DuLieuMuc)]
     public async Task<ActionResult<MucDuLieuChungDto>> SuaMuc(
         string ma, SuaMucRequest req, CancellationToken ct)
-    {
-        var can = LoaiDuLieuChung.ChuanHoaMa(ma);
-        var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == can, ct);
-        if (muc is null)
-            return NotFound(new
-            {
-                error = $"Không có mục {ma}"
-            });
-
-        // Mã KHÔNG đổi được, kể cả mục tự tạo: nó nằm trong cột `Loai` của mọi
-        // file thuộc mục đó. Đổi mã là mồ côi toàn bộ số file ấy.
-        if (req.Ten is not null && req.Ten.Trim().Length > 0)
-            muc.Ten = req.Ten.Trim();
-        if (req.MoTa is not null)
-            muc.MoTa = req.MoTa;
-
-        await db.SaveChangesAsync(ct);
-
-        var so = await db.TepDuLieuChungs.CountAsync(t => t.Loai == muc.Ma, ct);
-        return new MucDuLieuChungDto(muc.Ma, muc.Ten, muc.MoTa, muc.ThuTu, muc.MacDinh, so);
-    }
+        => await service.SuaMuc(ma, req, ct);
 
     [HttpDelete("muc/{ma}")]
     [HasPermission(MaQuyen.DuLieuMuc)]
     public async Task<IActionResult> XoaMuc(string ma, CancellationToken ct)
     {
-        using var khoa = await kho.Khoa.LayAsync(ct);
-        var can = LoaiDuLieuChung.ChuanHoaMa(ma);
-        var muc = await db.MucDuLieuChungs.FirstOrDefaultAsync(m => m.Ma == can, ct);
-        if (muc is null)
-            return NotFound(new
-            {
-                error = $"Không có mục {ma}"
-            });
-
-        if (muc.MacDinh)
-            return Conflict(new
-            {
-                error = $"Mục '{muc.Ten}' là mục dựng sẵn, không xoá được."
-            });
-
-        // Còn file thì chặn. Xoá mục mà để file lại là chúng trỏ vào một mã
-        // không tồn tại: không hiện ở mục nào, cũng không ai biết để dọn.
-        var so = await db.TepDuLieuChungs.CountAsync(t => t.Loai == muc.Ma, ct);
-        if (so > 0)
-            return Conflict(new
-            {
-                error = $"Mục '{muc.Ten}' còn {so} file. Chuyển hoặc xoá file trước khi xoá mục.",
-            });
-
-        db.MucDuLieuChungs.Remove(muc);
-        await db.SaveChangesAsync(ct);
-
-        await DanhLaiThuTuAsync(ct);
-
-        log.LogWarning("Dữ liệu chung: {Ai} xoá mục {Ma}", User.Email(), muc.Ma);
+        await service.XoaMuc(ma, ct);
         return NoContent();
     }
 
-    // ------------------------------------------------------- dùng chung
-
-    /// <summary>
-    /// Đánh lại số thứ tự thành 1, 2, 3… liên tiếp, giữ nguyên thứ tự đang có.
-    ///
-    /// Xoá mục giữa dãy thì để lại một lỗ; không vá thì sau vài lần xoá số thứ
-    /// tự trông như ngẫu nhiên và chẳng còn nói lên điều gì.
-    /// </summary>
-    private async Task DanhLaiThuTuAsync(CancellationToken ct)
-    {
-        var tatCa = await db.MucDuLieuChungs
-            .OrderBy(m => m.ThuTu).ThenBy(m => m.Id)
-            .ToListAsync(ct);
-
-        var doi = false;
-        for (var i = 0; i < tatCa.Count; i++)
-        {
-            if (tatCa[i].ThuTu == i + 1)
-                continue;
-            tatCa[i].ThuTu = i + 1;
-            doi = true;
-        }
-        if (doi)
-            await db.SaveChangesAsync(ct);
-    }
-
-    private async Task<Dictionary<string, string>> TenMucAsync(CancellationToken ct)
-        => await db.MucDuLieuChungs.AsNoTracking()
-            .ToDictionaryAsync(m => m.Ma, m => m.Ten, ct);
-
-    /// <summary>Thông báo mục lạ, kèm danh sách mục đang có để người dùng biết gõ gì.</summary>
-    private async Task<string> LoiMucLaAsync(string? goVao, CancellationToken ct)
-    {
-        var co = await db.MucDuLieuChungs.AsNoTracking()
-            .OrderBy(m => m.ThuTu).Select(m => m.Ma).ToListAsync(ct);
-        return $"Mục '{goVao}' không có. Hiện có: {string.Join(", ", co)}.";
-    }
-}
-
-/// <summary>
-/// Gộp file và trường chữ vào một model: Swashbuckle không sinh được đặc tả
-/// khi <c>IFormFile</c> đứng chung tham số <c>[FromForm]</c> rời.
-/// </summary>
-public class TaiLenDuLieuForm
-{
-    public IFormFile? File { get; set; }
-    public string? Loai { get; set; }
-    public string? Ten { get; set; }
-    public string? MoTa { get; set; }
-    public int? SoftwareTypeId { get; set; }
-    [StringLength(128), DisplayFormat(ConvertEmptyStringToNull = false)] public string? DocumentProgram { get; set; }
-    [StringLength(128), DisplayFormat(ConvertEmptyStringToNull = false)] public string? DocumentCategory { get; set; }
-    [StringLength(128), DisplayFormat(ConvertEmptyStringToNull = false)] public string? DocumentFunction { get; set; }
-    [StringLength(128), DisplayFormat(ConvertEmptyStringToNull = false)] public string? DocumentType { get; set; }
-}
-
-public record SuaDuLieuRequest(string? Ten, string? Loai, string? MoTa, int? SoftwareTypeId = null, long? Revision = null,
-    [StringLength(128)] string? DocumentProgram = null,
-    [StringLength(128)] string? DocumentCategory = null,
-    [StringLength(128)] string? DocumentFunction = null,
-    [StringLength(128)] string? DocumentType = null);
-public class SuaDuLieuForm : TaiLenDuLieuForm
-{
-    public long Revision { get; set; }
 }

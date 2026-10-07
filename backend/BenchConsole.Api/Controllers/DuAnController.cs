@@ -9,15 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BenchConsole.Api.Controllers;
 
-/// <summary>
-/// Danh mục dự án. Chỉ có mã, tên, mô tả — dự án ở đây là **nhãn để nhóm thiết
-/// bị**, không phải thực thể quản lý dự án.
-///
-/// Dùng lại quyền BENCH.* chứ không thêm DUAN.*: dự án là một phần của danh mục
-/// thiết bị, và thêm mã quyền mới thì mọi vai trò đang có trên máy A đều thiếu
-/// quyền đó (AuthSeed không sửa vai trò đã tồn tại) — người dùng sẽ thấy 403 mà
-/// không hiểu vì sao.
-/// </summary>
+/// <summary>Danh mục dự án.</summary>
 [ApiController]
 [Route("api/projects")]
 [Authorize]
@@ -27,8 +19,7 @@ public class DuAnController(AppDbContext db) : ControllerBase
     [HasPermission(MaQuyen.BenchView)]
     public async Task<ActionResult<List<DuAnDto>>> List(CancellationToken ct)
     {
-        // Đếm thiết bị ngay trong truy vấn: giao diện cần biết dự án nào đang
-        // rỗng để xoá được mà không phải gọi thêm endpoint cho từng dòng.
+        // Đếm thiết bị ngay trong truy vấn: giao diện cần biết dự án nào đang rỗng để xoá được mà không phải gọi thêm endpoint cho từng dòng.
         var rows = await db.DuAns.AsNoTracking()
             .OrderBy(d => d.Ma)
             .Select(d => new { DuAn = d, So = d.ThietBis.Count })
@@ -71,9 +62,7 @@ public class DuAnController(AppDbContext db) : ControllerBase
         var duAn = await db.DuAns.FirstOrDefaultAsync(d => d.Ma == ma.Trim().ToUpperInvariant(), ct);
         if (duAn is null) return NotFound(new { error = $"Không có dự án {ma}" });
 
-        // Mã thì không cho đổi: thiết bị nối vào dự án theo id, nhưng mã là thứ
-        // người ta gõ trong URL và trong lệnh curl — đổi là làm mọi ghi chép cũ
-        // trỏ vào một cái tên không còn tồn tại.
+        // Mã thì không cho đổi: thiết bị nối vào dự án theo id, nhưng mã là thứ người ta gõ trong URL và trong lệnh curl — đổi là làm mọi ghi chép cũ trỏ vào một cái tên không còn tồn tại.
         if (req.Ten is not null && req.Ten.Trim().Length > 0) duAn.Ten = req.Ten.Trim();
         if (req.MoTa is not null) duAn.MoTa = req.MoTa;
 
@@ -91,8 +80,6 @@ public class DuAnController(AppDbContext db) : ControllerBase
         if (duAn is null) return NotFound(new { error = $"Không có dự án {ma}" });
 
         // Còn thiết bị thì chặn, dù khoá ngoại có Cascade tự dọn được bảng nối.
-        // Cascade ở đây là âm thầm gỡ thiết bị khỏi dự án — người xoá tưởng mình
-        // chỉ dọn một cái tên, không biết vừa xoá cả liên kết của 20 con bench.
         var so = await db.ThietBiDuAns.CountAsync(x => x.DuAnId == duAn.Id, ct);
         if (so > 0)
             return Conflict(new

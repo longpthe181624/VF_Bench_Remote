@@ -34,11 +34,7 @@ public static class AuthSeed
         var daCo = await db.Permissions.Select(p => p.Ma).ToListAsync(ct);
         var thieu = MaQuyen.TatCa.Where(q => !daCo.Contains(q.Ma)).ToList();
 
-        // Danh mục trong code là nguồn sự thật, nên quyền đã gỡ khỏi danh mục
-        // phải biến mất khỏi database luôn. Để lại thì nó vẫn hiện trên màn
-        // Vai trò và vẫn tích được, trong khi code không còn kiểm nó nữa —
-        // người ta tưởng vừa cấp quyền cho ai đó mà thật ra không cấp gì cả.
-        // Khoá ngoại Cascade dọn luôn các dòng RolePermissions trỏ vào.
+        // Danh mục trong code là nguồn sự thật, nên quyền đã gỡ khỏi danh mục phải biến mất khỏi database luôn.
         var hopLe = MaQuyen.TatCa.Select(q => q.Ma).ToList();
         var thua = await db.Permissions.Where(p => !hopLe.Contains(p.Ma)).ToListAsync(ct);
         if (thua.Count > 0)
@@ -61,14 +57,11 @@ public static class AuthSeed
         var quyen = await db.Permissions.ToListAsync(ct);
 
         // Admin được gán TOÀN BỘ quyền dù `QuyenTruyCap` đã cho nó bypass.
-        // Hai lý do: màn quản trị hiện vai trò Admin với 0 quyền trông như
-        // hỏng, và nếu sau này bỏ cơ chế bypass thì hệ thống vẫn chạy đúng.
         await VaiTroAsync(db, RoleAdmin, "Quản trị",
             "Toàn quyền, và được bỏ qua mọi kiểm tra quyền.",
             quyen.Select(p => p.Ma), ct);
 
-        // Kỹ sư test: làm được mọi việc chuyên môn, không đụng vào người dùng
-        // và vai trò.
+        // Kỹ sư test: làm được mọi việc chuyên môn, không đụng vào người dùng và vai trò.
         await VaiTroAsync(db, RoleEngineer, "Kỹ sư test",
             "Chạy test, quản lý gói và xem báo cáo. Không quản trị người dùng.",
             quyen.Select(p => p.Ma).Where(m =>
@@ -77,11 +70,6 @@ public static class AuthSeed
                 && m != MaQuyen.ClientCatalogCreate && m != MaQuyen.ClientJobsExecute), ct);
 
         // Chỉ xem phần CHUYÊN MÔN, không phải xem mọi thứ.
-        //
-        // Bản trước lọc bằng `EndsWith(".VIEW")` nên quét luôn `USER.VIEW` và
-        // `ROLE.VIEW` — ai mang vai trò này cũng đọc được toàn bộ danh bạ
-        // người dùng và cấu hình phân quyền. Phép kiểm tầng Api bắt được ngay
-        // lần chạy đầu tiên.
         await VaiTroAsync(db, RoleViewer, "Chỉ xem",
             "Xem bench, gói test case và báo cáo. Không ra lệnh, không sửa gì, "
             + "không thấy danh sách người dùng.",
@@ -90,25 +78,7 @@ public static class AuthSeed
                 && !m.StartsWith("USER.") && !m.StartsWith("ROLE.")), ct);
     }
 
-    /// <summary>
-    /// Tạo vai trò nếu chưa có, kèm bộ quyền. Vai trò ĐÃ CÓ thì không đụng
-    /// tới: người quản trị có thể đã chỉnh tay, ghi đè mỗi lần khởi động là
-    /// âm thầm xoá mất chỉnh sửa của họ.
-    /// </summary>
-    /// <summary>
-    /// Dựng hoặc ĐỒNG BỘ LẠI một vai trò dựng sẵn.
-    ///
-    /// Bản trước thấy vai trò đã tồn tại là bỏ qua, và cái giá đã phải trả hai
-    /// lần: thêm mã quyền mới thì mọi vai trò trên máy A đều thiếu, người dùng
-    /// nhận 403 mà không hiểu vì sao; và lần sửa bộ lọc quyền của `Viewer`
-    /// (nó đang thừa `USER.VIEW` với `ROLE.VIEW`) **vẫn chưa tới được máy A**
-    /// vì phải bỏ tick tay mà chưa ai làm.
-    ///
-    /// Nay ba vai trò dựng sẵn coi code là nguồn sự thật, mỗi lần khởi động là
-    /// đồng bộ lại. Đổi lại: **sửa tay quyền của Admin/Engineer/Viewer sẽ bị
-    /// ghi đè.** Muốn một bộ quyền riêng thì tạo vai trò mới — vai trò tự tạo
-    /// không bị đụng tới.
-    /// </summary>
+    /// <summary>Tạo vai trò nếu chưa có, kèm bộ quyền.</summary>
     private static async Task VaiTroAsync(AppDbContext db, string ma, string ten,
                                           string moTa, IEnumerable<string> maQuyen,
                                           CancellationToken ct)
@@ -138,14 +108,7 @@ public static class AuthSeed
         await db.SaveChangesAsync(ct);
     }
 
-    /// <summary>
-    /// Tạo tài khoản quản trị đầu tiên nếu chưa có người dùng nào.
-    ///
-    /// Mật khẩu lấy từ cấu hình `Auth:AdminPassword`. Không cấu hình thì SINH
-    /// NGẪU NHIÊN rồi in ra log đúng một lần — cố ý không có mật khẩu mặc
-    /// định nào trong mã nguồn, vì mật khẩu mặc định thì không ai đổi và cuối
-    /// cùng nằm luôn trên máy thật.
-    /// </summary>
+    /// <summary>Tạo tài khoản quản trị đầu tiên nếu chưa có người dùng nào.</summary>
     private static async Task TaoAdminDauTienAsync(AppDbContext db, IConfiguration cfg,
                                                    ILogger log, CancellationToken ct)
     {
@@ -163,15 +126,7 @@ public static class AuthSeed
             MatKhauHash = BCrypt.Net.BCrypt.HashPassword(matKhau),
             TaoLuc = DateTimeOffset.UtcNow,
 
-            // Tài khoản quản trị ĐẦU TIÊN cố ý KHÔNG bị ép ghi danh hai lớp,
-            // khác mọi tài khoản tạo sau.
-            //
-            // Nó là tài khoản duy nhất lúc máy mới dựng, nên không có ai khác
-            // gỡ hộ nếu ghi danh hỏng giữa chừng — mất điện thoại hay quét lỗi
-            // là khoá chết cả hệ thống, không còn đường vào. Mọi tài khoản khác
-            // đều có đường thoát: DELETE /api/users/{id}/totp do admin gọi.
-            //
-            // Người này nên tự bật ngay sau khi đăng nhập lần đầu.
+            // Tài khoản quản trị ĐẦU TIÊN cố ý KHÔNG bị ép ghi danh hai lớp, khác mọi tài khoản tạo sau.
             TotpBatBuoc = false,
         };
         db.Users.Add(user);

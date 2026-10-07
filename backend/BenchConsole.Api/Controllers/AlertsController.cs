@@ -32,10 +32,7 @@ public class AlertsController(AppDbContext db) : ControllerBase
             a.RaisedAt, a.AcknowledgedAt, a.AcknowledgedBy)).ToList();
     }
 
-    /// <summary>
-    /// Xác nhận đã biết. Không đóng cảnh báo — cảnh báo chỉ đóng khi bench thật
-    /// sự hồi phục, để không ai bấm cho mất dấu đỏ rồi quên mất sự cố.
-    /// </summary>
+    /// <summary>Xác nhận đã biết.</summary>
     [HttpPost("{id:int}/ack")]
     [HasPermission(MaQuyen.BenchUpdate)]
     public async Task<ActionResult<AlertDto>> Acknowledge(

@@ -20,21 +20,10 @@ public class DonBaoCaoService(
     KhoBaoCao kho,
     ILogger<DonBaoCaoService> log) : BackgroundService
 {
-    /// <summary>
-    /// Số ngày giữ báo cáo. `0` = không dọn gì cả.
-    ///
-    /// Mặc định 180 ngày: đủ dài để không xoá mất thứ gì đang có, mà vẫn chặn
-    /// được chuyện phình vô hạn. Đây là **xoá dữ liệu người dùng**, nên nó phải
-    /// là con số người vận hành chọn chứ không phải thứ lập trình viên áp đặt —
-    /// chỉnh bằng `BaoCao:GiuNgay`.
-    /// </summary>
+    /// <summary>Số ngày giữ báo cáo.</summary>
     private int GiuNgay => cfg.GetValue("BaoCao:GiuNgay", 180);
 
-    /// <summary>
-    /// File mồ côi (có trên đĩa mà không bản ghi nào trỏ tới) phải già hơn
-    /// chừng này mới xoá. Khe an toàn cho file vừa tải lên xong nhưng chưa kịp
-    /// ghi bản ghi — xoá nhầm là mất bằng chứng của một lượt vừa chạy.
-    /// </summary>
+    /// <summary>File mồ côi (có trên đĩa mà không bản ghi nào trỏ tới) phải già hơn chừng này mới xoá.</summary>
     private static readonly TimeSpan TuoiToiThieuCuaFileMoCoi = TimeSpan.FromDays(1);
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -49,8 +38,7 @@ public class DonBaoCaoService(
 
         log.LogInformation("Sẽ dọn báo cáo cũ hơn {So} ngày, chạy lại mỗi 6 giờ", GiuNgay);
 
-        // Chờ một nhịp trước lần đầu: lúc khởi động backend còn đang migrate và
-        // seed, đừng tranh database với chúng.
+        // Chờ một nhịp trước lần đầu: lúc khởi động backend còn đang migrate và seed, đừng tranh database với chúng.
         await Task.Delay(TimeSpan.FromMinutes(2), ct).ContinueWith(_ => { }, ct);
 
         while (!ct.IsCancellationRequested)
@@ -65,8 +53,7 @@ public class DonBaoCaoService(
             }
             catch (Exception ex)
             {
-                // Dọn dẹp hỏng thì không được làm chết backend. Ghi lại rồi
-                // thử lại ở lượt sau.
+                // Dọn dẹp hỏng thì không được làm chết backend.
                 log.LogError(ex, "Dọn báo cáo hỏng, sẽ thử lại sau 6 giờ");
             }
 
@@ -89,9 +76,7 @@ public class DonBaoCaoService(
             db.BaoCaoChays.RemoveRange(cu);
             await db.SaveChangesAsync(ct);
 
-            // Xoá file SAU khi bản ghi đã mất, và chỉ file không còn ai trỏ
-            // tới — nhiều bản ghi có thể dùng chung một file vì tên file là
-            // sha256 của nội dung.
+            // Xoá file SAU khi bản ghi đã mất, và chỉ file không còn ai trỏ tới — nhiều bản ghi có thể dùng chung một file vì tên file là sha256 của nội dung.
             var daXoa = 0;
             foreach (var sha in cu.Select(b => b.Sha256).Distinct())
             {
@@ -107,13 +92,7 @@ public class DonBaoCaoService(
         await DonFileMoCoiAsync(db, ct);
     }
 
-    /// <summary>
-    /// Xoá file nằm trên đĩa mà KHÔNG bản ghi nào trỏ tới.
-    ///
-    /// Sinh ra khi tải lên xong nhưng ghi database hỏng, hoặc khi ai đó xoá
-    /// bản ghi thẳng trong database. Không dọn thì chúng chiếm chỗ vĩnh viễn
-    /// và không có đường nào nhìn thấy.
-    /// </summary>
+    /// <summary>Xoá file nằm trên đĩa mà KHÔNG bản ghi nào trỏ tới.</summary>
     private async Task DonFileMoCoiAsync(AppDbContext db, CancellationToken ct)
     {
         var thuMuc = Path.GetDirectoryName(kho.DuongDan("x"));

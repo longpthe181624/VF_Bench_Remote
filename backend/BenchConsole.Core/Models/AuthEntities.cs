@@ -1,14 +1,6 @@
 namespace BenchConsole.Core.Models;
 
-/// <summary>
-/// Người dùng Console.
-///
-/// CỐ Ý KHÔNG có trường `Role` dạng chuỗi. Bản hướng dẫn gốc giữ nó "cho tương
-/// thích" rồi lại dùng chính nó để bypass admin, trong khi quyền thật đi đường
-/// UserRoles → RolePermissions. Hai nguồn sự thật cho cùng một câu hỏi là sớm
-/// muộn cũng lệch, và lệch kiểu đó thì im lặng. Đây là project mới, không có
-/// gì để tương thích ngược.
-/// </summary>
+/// <summary>Người dùng Console.</summary>
 public class User
 {
     public int Id { get; set; }
@@ -24,17 +16,10 @@ public class User
     /// <summary>Khoá tài khoản tới thời điểm này. Null là không khoá.</summary>
     public DateTimeOffset? KhoaDenLuc { get; set; }
 
-    /// <summary>
-    /// Đếm số lần đăng nhập sai liên tiếp. Đặt lại về 0 khi đăng nhập đúng.
-    /// Dùng để khoá tạm thời sau nhiều lần thử.
-    /// </summary>
+    /// <summary>Đếm số lần đăng nhập sai liên tiếp.</summary>
     public int SoLanSai { get; set; }
 
-    /// <summary>
-    /// Token làm mới. Access token cố ý sống ngắn vì quyền nằm trong nó — gỡ
-    /// quyền của ai đó thì họ vẫn giữ quyền cũ tới lúc token hết hạn, mà quyền
-    /// ở đây gác việc ra lệnh chạy test trên bench thật.
-    /// </summary>
+    /// <summary>Token làm mới.</summary>
     public string? RefreshToken { get; set; }
     public DateTimeOffset? RefreshTokenHetHan { get; set; }
 
@@ -51,26 +36,10 @@ public class User
     /// <summary>Lúc bật TOTP. Null là chưa bật — đăng nhập chỉ cần mật khẩu.</summary>
     public DateTimeOffset? TotpBatLuc { get; set; }
 
-    /// <summary>
-    /// Tài khoản này BẮT BUỘC dùng xác thực hai lớp.
-    ///
-    /// Mặc định `true`, nên mọi tài khoản tạo từ 02/10 đều phải ghi danh ngay
-    /// lần đăng nhập đầu: đúng mật khẩu thì nhận token tạm và màn quét mã QR,
-    /// chưa quét xong thì chưa vào được.
-    ///
-    /// Tài khoản có từ TRƯỚC giữ `false` — EF ghi mặc định của kiểu `bool` cho
-    /// hàng cũ, và ở đây đúng là thứ mình muốn. Bật đồng loạt là khoá luôn
-    /// người đang trực máy A nếu lúc đó họ không cầm điện thoại. Muốn bật cho
-    /// tất cả thì chạy một câu UPDATE, xem CLAUDE.md.
-    /// </summary>
+    /// <summary>Tài khoản này BẮT BUỘC dùng xác thực hai lớp.</summary>
     public bool TotpBatBuoc { get; set; } = true;
 
-    /// <summary>
-    /// Nhịp 30 giây của lần dùng mã thành công gần nhất.
-    ///
-    /// Chặn dùng lại: cửa sổ chấp nhận rộng 90 giây, nên thiếu cột này thì một
-    /// mã nhìn trộm được qua vai vẫn đăng nhập được sau khi chủ nhân đã dùng.
-    /// </summary>
+    /// <summary>Nhịp 30 giây của lần dùng mã thành công gần nhất.</summary>
     public long? TotpNhipCuoi { get; set; }
 
     public DateTimeOffset TaoLuc { get; set; }
@@ -80,17 +49,7 @@ public class User
     public List<MaKhoiPhuc> MaKhoiPhucs { get; set; } = new();
 }
 
-/// <summary>
-/// Mã khôi phục dùng một lần, thay cho mã trên điện thoại khi mất máy.
-///
-/// Không có nó thì mất điện thoại là khoá chết tài khoản — và với tài khoản
-/// quản trị cuối cùng thì không ai mở lại được, kể cả admin, vì admin chính là
-/// người đang bị khoá.
-///
-/// Mỗi mã một hàng chứ không nhét cả mảng vào một cột: đánh dấu từng mã đã
-/// tiêu thì phải sửa đúng một hàng, không phải đọc ra, sửa chuỗi, ghi đè — mà
-/// ghi đè kiểu đó thì hai lần đăng nhập song song sẽ xoá mất dấu của nhau.
-/// </summary>
+/// <summary>Mã khôi phục dùng một lần, thay cho mã trên điện thoại khi mất máy.</summary>
 public class MaKhoiPhuc
 {
     public int Id { get; set; }

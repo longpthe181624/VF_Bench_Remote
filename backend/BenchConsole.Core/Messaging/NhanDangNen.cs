@@ -8,14 +8,7 @@ public enum DangNen
     SevenZip = 2,
 }
 
-/// <summary>
-/// Nhận dạng gói test case bằng **byte đầu file**, không tin phần mở rộng.
-///
-/// Lý do không tin đuôi file: khảo sát 21/09 cho thấy `.mtc` **có file là ZIP,
-/// có file là 7z, cùng một đuôi**. Nhận nhầm 7z thành ZIP thì lỗi nổ ở tận máy
-/// bench, lúc agent bung gói — xa chỗ gây lỗi cả một chặng mạng, và người ở xa
-/// chỉ thấy "bung gói thất bại" mà không hiểu vì sao.
-/// </summary>
+/// <summary>Nhận dạng gói test case bằng **byte đầu file**, không tin phần mở rộng.</summary>
 public static class NhanDangNen
 {
     private static readonly byte[] ChuKyZip = [0x50, 0x4B, 0x03, 0x04];        // PK\x03\x04
@@ -31,17 +24,12 @@ public static class NhanDangNen
         return DangNen.KhongRo;
     }
 
-    /// <summary>
-    /// Câu giải thích cho người dùng khi gói không nhận được, hoặc null khi
-    /// gói hợp lệ. Nói thẳng phải làm gì, chứ "file không hợp lệ" thì người
-    /// tải lên không biết sửa kiểu gì.
-    /// </summary>
+    /// <summary>Câu giải thích cho người dùng khi gói không nhận được, hoặc null khi gói hợp lệ.</summary>
     public static string? LyDoTuChoi(ReadOnlySpan<byte> dauFile)
         => Doan(dauFile) switch
         {
             DangNen.Zip => null,
-            // Agent chỉ bung được ZIP: Python có sẵn `zipfile`, còn 7z phải cài
-            // thêm. Máy bench trong xưởng thường bị khoá, cài thêm là phiền.
+            // Agent chỉ bung được ZIP: Python có sẵn `zipfile`, còn 7z phải cài thêm.
             DangNen.SevenZip =>
                 "Gói đang là 7z. Agent trên máy bench chỉ bung được ZIP. "
                 + "Hãy nén lại bằng ZIP rồi tải lên.",

@@ -1,16 +1,6 @@
 namespace BenchConsole.Core.Models;
 
-/// <summary>
-/// Luật đặt mã mục dữ liệu chung, và danh sách mục dựng sẵn.
-///
-/// **Danh mục nay nằm trong database, quản trị tự thêm được** — đổi ngày 02/10.
-/// Trước đó nó là hằng số trong code với lý do "mỗi mục kéo theo cách hiển thị
-/// riêng"; thực tế các mục chỉ khác nhau cái tên, nên bắt sửa code để thêm một
-/// ngăn là chặn người dùng ở chỗ không đáng chặn.
-///
-/// Lớp này giữ lại hai việc **không cần database**, nhờ vậy kiểm thử được mà
-/// không dựng hạ tầng: luật đặt mã, và danh sách mục dựng sẵn để seed.
-/// </summary>
+/// <summary>Luật đặt mã mục dữ liệu chung, và danh sách mục dựng sẵn.</summary>
 public static class LoaiDuLieuChung
 {
     /// <summary>
@@ -25,14 +15,7 @@ public static class LoaiDuLieuChung
     public const string PhienBan = "phien-ban";
     public const string TaiLieu = "tai-lieu";
 
-    /// <summary>
-    /// Mục dựng sẵn, seed vào database lúc khởi động nếu chưa có. Quản trị
-    /// thêm mục mới bên cạnh chúng, và đổi được tên hiển thị của chúng.
-    /// </summary>
-    /// <remarks>
-    /// Không mang số thứ tự: số đó do database cấp theo kiểu tự tăng, và được
-    /// đánh lại liên tiếp 1..N mỗi khi xoá một mục.
-    /// </remarks>
+    /// <summary>Mục dựng sẵn, seed vào database lúc khởi động nếu chưa có.</summary>
     public static readonly (string Ma, string Ten, string? MoTa)[] MacDinh =
     [
         (Dbc,      "File DBC",           "Ma trận CAN"),
@@ -44,15 +27,7 @@ public static class LoaiDuLieuChung
     /// <summary>Độ dài tối đa của mã. Mã đi vào URL nên không để dài lê thê.</summary>
     public const int DoDaiMaToiDa = 32;
 
-    /// <summary>
-    /// Sinh mã từ TÊN người dùng gõ: bỏ dấu tiếng Việt, về chữ thường, mọi thứ
-    /// không phải chữ số thành gạch nối.
-    ///
-    /// Tạo mục chỉ cần gõ tên, mã suy ra từ đó. Nên **bỏ dấu là bắt buộc**,
-    /// không phải cho đẹp: mã chỉ nhận chữ ASCII vì nó đi vào URL, mà bản đầu
-    /// không bỏ dấu nên "Sơ đồ mạch" ra `s-m-ch` và "Tài liệu kỹ thuật" ra
-    /// `t-i-li-u-k-thu-t` — vô dụng, và hai tên khác nhau rất dễ đụng nhau.
-    /// </summary>
+    /// <summary>Sinh mã từ TÊN người dùng gõ: bỏ dấu tiếng Việt, về chữ thường, mọi thứ không phải chữ số thành gạch nối.</summary>
     public static string ChuanHoaMa(string? ma)
     {
         if (string.IsNullOrWhiteSpace(ma)) return "";
@@ -71,12 +46,7 @@ public static class LoaiDuLieuChung
         return ra.ToString().Trim('-');
     }
 
-    /// <summary>
-    /// Bỏ dấu tiếng Việt. `FormD` tách chữ cái khỏi dấu thanh rồi lọc dấu đi.
-    ///
-    /// Riêng `đ`/`Đ` phải thay tay: nó là một chữ cái riêng trong Unicode chứ
-    /// không phải `d` cộng dấu, nên `FormD` không tách ra được.
-    /// </summary>
+    /// <summary>Bỏ dấu tiếng Việt.</summary>
     private static string BoDau(string s)
     {
         var tach = s.Replace('đ', 'd').Replace('Đ', 'D')

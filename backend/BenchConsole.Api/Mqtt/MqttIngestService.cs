@@ -25,25 +25,11 @@ public class MqttOptions
     /// <summary>Số giờ giữ lại telemetry thô. Quá hạn thì xoá để bảng khỏi phình.</summary>
     public int TelemetryRetentionHours { get; set; } = 48;
 
-    /// <summary>
-    /// Bao lâu không nghe thấy gì thì coi bench là mất kết nối.
-    ///
-    /// Đây chỉ là lưới an toàn. Tín hiệu chính là Last Will do broker phát khi
-    /// agent chết — cái đó tới trong vài giây. Mốc này bắt trường hợp Last Will
-    /// không tới được (broker vừa khởi động lại, mạng chia đôi). Giá trị phải
-    /// lớn hơn chu kỳ gửi heartbeat của agent, nếu không bench đang chạy tốt
-    /// cũng bị đánh dấu mất kết nối.
-    /// </summary>
+    /// <summary>Bao lâu không nghe thấy gì thì coi bench là mất kết nối.</summary>
     public int StaleAfterSeconds { get; set; } = 90;
 }
 
-/// <summary>
-/// Nghe MQTT, ghi database, đẩy cập nhật xuống trình duyệt qua SignalR.
-///
-/// Callback MQTT chỉ đẩy thông điệp vào một hàng đợi trong bộ nhớ; một vòng lặp
-/// tiêu thụ duy nhất mới ghi database. Làm vậy để tránh nhiều callback cùng
-/// dùng một DbContext — lỗi này rất khó lần ra khi nó xảy ra.
-/// </summary>
+/// <summary>Nghe MQTT, ghi database, đẩy cập nhật xuống trình duyệt qua SignalR.</summary>
 public class MqttIngestService(
     IOptions<MqttOptions> options,
     IServiceScopeFactory scopeFactory,
@@ -54,8 +40,7 @@ public class MqttIngestService(
     private readonly Channel<(string Topic, string Payload)> _queue =
         Channel.CreateBounded<(string, string)>(new BoundedChannelOptions(10_000)
         {
-            // Hàng đợi đầy nghĩa là database không theo kịp. Bỏ gói cũ nhất
-            // chứ không chặn callback MQTT, vì chặn sẽ làm đứt kết nối broker.
+            // Hàng đợi đầy nghĩa là database không theo kịp.
             FullMode = BoundedChannelFullMode.DropOldest,
         });
 
@@ -126,7 +111,6 @@ public class MqttIngestService(
         }
     }
 
-    // ------------------------------------------------------------------ ghi DB
 
     private async Task ConsumeLoopAsync(CancellationToken ct)
     {
@@ -163,8 +147,7 @@ public class MqttIngestService(
 
         if (bench is null)
         {
-            // Bench chưa đăng ký trên Console. Không tự thêm — đăng ký là việc có
-            // chủ đích, và tự thêm sẽ khiến một lỗi gõ sai mã sinh ra bench rác.
+            // Bench chưa đăng ký trên Console.
             log.LogWarning("Nhận dữ liệu từ bench chưa đăng ký: {Code}", code);
             return;
         }
@@ -172,9 +155,7 @@ public class MqttIngestService(
         var at = msg.Timestamp ?? DateTimeOffset.UtcNow;
         bench.LastPacketAt = at;
 
-        // Đẩy xuống trình duyệt SAU khi lưu xong. Gom lại chứ không bắn ngay
-        // trong switch, vì Id của dòng mới chỉ có sau SaveChanges, và bắn trước
-        // khi lưu thì giao diện có thể thấy dữ liệu mà DB chưa nhận.
+        // Đẩy xuống trình duyệt SAU khi lưu xong.
         var pushes = new List<Func<Task>>();
 
         switch (msg)
@@ -212,8 +193,7 @@ public class MqttIngestService(
                         BenchId = bench.Id, Channel = channel, Value = value, At = at,
                     });
 
-                    // Kênh chính là kênh đầu tiên khai trong cấu hình bench;
-                    // nếu chưa khai thì lấy kênh đầu tiên nhận được.
+                    // Kênh chính là kênh đầu tiên khai trong cấu hình bench; nếu chưa khai thì lấy kênh đầu tiên nhận được.
                     if (bench.PrimaryChannel is null || bench.PrimaryChannel == channel)
                     {
                         bench.PrimaryChannel ??= channel;
@@ -222,7 +202,6 @@ public class MqttIngestService(
                 }
 
                 // Chỉ tab nào đang mở đúng bench này mới cần chuỗi số đầy đủ.
-                // Gửi cho cả 37 bench xuống mọi tab là vô ích và tốn băng thông.
                 if (t.Channels.Count > 0)
                 {
                     var series = t.Channels.ToDictionary(c => c.Key, c => c.Value);
@@ -311,8 +290,7 @@ public class MqttIngestService(
     {
         if (!MayCuaBench.Lech(bench.TenMay, s.Host)) return null;
 
-        // Đã có cảnh báo lệch máy đang mở thì thôi, đừng sinh thêm mỗi nhịp
-        // status — agent gửi vài chục giây một lần, sẽ ngập bảng cảnh báo.
+        // Đã có cảnh báo lệch máy đang mở thì thôi, đừng sinh thêm mỗi nhịp status — agent gửi vài chục giây một lần, sẽ ngập bảng cảnh báo.
         var dangMo = await db.Alerts.AnyAsync(
             a => a.BenchId == bench.Id && a.Kind == MayCuaBench.LoaiCanhBao && a.ClosedAt == null, ct);
         if (dangMo) return null;
@@ -330,16 +308,11 @@ public class MqttIngestService(
         return alert;
     }
 
-    /// <summary>
-    /// Mở cảnh báo khi bench vào trạng thái xấu, đóng khi nó hồi phục.
-    /// Trả về cảnh báo vừa mở, hoặc null nếu không có gì mới.
-    /// </summary>
+    /// <summary>Mở cảnh báo khi bench vào trạng thái xấu, đóng khi nó hồi phục.</summary>
     private static async Task<Alert?> ApplyAlertAsync(
         AppDbContext db, Bench bench, StatusMessage s, DateTimeOffset at, CancellationToken ct)
     {
-        // Loại trừ cảnh báo lệch máy: nó nói về DANH TÍNH bench, không phải sức
-        // khoẻ bench. Không lọc ở đây thì bench khoẻ trở lại là nó tự đóng mất
-        // cảnh báo lệch máy, trong khi cấu hình vẫn đang sai.
+        // Loại trừ cảnh báo lệch máy: nó nói về DANH TÍNH bench, không phải sức khoẻ bench.
         var open = await db.Alerts.FirstOrDefaultAsync(
             a => a.BenchId == bench.Id && a.ClosedAt == null
                  && a.Kind != MayCuaBench.LoaiCanhBao, ct);
@@ -363,7 +336,6 @@ public class MqttIngestService(
         return null;
     }
 
-    // ------------------------------------------------------- dọn dẹp định kỳ
 
     private async Task HousekeepingLoopAsync(CancellationToken ct)
     {
@@ -374,8 +346,7 @@ public class MqttIngestService(
                 using var scope = scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                // Lệnh gửi đi mà quá hạn không thấy ack thì coi như rơi, để giao diện
-                // không treo mãi ở trạng thái "đang gửi".
+                // Lệnh gửi đi mà quá hạn không thấy ack thì coi như rơi, để giao diện không treo mãi ở trạng thái "đang gửi".
                 var deadline = DateTimeOffset.UtcNow.AddSeconds(-_opt.AckTimeoutSeconds);
                 var stale = await db.Commands
                     .Include(c => c.Bench)
@@ -386,11 +357,7 @@ public class MqttIngestService(
                 // Lưới an toàn cho trạng thái mất kết nối — xem StaleAfterSeconds.
                 var silentSince = DateTimeOffset.UtcNow.AddSeconds(-_opt.StaleAfterSeconds);
                 var silent = await db.Benches
-                    // Thiết bị không hỗ trợ remote thì KHÔNG BAO GIỜ có agent,
-                    // nên im lặng là bình thường chứ không phải mất kết nối.
-                    // Thiếu điều kiện này là mỗi con ECU đơn đẻ một cảnh báo
-                    // mỗi ngày, người ta tắt cảnh báo đi, rồi lúc bench thật
-                    // hỏng thì không ai nhìn nữa.
+                    // Thiết bị không hỗ trợ remote thì KHÔNG BAO GIỜ có agent, nên im lặng là bình thường chứ không phải mất kết nối.
                     .Where(b => b.HoTroRemote
                              && b.State != BenchState.Offline
                              && b.State != BenchState.Unknown
@@ -399,17 +366,14 @@ public class MqttIngestService(
                     .ToListAsync(ct);
                 foreach (var b in silent)
                 {
-                    // Bench đang Lỗi mà im luôn thì nguyên nhân gốc (vd. CAN
-                    // timeout) vẫn còn đó — đè bằng câu chung chung sẽ xoá mất
-                    // đầu mối duy nhất giải thích vì sao nó im lặng.
+                    // Bench đang Lỗi mà im luôn thì nguyên nhân gốc (vd.
                     b.Note = b.State == BenchState.Error && !string.IsNullOrWhiteSpace(b.Note)
                         ? $"Mất kết nối — trước đó: {b.Note}"
                         : "Không nhận được dữ liệu";
                     b.State = BenchState.Offline;
                 }
 
-                // Telemetry thô phình rất nhanh: 37 bench × 3 kênh × mỗi 5 giây
-                // ≈ 1,9 triệu dòng một ngày. Phải xoá theo hạn.
+                // Telemetry thô phình rất nhanh: 37 bench × 3 kênh × mỗi 5 giây ≈ 1,9 triệu dòng một ngày.
                 var cutoff = DateTimeOffset.UtcNow.AddHours(-_opt.TelemetryRetentionHours);
                 await db.TelemetrySamples.Where(s => s.At < cutoff).ExecuteDeleteAsync(ct);
 
