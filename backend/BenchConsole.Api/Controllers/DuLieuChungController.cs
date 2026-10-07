@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
 using BenchConsole.Api.Auth;
@@ -55,10 +56,27 @@ public class DuLieuChungController(
             .ToList();
     }
 
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    [AllowClientApiKey, HttpGet("document-lookups"), HasPermission(MaQuyen.DuLieuView)]
+    public async Task<object> DocumentLookups(CancellationToken ct)
+    {
+        var docs = db.TepDuLieuChungs.AsNoTracking().Where(x => x.Loai == LoaiDuLieuChung.TaiLieu);
+        return new
+        {
+            documentProgram = await docs.Where(x => x.DocumentProgram != null).Select(x => x.DocumentProgram!).Distinct().OrderBy(x => x).ToListAsync(ct),
+            documentCategory = await docs.Where(x => x.DocumentCategory != null).Select(x => x.DocumentCategory!).Distinct().OrderBy(x => x).ToListAsync(ct),
+            documentFunction = await docs.Where(x => x.DocumentFunction != null).Select(x => x.DocumentFunction!).Distinct().OrderBy(x => x).ToListAsync(ct),
+            documentType = await docs.Where(x => x.DocumentType != null).Select(x => x.DocumentType!).Distinct().OrderBy(x => x).ToListAsync(ct),
+        };
+    }
+
     [AllowClientApiKey, HttpGet]
     [HasPermission(MaQuyen.DuLieuView)]
     public async Task<ActionResult<List<TepDuLieuChungDto>>> List(
-        [FromQuery] string? loai, [FromQuery] string? q, CancellationToken ct, [FromQuery] int? softwareTypeId = null)
+        [FromQuery] string? loai, [FromQuery] string? q, CancellationToken ct, [FromQuery] int? softwareTypeId = null,
+        [FromQuery] string? documentProgram = null, [FromQuery] string? documentCategory = null,
+        [FromQuery] string? documentFunction = null, [FromQuery] string? documentType = null)
     {
         var query = db.TepDuLieuChungs.AsNoTracking().Include(t => t.SoftwareType).AsQueryable();
         if (softwareTypeId.HasValue)
@@ -82,11 +100,24 @@ public class DuLieuChungController(
                 });
             query = query.Where(t => t.Loai == can);
         }
+        if (new[] { documentProgram, documentCategory, documentFunction, documentType }.Any(x => !string.IsNullOrWhiteSpace(x)))
+        {
+            if (!string.IsNullOrWhiteSpace(loai) && LoaiDuLieuChung.ChuanHoaMa(loai) != LoaiDuLieuChung.TaiLieu)
+                return BadRequest(new { error = "Bộ lọc tài liệu chỉ áp dụng cho mục Tài liệu." });
+            query = query.Where(t => t.Loai == LoaiDuLieuChung.TaiLieu);
+            if (!string.IsNullOrWhiteSpace(documentProgram)) query = query.Where(t => t.DocumentProgram == documentProgram.Trim());
+            if (!string.IsNullOrWhiteSpace(documentCategory)) query = query.Where(t => t.DocumentCategory == documentCategory.Trim());
+            if (!string.IsNullOrWhiteSpace(documentFunction)) query = query.Where(t => t.DocumentFunction == documentFunction.Trim());
+            if (!string.IsNullOrWhiteSpace(documentType)) query = query.Where(t => t.DocumentType == documentType.Trim());
+        }
         if (!string.IsNullOrWhiteSpace(q))
         {
             var tim = q.Trim();
-            query = query.Where(t => EF.Functions.Like(t.Ten, $"%{tim}%")
-                                  || EF.Functions.Like(t.TenFile, $"%{tim}%"));
+            query = query.Where(t => t.Ten.Contains(tim) || t.TenFile.Contains(tim) || (t.MoTa != null && t.MoTa.Contains(tim)) || (t.NguoiTaiLen != null && t.NguoiTaiLen.Contains(tim))
+                || (t.Loai == LoaiDuLieuChung.TaiLieu && ((t.DocumentProgram != null && t.DocumentProgram.Contains(tim))
+                    || (t.DocumentCategory != null && t.DocumentCategory.Contains(tim))
+                    || (t.DocumentFunction != null && t.DocumentFunction.Contains(tim))
+                    || (t.DocumentType != null && t.DocumentType.Contains(tim)))));
         }
 
         var rows = await query.OrderByDescending(t => t.TaiLenLuc).Take(500).ToListAsync(ct);
@@ -141,6 +172,8 @@ public class DuLieuChungController(
             {
                 error = "Type chỉ áp dụng cho phiên bản phần mềm và phải có trong danh mục."
             });
+        if (loai != LoaiDuLieuChung.TaiLieu && new[] { form.DocumentProgram, form.DocumentCategory, form.DocumentFunction, form.DocumentType }.Any(x => !string.IsNullOrWhiteSpace(x)))
+            return BadRequest(new { error = "Chương trình / Category / Function / Type chỉ áp dụng cho Tài liệu." });
         // Không khai tên thì lấy tên file, để không ai phải gõ hai lần cùng một thứ.
         var ten = string.IsNullOrWhiteSpace(form.Ten)
             ? Path.GetFileNameWithoutExtension(KiemTraTep.TenGoc(form.File.FileName))
@@ -163,6 +196,10 @@ public class DuLieuChungController(
         var tep = new TepDuLieuChung
         {
             Loai = loai,
+            DocumentProgram = Clean(form.DocumentProgram),
+            DocumentCategory = Clean(form.DocumentCategory),
+            DocumentFunction = Clean(form.DocumentFunction),
+            DocumentType = Clean(form.DocumentType),
             SoftwareTypeId = typeId,
             Ten = ten,
             TenFile = KiemTraTep.TenGoc(form.File.FileName),
@@ -215,7 +252,7 @@ public class DuLieuChungController(
     [HttpPost("{id:int}/update"), HasPermission(MaQuyen.DuLieuUpload)]
     [RequestSizeLimit(KiemTraTep.TranYeuCau), RequestFormLimits(MultipartBodyLengthLimit = KiemTraTep.TranYeuCau)]
     public Task<ActionResult<TepDuLieuChungDto>> Replace(int id, [FromForm] SuaDuLieuForm form, CancellationToken ct)
-        => UpdateDraft(id, new SuaDuLieuRequest(form.Ten, form.Loai, form.MoTa, form.SoftwareTypeId, form.Revision), form.File, ct);
+        => UpdateDraft(id, new SuaDuLieuRequest(form.Ten, form.Loai, form.MoTa, form.SoftwareTypeId, form.Revision, form.DocumentProgram, form.DocumentCategory, form.DocumentFunction, form.DocumentType), form.File, ct);
 
     private async Task<ActionResult<TepDuLieuChungDto>> UpdateDraft(int id, SuaDuLieuRequest req, IFormFile? replacement, CancellationToken ct)
     {
@@ -277,6 +314,12 @@ public class DuLieuChungController(
             {
                 error = "Mục đích đã có file cùng tên. Hãy dùng tên khác."
             });
+        if (loai != LoaiDuLieuChung.TaiLieu && new[] { req.DocumentProgram, req.DocumentCategory, req.DocumentFunction, req.DocumentType }.Any(x => !string.IsNullOrWhiteSpace(x)))
+            return BadRequest(new { error = "Các trường phân loại tài liệu chỉ áp dụng cho Tài liệu." });
+        tep.DocumentProgram = loai != LoaiDuLieuChung.TaiLieu ? null : req.DocumentProgram is null ? tep.DocumentProgram : Clean(req.DocumentProgram);
+        tep.DocumentCategory = loai != LoaiDuLieuChung.TaiLieu ? null : req.DocumentCategory is null ? tep.DocumentCategory : Clean(req.DocumentCategory);
+        tep.DocumentFunction = loai != LoaiDuLieuChung.TaiLieu ? null : req.DocumentFunction is null ? tep.DocumentFunction : Clean(req.DocumentFunction);
+        tep.DocumentType = loai != LoaiDuLieuChung.TaiLieu ? null : req.DocumentType is null ? tep.DocumentType : Clean(req.DocumentType);
         tep.Loai = loai;
         tep.SoftwareTypeId = typeId;
         tep.Ten = ten;
@@ -536,9 +579,17 @@ public class TaiLenDuLieuForm
     public string? Ten { get; set; }
     public string? MoTa { get; set; }
     public int? SoftwareTypeId { get; set; }
+    [StringLength(128), DisplayFormat(ConvertEmptyStringToNull = false)] public string? DocumentProgram { get; set; }
+    [StringLength(128), DisplayFormat(ConvertEmptyStringToNull = false)] public string? DocumentCategory { get; set; }
+    [StringLength(128), DisplayFormat(ConvertEmptyStringToNull = false)] public string? DocumentFunction { get; set; }
+    [StringLength(128), DisplayFormat(ConvertEmptyStringToNull = false)] public string? DocumentType { get; set; }
 }
 
-public record SuaDuLieuRequest(string? Ten, string? Loai, string? MoTa, int? SoftwareTypeId = null, long? Revision = null);
+public record SuaDuLieuRequest(string? Ten, string? Loai, string? MoTa, int? SoftwareTypeId = null, long? Revision = null,
+    [StringLength(128)] string? DocumentProgram = null,
+    [StringLength(128)] string? DocumentCategory = null,
+    [StringLength(128)] string? DocumentFunction = null,
+    [StringLength(128)] string? DocumentType = null);
 public class SuaDuLieuForm : TaiLenDuLieuForm
 {
     public long Revision { get; set; }

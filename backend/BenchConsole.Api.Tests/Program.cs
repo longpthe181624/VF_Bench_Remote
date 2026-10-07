@@ -1063,6 +1063,7 @@ await RequestChecks.Run(http, may.Services, tokenAdmin, tokenViewer, tokenKySu, 
 Nhom("API key: cấp/thu hồi, phạm vi endpoint và phân quyền Client thực tế");
 await ClientApiKeyChecks.Run(http, may.Services, tokenAdmin, tokenViewer, tokenKySu, Check);
 await JobChecks.Run(http, may.Services, tokenAdmin, tokenViewer, tokenKySu, Check);
+await DocumentChecks.Run(http, tokenAdmin, tokenViewer, tokenKySu, Check);
 using (var scope = may.Services.CreateScope())
 {
     var database = scope.ServiceProvider.GetRequiredService<AppDbContext>();

@@ -113,3 +113,7 @@ Script cần Playwright và Chromium; có thể đặt `PLAYWRIGHT_MODULE`,
 `CHROMIUM_PATH` tới bản đã cài. `REACT_UI_URL` mặc định
 `http://127.0.0.1:5077/app/`. Tài khoản test cố định chỉ tồn tại trong server
 kiểm thử. Dừng server bằng POST `/__test/stop`.
+
+## Phân loại tài liệu
+
+Mục Tài liệu có Chương trình / Category / Function / Type tài liệu trong form upload và chỉnh sửa, gợi ý tên đã dùng và bộ lọc trên danh sách. Xem [document-classification.md](document-classification.md).

@@ -7,6 +7,7 @@ import { notify } from '../../lib/notify'
 import { bytes, date } from '../../lib/format'
 import { Button, DetailList, ErrorMessage, Field, Modal } from '../ui'
 import { MutationForm } from '../MutationForm'
+import { DocumentFields } from './DocumentFields'
 import { SoftwareTypeSelect } from './SoftwareTypeSelect'
 import { DownloadButton } from './DownloadButton'
 export function FileDetailModal({ file, kind, categories = [], onClose, onStatus }) {
@@ -125,6 +126,7 @@ export function FileDetailModal({ file, kind, categories = [], onClose, onStatus
           required={editable}
         />
       )}
+      {kind === 'shared' && editCategory === 'tai-lieu' && <DocumentFields file={file} disabled={!editable} />}
       <Field label="Mô tả">
         <textarea
           name="moTa"

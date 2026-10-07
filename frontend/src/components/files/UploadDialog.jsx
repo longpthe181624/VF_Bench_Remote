@@ -5,6 +5,7 @@ import { useAuth } from '../../context/auth-context'
 import { upload, errorText } from '../../services/api'
 import { notify } from '../../lib/notify'
 import { Button, ErrorMessage, Field, Modal } from '../ui'
+import { DocumentFields } from './DocumentFields'
 import { SoftwareTypeSelect } from './SoftwareTypeSelect'
 export function UploadDialog({ kind, category, categories, onClose, onlyTestcase = false }) {
   const { can } = useAuth()
@@ -72,6 +73,7 @@ export function UploadDialog({ kind, category, categories, onClose, onlyTestcase
             </>
           )}
           {kind === 'shared' && uploadCategory === 'phien-ban' && <SoftwareTypeSelect required />}
+          {kind === 'shared' && uploadCategory === 'tai-lieu' && <DocumentFields />}
           {kind === 'package' && (
             <>
               <Field label="Loại gói">

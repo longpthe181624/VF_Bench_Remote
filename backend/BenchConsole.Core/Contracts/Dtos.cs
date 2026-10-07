@@ -182,12 +182,13 @@ public record TepDuLieuChungDto(
     string? MoTa,
     string? NguoiTaiLen,
     DateTimeOffset TaiLenLuc, int? SoftwareTypeId = null, string? SoftwareType = null,
-    string Status = "Draft", long Revision = 1)
+    string Status = "Draft", long Revision = 1, string? DocumentProgram = null, string? DocumentCategory = null,
+    string? DocumentFunction = null, string? DocumentType = null)
 {
     /// <summary>Tên mục truyền từ ngoài vào: danh mục nay nằm trong database.</summary>
     public static TepDuLieuChungDto From(TepDuLieuChung t, string? tenLoai) => new(
         t.Id, t.Loai, string.IsNullOrWhiteSpace(tenLoai) ? t.Loai : tenLoai, t.Ten, t.TenFile,
-        t.Sha256, t.KichThuoc, t.MoTa, t.NguoiTaiLen, t.TaiLenLuc, t.SoftwareTypeId, t.SoftwareType?.Ten, t.Status, t.Revision);
+        t.Sha256, t.KichThuoc, t.MoTa, t.NguoiTaiLen, t.TaiLenLuc, t.SoftwareTypeId, t.SoftwareType?.Ten, t.Status, t.Revision, t.DocumentProgram, t.DocumentCategory, t.DocumentFunction, t.DocumentType);
 }
 
 /// <summary>Một mục trong kho dữ liệu chung, kèm số file đang có.</summary>

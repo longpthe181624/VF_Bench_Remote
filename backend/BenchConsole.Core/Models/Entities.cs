@@ -194,6 +194,11 @@ public class MucDuLieuChung
 /// </summary>
 public class TepDuLieuChung
 {
+    public string? DocumentProgram { get; set; }
+    public string? DocumentCategory { get; set; }
+    public string? DocumentFunction { get; set; }
+    public string? DocumentType { get; set; }
+
     public int Id { get; set; }
     public string Status { get; set; } = "Draft";
     public long Revision { get; set; } = 1;

@@ -33,6 +33,7 @@ Upload giữ nguyên endpoint và multipart form hiện có:
 | Công việc | API | Trường |
 | --- | --- | --- |
 | Upload Database/DBC | `POST /api/database/files` | `file`, `modelId`, `categoryId`, `typeId`, `phienBan`, `moTa` |
+| Upload tài liệu | `POST /api/du-lieu-chung` | `file`, `loai=tai-lieu`, `ten`, `documentProgram`, `documentCategory`, `documentFunction`, `documentType`; [chi tiết](document-classification.md) |
 | Upload phần mềm | `POST /api/du-lieu-chung` | `file`, `loai=phien-ban`, `ten`, `softwareTypeId`, `moTa` |
 | Thêm/lấy danh mục | `POST /api/client/catalogs/{kind}` | JSON `ma`, `ten` |
 

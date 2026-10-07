@@ -25,6 +25,7 @@ import { FileDetailModal } from '../components/files/FileDetailModal'
 import { UploadDialog } from '../components/files/UploadDialog'
 import { FileStatusDialog } from '../components/files/FileStatusDialog'
 import { SharedDataTabs } from '../components/files/SharedDataTabs'
+import { documentFields } from '../lib/document-fields'
 import DatabasePage from './DatabasePage'
 export default function FilesPage(props) {
   const [params] = useSearchParams()
@@ -50,16 +51,20 @@ function FilesListPage({ kind = 'shared', software = false, onlyTestcase = false
   const [params, setParams] = useSearchParams()
   const config = getFileConfig(kind)
   const categories = useApi('/du-lieu-chung/muc', 'DULIEU.VIEW')
+  const [q, setQ] = useState('')
   const category = software ? 'phien-ban' : params.get('category') || ''
   const softwareTypes = useApi('/software/types', 'DULIEU.VIEW', null, {
     enabled: kind === 'shared' && can('DULIEU.VIEW'),
   })
+  const documents = kind === 'shared' && category === 'tai-lieu'
+  const documentLookups = useApi('/du-lieu-chung/document-lookups', 'DULIEU.VIEW', null, { enabled: documents && can('DULIEU.VIEW') })
+  const documentFilters = documents ? Object.fromEntries(documentFields.map(field => [field.key, params.get(field.key) || undefined])) : {}
   const softwareTypeId = category === 'phien-ban' ? params.get('softwareTypeId') || '' : ''
   const files = useApi(
     config.path,
     config.view,
     kind === 'shared'
-      ? { loai: category || undefined, softwareTypeId: softwareTypeId || undefined }
+      ? { loai: category || undefined, softwareTypeId: softwareTypeId || undefined, ...documentFilters, q: documents && q ? q : undefined }
       : kind === 'package' && onlyTestcase
         ? { loai: 'testcase' }
         : undefined,
@@ -67,7 +72,6 @@ function FilesListPage({ kind = 'shared', software = false, onlyTestcase = false
   const devices = useApi('/devices', 'BENCH.VIEW', null, {
     enabled: kind === 'package' && can('BENCH.VIEW'),
   })
-  const [q, setQ] = useState('')
   const [type, setType] = useState('')
   const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState(null)
@@ -80,7 +84,7 @@ function FilesListPage({ kind = 'shared', software = false, onlyTestcase = false
       : can(config.upload)
   const rows = (files.data || []).filter(
     (f) =>
-      matches(f, q, ['ten', 'tenFile', 'tenFileGoc', 'moTa', 'nguoiTaiLen']) &&
+      matches(f, q, ['ten', 'tenFile', 'tenFileGoc', 'moTa', 'nguoiTaiLen', ...documentFields.map(field => field.key)]) &&
       (!type || f.loai === type),
   )
   async function deleteFile(file) {
@@ -100,9 +104,9 @@ function FilesListPage({ kind = 'shared', software = false, onlyTestcase = false
   return (
     <>
       <PageHeading
-        title={software ? 'Phiên bản phần mềm' : onlyTestcase ? 'Testcase' : config.title}
+        title={software ? 'Phiên bản phần mềm' : documents ? 'Tài liệu' : onlyTestcase ? 'Testcase' : config.title}
         description={
-          software ? 'Kho file phần mềm và ghi chú phiên bản dùng chung.' : config.description
+          software ? 'Kho file phần mềm và ghi chú phiên bản dùng chung.' : documents ? 'Phân loại theo chương trình, domain, function và loại tài liệu.' : config.description
         }
       >
         <Badge>{files.data?.length || 0} file</Badge>
@@ -111,10 +115,10 @@ function FilesListPage({ kind = 'shared', software = false, onlyTestcase = false
       <Toolbar
         value={q}
         onSearch={setQ}
-        placeholder="Tìm tên / file / mô tả"
+        placeholder={documents ? 'Tìm tên / chương trình / Category / Function / Type' : 'Tìm tên / file / mô tả'}
         actions={
           <>
-            {kind === 'shared' && category !== 'phien-ban' && can('DULIEU.MUC') && (
+            {kind === 'shared' && category !== 'phien-ban' && !documents && can('DULIEU.MUC') && (
               <Button onClick={() => navigate('/categories')}>
                 <FolderCog size={14} />
                 Quản lý mục
@@ -129,6 +133,11 @@ function FilesListPage({ kind = 'shared', software = false, onlyTestcase = false
           </>
         }
       >
+        {documents && documentFields.map(field => <select key={field.key} aria-label={`Lọc ${field.label}`} value={params.get(field.key) || ''} onChange={e => {
+          const next = new URLSearchParams(params)
+          e.target.value ? next.set(field.key, e.target.value) : next.delete(field.key)
+          setParams(next)
+        }}><option value="">Tất cả {field.label}</option>{(documentLookups.data?.[field.key] || []).map(value => <option key={value} value={value}>{value}</option>)}</select>)}
         {category === 'phien-ban' && (
           <select
             aria-label="Type phần mềm"
@@ -158,9 +167,9 @@ function FilesListPage({ kind = 'shared', software = false, onlyTestcase = false
           </select>
         )}
       </Toolbar>
-      <ErrorMessage>{error || (files.error && errorText(files.error))}</ErrorMessage>
+      <ErrorMessage>{error || (files.error && errorText(files.error)) || (documentLookups.error && errorText(documentLookups.error))}</ErrorMessage>
       <DataTable
-        key={q + type + category + softwareTypeId}
+        key={q + type + category + softwareTypeId + JSON.stringify(documentFilters)}
         rows={rows}
         loading={files.isLoading}
         columns={[
@@ -233,6 +242,7 @@ function FilesListPage({ kind = 'shared', software = false, onlyTestcase = false
                 },
               ]
             : []),
+          ...(documents ? documentFields.map(field => ({ key: field.key, label: field.label, render: file => file[field.key] || '—' })) : []),
           { key: 'kichThuoc', label: 'Dung lượng', render: (f) => bytes(f.kichThuoc) },
           ...(kind !== 'package' ? [{ key: 'moTa', label: 'Mô tả' }] : []),
           ...(kind !== 'private' ? [{ key: 'nguoiTaiLen', label: 'Người tải lên' }] : []),
