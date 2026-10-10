@@ -1,11 +1,11 @@
 using System.Text.Json;
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Mqtt;
-using Microsoft.EntityFrameworkCore;
-using MQTTnet;
 using MQTTnet.Protocol;
+using MQTTnet;
+using Microsoft.EntityFrameworkCore;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Files;
 
 /// <summary>Outbox lưu bền: broker mất kết nối thì gửi lại, Client đồng bộ qua API.</summary>
 public class DatabaseNotificationService(IServiceScopeFactory scopes, MqttIngestService mqtt, ILogger<DatabaseNotificationService> log) : BackgroundService

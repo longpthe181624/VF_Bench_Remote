@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using BenchConsole.Api.Services;
+using BenchConsole.Api.Services.Identity;
 using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
 using Microsoft.AspNetCore.Authorization;

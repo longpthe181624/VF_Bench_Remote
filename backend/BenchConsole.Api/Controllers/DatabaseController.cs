@@ -1,6 +1,7 @@
 using BenchConsole.Api.Auth;
 using BenchConsole.Api.Contracts;
-using BenchConsole.Api.Services;
+using BenchConsole.Api.Services.Files.Storage;
+using BenchConsole.Api.Services.Files;
 using BenchConsole.Core.Auth;
 using BenchConsole.Core.Contracts;
 using Microsoft.AspNetCore.Authorization;
@@ -54,7 +55,7 @@ public class DatabaseController(DatabaseService service) : ControllerBase
     {
         var file = await service.Download(id, ct);
         Response.Headers.CacheControl = "no-store";
-        return FileDownload.Create(file.Path, file.Name, file.Sha256);
+        return FileDownload.Create(file);
     }
 
     [HttpDelete("files/{id:int}"), HasPermission(MaQuyen.DuLieuDelete)]

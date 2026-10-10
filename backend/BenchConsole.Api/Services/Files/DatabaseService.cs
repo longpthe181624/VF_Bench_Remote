@@ -1,10 +1,13 @@
 using BenchConsole.Api.Contracts;
 using BenchConsole.Api.Data;
+using BenchConsole.Api.Services.Common;
+using BenchConsole.Api.Services.Files.Storage;
+using BenchConsole.Api.Services.Identity;
 using BenchConsole.Core.Contracts;
 using BenchConsole.Core.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Files;
 
 public sealed class DatabaseService(AppDbContext db, KhoDatabase kho, KhoDuLieuChung shared, ICurrentCaller caller)
 {

@@ -2,7 +2,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using BenchConsole.Core.Messaging;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Files.Storage;
 
 /// <summary>Gói tải lên không dùng được. Thông điệp đưa thẳng ra cho người tải.</summary>
 public class GoiKhongHopLe(string message) : Exception(message);

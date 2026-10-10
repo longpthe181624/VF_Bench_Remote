@@ -1,18 +1,23 @@
+using System.Security.Cryptography;
+using System.Text;
+using BenchConsole.Api.Auth;
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Hubs;
 using BenchConsole.Api.Middleware;
 using BenchConsole.Api.Mqtt;
-using System.Security.Cryptography;
-using System.Text;
-using BenchConsole.Api.Auth;
 using BenchConsole.Api.Repository;
-using BenchConsole.Api.Services;
+using BenchConsole.Api.Services.Client;
+using BenchConsole.Api.Services.Devices;
+using BenchConsole.Api.Services.Files.Storage;
+using BenchConsole.Api.Services.Files;
+using BenchConsole.Api.Services.Identity;
+using BenchConsole.Api.Services.Testing;
 using BenchConsole.Core.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,6 +71,20 @@ builder.Services.AddScoped<ICurrentCaller, HttpCurrentCaller>();
 builder.Services.AddScoped<DuLieuChungService>();
 builder.Services.AddScoped<DatabaseService>();
 builder.Services.AddScoped<RequestService>();
+builder.Services.AddScoped<AlertsService>();
+builder.Services.AddScoped<BenchesService>();
+builder.Services.AddScoped<ClientApiKeysService>();
+builder.Services.AddScoped<ClientCatalogsService>();
+builder.Services.AddScoped<ClientDatabaseService>();
+builder.Services.AddScoped<ClientJobsService>();
+builder.Services.AddScoped<DuAnService>();
+builder.Services.AddScoped<KhoService>();
+builder.Services.AddScoped<RequestJobsService>();
+builder.Services.AddScoped<RolesService>();
+builder.Services.AddScoped<RunsService>();
+builder.Services.AddScoped<SoftwareTypesService>();
+builder.Services.AddScoped<TestCasesService>();
+builder.Services.AddScoped<UsersService>();
 
 builder.Services.AddAuthentication("ConsoleAuth")
     .AddPolicyScheme("ConsoleAuth", "JWT hoặc client API key", o =>

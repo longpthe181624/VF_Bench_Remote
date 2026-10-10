@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Http;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Files.Storage;
 
 public static class KiemTraTep
 {

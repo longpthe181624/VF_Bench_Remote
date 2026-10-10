@@ -1,10 +1,9 @@
 using BenchConsole.Api.Contracts;
 using BenchConsole.Api.Data;
 using BenchConsole.Core.Models;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Files;
 
 public static class DatabaseFileQueries
 {
@@ -36,30 +35,6 @@ public static class DatabaseFileQueries
             page,
             size
         };
-    }
-
-    public static async Task<IActionResult> DownloadAsync(AppDbContext db, KhoDatabase kho, int id, string? sha256, bool testing, bool client, CancellationToken ct)
-    {
-        var file = await db.DatabaseFiles.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (file is null)
-            return new NotFoundResult();
-        if (client && !string.Equals(sha256, file.Sha256, StringComparison.OrdinalIgnoreCase))
-            return new ConflictObjectResult(new
-            {
-                error = "SHA-256 không khớp bản file được chọn. Đồng bộ manifest rồi chọn lại."
-            });
-        if (client && file.Status != "Release" && !testing)
-            return new ConflictObjectResult(new
-            {
-                error = "File đang Draft. Chỉ tải khi người dùng chọn kiểm thử Draft rõ ràng (testing=true)."
-            });
-        var path = kho.DuongDan(file.Sha256);
-        if (!System.IO.File.Exists(path))
-            return new NotFoundObjectResult(new
-            {
-                error = "File đã mất trên ổ lưu trữ."
-            });
-        return FileDownload.Create(path, file.TenFile, file.Sha256);
     }
 
 }

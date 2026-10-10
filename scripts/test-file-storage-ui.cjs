@@ -36,9 +36,28 @@ function zip(name,text){
     await page.setInputFiles('#kho-file',{name:'large-32mb.bin',mimeType:'application/octet-stream',buffer:large});await page.locator('#kho-form button[type=submit]').click();
     await page.locator('#kho-area tbody tr').filter({hasText:'large-32mb.bin'}).waitFor();
     // Token hết hạn phải được refresh và thử lại multipart, không mất file chọn.
-    await page.evaluate(()=>{phien.accessToken='expired-test-token';});
+    let expiredRequestSent=false,uploadAttempts=0;
+    const expireFirstUpload=async route=>{
+      const request=route.request();
+      if(request.method()==='POST'){
+        uploadAttempts++;
+        if(!expiredRequestSent){
+          expiredRequestSent=true;
+          return route.continue({headers:{...request.headers(),authorization:'Bearer expired-test-token'}});
+        }
+      }
+      return route.continue();
+    };
+    await page.route('**/api/storage',expireFirstUpload);
+    const rejectedUpload=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/storage'&&r.request().method()==='POST'&&r.status()===401);
+    const refreshedSession=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/auth/refresh'&&r.request().method()==='POST');
     await page.setInputFiles('#kho-file',{name:'after-refresh.txt',mimeType:'text/plain',buffer:payload});await page.locator('#kho-form button[type=submit]').click();
+    await rejectedUpload;assert.equal((await refreshedSession).status(),200);
     await page.locator('#kho-area tbody tr').filter({hasText:'after-refresh.txt'}).waitFor();
+    assert.equal(uploadAttempts,2);await page.unroute('**/api/storage',expireFirstUpload);
+    const refreshedDownload=page.waitForEvent('download');
+    await page.locator('#kho-area tbody tr').filter({hasText:'after-refresh.txt'}).getByRole('button',{name:'Tải về',exact:true}).click();
+    assert.deepEqual(await fs.readFile(await(await refreshedDownload).path()),payload);
     await page.click('#dlc-toggle');await page.fill('#dlc-form input[name=ten]','UI shared');await page.setInputFiles('#dlc-form input[name=file]',{name:'shared.txt',mimeType:'text/plain',buffer:payload});await page.locator('#dlc-form button[type=submit]').click();
     const shared=page.locator('#dlc-area tbody tr').filter({hasText:'UI shared'});await shared.waitFor();await shared.getByRole('button',{name:'Thông tin / sửa'}).click();
     await dialog.locator('input').fill('UI shared moved');await dialog.locator('select').selectOption('khac');await dialog.getByRole('button',{name:'Lưu thay đổi'}).click();await page.locator('#file-dialog').waitFor({state:'hidden'});

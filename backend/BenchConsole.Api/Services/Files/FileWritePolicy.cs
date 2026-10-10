@@ -1,4 +1,4 @@
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Files;
 
 /// <summary>Quy tắc chung cho DBC và phần mềm, kể cả endpoint tương thích cũ.</summary>
 public static class FileWritePolicy

@@ -9,7 +9,7 @@ using BenchConsole.Core.Models;
 using Microsoft.IdentityModel.Tokens;
 using QRCoder;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Identity;
 
 /// <summary>Đăng nhập không thành, kèm câu giải thích đưa thẳng cho người dùng.</summary>
 public class DangNhapThatBai(string message) : Exception(message);

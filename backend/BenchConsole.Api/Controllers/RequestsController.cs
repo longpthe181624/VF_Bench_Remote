@@ -1,6 +1,7 @@
 using BenchConsole.Api.Auth;
 using BenchConsole.Api.Contracts;
-using BenchConsole.Api.Services;
+using BenchConsole.Api.Services.Files;
+using BenchConsole.Api.Services.Testing;
 using BenchConsole.Core.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -41,7 +42,7 @@ public class RequestsController(RequestService service) : ControllerBase
     public async Task<IActionResult> Download(string code, int fileId, CancellationToken ct)
     {
         var file = await service.Download(code, fileId, ct);
-        return FileDownload.Create(file.Path, file.Name, file.Sha256);
+        return FileDownload.Create(file);
     }
 
     [HttpPost("{code}/start"), HasPermission(MaQuyen.BenchRun)]

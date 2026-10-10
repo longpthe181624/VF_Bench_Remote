@@ -1,10 +1,11 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using BenchConsole.Api.Data;
+using BenchConsole.Api.Services.Files.Storage;
 using BenchConsole.Core.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Testing;
 
 public sealed class JobWriteGate { public KhoaKho Lock { get; } = new(); }
 public sealed class JobFlowException(int status, string message) : Exception(message)

@@ -1,10 +1,11 @@
 using System.IO.Compression;
-using System.Net;
 using System.Net.Http.Json;
-using System.Text;
+using System.Net;
 using System.Text.Json;
+using System.Text;
 using BenchConsole.Api.Data;
-using BenchConsole.Api.Services;
+using BenchConsole.Api.Services.Files.Storage;
+using BenchConsole.Api.Services.Testing;
 using BenchConsole.Core.Auth;
 using BenchConsole.Core.Models;
 using Microsoft.EntityFrameworkCore;
@@ -62,7 +63,9 @@ public static class JobChecks
             var request = await Json(await Send(HttpMethod.Post, "/api/requests", new { name = "Job fixture", project, device,
                 packageIds = new[] { packageId }, mode = "auto", timing = scheduled ? "scheduled" : "now", scheduledAt = scheduled ? DateTimeOffset.UtcNow.AddDays(1) : (DateTimeOffset?)null }, token: engineer));
             var code = request.GetProperty("code").GetString()!;
-            var job = await Json(await Send(HttpMethod.Post, $"/api/requests/{code}/enqueue", new { revision = 1 }, token: engineer));
+            using var enqueue = await Send(HttpMethod.Post, $"/api/requests/{code}/enqueue", new { revision = 1 }, token: engineer);
+            check(enqueue.StatusCode == HttpStatusCode.Accepted, "Jobs: gửi việc mới trả 202");
+            var job = await Json(enqueue);
             return (code, job);
         }
         var independent = await Queue("JOB-STANDALONE", project: "");
@@ -74,7 +77,9 @@ public static class JobChecks
         check((await Send(HttpMethod.Post, independentPath + "/complete", new { leaseId = independentLease, state = "failed", expectedResults = 0, reason = "SIMULATION cleanup" }, key: independentKey)).IsSuccessStatusCode,
             "Jobs: kết thúc việc không dự án");
         var (requestCode, queued) = await Queue(); var jobCode = queued.GetProperty("code").GetString()!; var path = "/api/client/jobs/" + jobCode;
-        var repeatQueue = await Json(await Send(HttpMethod.Post, $"/api/requests/{requestCode}/enqueue", new { revision = 1 }, token: engineer));
+        using var repeated = await Send(HttpMethod.Post, $"/api/requests/{requestCode}/enqueue", new { revision = 1 }, token: engineer);
+        check(repeated.StatusCode == HttpStatusCode.OK, "Jobs: gửi lại việc đã tồn tại trả 200");
+        var repeatQueue = await Json(repeated);
         check(repeatQueue.GetProperty("code").GetString() == jobCode, "Jobs: retry enqueue không tạo việc trùng");
         check((await Send(HttpMethod.Patch, $"/api/requests/{requestCode}", new { name = "change", revision = 2 }, token: engineer)).StatusCode == HttpStatusCode.Conflict, "Jobs: request đã gửi là immutable");
         check((await Send(HttpMethod.Get, path, key: other)).StatusCode == HttpStatusCode.NotFound, "Jobs: key không thấy việc của bench khác");

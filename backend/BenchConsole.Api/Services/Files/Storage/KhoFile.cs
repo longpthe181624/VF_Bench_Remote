@@ -1,22 +1,12 @@
 using System.Security.Cryptography;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Files.Storage;
 
 /// <summary>Kết quả cất một file: băm nội dung và cỡ thật đã ghi xuống đĩa.</summary>
 public record KetQuaLuuFile(string Sha256, long KichThuoc);
 
 /// <summary>
-/// Cất file theo băm nội dung. Ba kho đang dùng chung lớp này: báo cáo chạy
-/// test, kho cá nhân, và dữ liệu chung.
-///
-/// Gom lại ngày 01/10. Trước đó <c>KhoBaoCao</c> và <c>KhoNguoiDung</c> là hai
-/// lớp trùng nhau khoảng 90%, chỉ khác tên thư mục; comment trong
-/// <c>KhoNguoiDung</c> tự đặt điều kiện "hợp nhất khi tầng Api có kiểm thử", mà
-/// điều kiện đó nay đã đủ. Thêm kho thứ ba là lúc phải trả nợ, không thì thành
-/// ba bản sao.
-///
-/// <c>KhoGoiTestCase</c> KHÔNG gom vào đây: nó còn mở ZIP ra đếm file `.tc` và
-/// từ chối gói sai định dạng. Đó là luật riêng của gói, không phải việc cất file.
+/// Lưu file theo SHA-256 cho kho cá nhân, dữ liệu chung, DBC và báo cáo.
 /// </summary>
 public class KhoFile
 {

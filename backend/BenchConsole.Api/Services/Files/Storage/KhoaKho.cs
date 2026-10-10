@@ -1,4 +1,4 @@
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Files.Storage;
 
 // Serialize thay đổi metadata / file trong từng kho của một instance BE.
 public sealed class KhoaKho

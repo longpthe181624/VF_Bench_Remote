@@ -93,6 +93,13 @@ public static class FileStorageChecks
 
         var manual=await Upload("/api/test-cases",admin,new(){["ten"]="Manual_storage",["kieuTest"]="manual"},("manual.zip",Zip("cases/sample.xlsx","Excel fixture")));
         var manualJson=await Json(manual);var packageId=manualJson.GetProperty("id").GetInt32();
+        check(manual.Headers.Location?.OriginalString.EndsWith($"/api/test-cases/{packageId}") == true,
+            "Gói: upload trả Location trỏ đến gói vừa tạo");
+        using var packageDownload = await Send(HttpMethod.Get, $"/api/test-cases/{packageId}/download", admin);
+        check(packageDownload.Content.Headers.ContentType?.MediaType == "application/zip"
+            && (packageDownload.Content.Headers.ContentDisposition?.FileNameStar
+                ?? packageDownload.Content.Headers.ContentDisposition?.FileName?.Trim('"')) == "Manual_storage.zip",
+            "Gói: giữ MIME ZIP và tên file tải xuống");
         check(manual.StatusCode==HttpStatusCode.Created&&manualJson.GetProperty("kieuTest").GetString()=="manual"&&manualJson.GetProperty("soTestCase").GetInt32()==1,"Gói: lưu ZIP Excel manual và số file");
         var blocked=await Send(HttpMethod.Post,"/api/devices/BENCH-CAY/deploy",admin,new{goiId=packageId});
         check(blocked.StatusCode==HttpStatusCode.BadRequest,"Gói: không triển khai Excel manual tới agent tự động");

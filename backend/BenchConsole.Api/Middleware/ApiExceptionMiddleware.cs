@@ -1,6 +1,7 @@
-using BenchConsole.Api.Services;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
 using System.Text.Json;
+using BenchConsole.Api.Services.Common;
+using BenchConsole.Api.Services.Testing;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 
 namespace BenchConsole.Api.Middleware;
 
@@ -18,7 +19,10 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
         }
         catch (Exception ex) when (!context.Response.HasStarted)
         {
+            var cacheControl = context.Response.Headers.CacheControl;
             context.Response.Clear();
+            if (cacheControl.Count > 0)
+                context.Response.Headers.CacheControl = cacheControl;
             var expected = ex switch
             {
                 ApiException api => (api.StatusCode, api.Error),

@@ -4,7 +4,7 @@ import { Button } from '../ui'
 import { download, errorText } from '../../services/api'
 import { notify } from '../../lib/notify'
 import { fileDownloadPath, fileName } from '../../services/files'
-export function DownloadButton({ kind, file }) {
+export function DownloadButton({ kind, file, onError = notify, iconSize = 13 }) {
   const [busy, setBusy] = useState(false)
   return (
     <Button
@@ -14,13 +14,13 @@ export function DownloadButton({ kind, file }) {
         try {
           await download(fileDownloadPath(kind, file), fileName(kind, file))
         } catch (e) {
-          notify(errorText(e))
+          onError(errorText(e))
         } finally {
           setBusy(false)
         }
       }}
     >
-      <Download size={13} />
+      <Download size={iconSize} />
       Tải về
     </Button>
   )

@@ -1,10 +1,11 @@
+using BenchConsole.Api.Services.Files.Storage;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace BenchConsole.Api.Tests;
 
@@ -27,14 +28,14 @@ public static class StorageUiServer
             using (var entry = zip.CreateEntry("simulation.tc").Open()) entry.Write(System.Text.Encoding.UTF8.GetBytes("simulation only"));
             stream.Position = 0;
             db.Benches.Add(new Core.Models.Bench { Code = "SIMULATION-STANDALONE", Ten = "Standalone simulation", State = Core.Models.BenchState.Idle });
-            var saved = await scope.ServiceProvider.GetRequiredService<Api.Services.KhoGoiTestCase>().LuuAsync(stream, default);
+            var saved = await scope.ServiceProvider.GetRequiredService<Api.Services.Files.Storage.KhoGoiTestCase>().LuuAsync(stream, default);
             db.GoiTestCases.Add(new Core.Models.GoiTestCase { Ten = "Simulation-UI", TenFileGoc = "simulation.zip",
                 Sha256 = saved.Sha256, KichThuoc = saved.KichThuoc, SoTestCase = 1 });
             await db.SaveChangesAsync();
         }
         var builder = WebApplication.CreateBuilder();
         builder.Logging.ClearProviders();
-        builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = Api.Services.KiemTraTep.TranYeuCau);
+        builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = Api.Services.Files.Storage.KiemTraTep.TranYeuCau);
         var app = builder.Build();
         app.Urls.Add("http://127.0.0.1:5077");
         app.Run(async context =>

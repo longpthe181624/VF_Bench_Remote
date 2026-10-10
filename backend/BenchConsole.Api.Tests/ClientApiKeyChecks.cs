@@ -54,6 +54,10 @@ public static class ClientApiKeyChecks
             new { name = "Empty permissions", permissions = Array.Empty<string>() }, new { name = "Past expiry", permissions = fullPermissions, expiresAt = DateTimeOffset.UtcNow.AddDays(-1) } })
             check((await Send(HttpMethod.Post, "/api/client-api-keys", admin, invalid)).StatusCode == HttpStatusCode.BadRequest, "API key: kiểm tra đầu vào");
         var response = await Send(HttpMethod.Post, "/api/client-api-keys", admin, body);
+        using var invalidKey = await Send(HttpMethod.Post, "/api/client-api-keys", admin,
+            new { name = "Invalid scope", permissions = new[] { MaQuyen.UserCreate } });
+        check(invalidKey.StatusCode == HttpStatusCode.BadRequest && invalidKey.Headers.CacheControl?.NoStore == true,
+            "API key: lỗi nghiệp vụ vẫn giữ no-store khi chuyển sang service");
         var created = await Json(response); var raw = created.GetProperty("apiKey").GetString()!;
         var row = created.GetProperty("key"); var id = row.GetProperty("id").GetInt32(); var keyId = row.GetProperty("keyId").GetString()!;
         check(response.StatusCode == HttpStatusCode.Created && response.Headers.CacheControl?.NoStore == true, "API key: cấp key một lần, response no-store");

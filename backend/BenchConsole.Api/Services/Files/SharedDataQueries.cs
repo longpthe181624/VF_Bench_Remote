@@ -4,7 +4,7 @@ using BenchConsole.Core.Contracts;
 using BenchConsole.Core.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Files;
 
 internal static class SharedDataQueries
 {

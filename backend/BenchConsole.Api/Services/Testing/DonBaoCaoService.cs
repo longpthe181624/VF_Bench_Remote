@@ -1,7 +1,8 @@
 using BenchConsole.Api.Data;
+using BenchConsole.Api.Services.Files.Storage;
 using Microsoft.EntityFrameworkCore;
 
-namespace BenchConsole.Api.Services;
+namespace BenchConsole.Api.Services.Testing;
 
 /// <summary>
 /// Dọn báo cáo cũ, cả bản ghi lẫn file trên đĩa.

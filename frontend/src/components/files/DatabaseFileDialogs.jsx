@@ -1,11 +1,12 @@
 import { DATABASE_FIELDS } from '../../lib/database-fields'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Upload, Download } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import { useAuth } from '../../context/auth-context'
 import { useApi } from '../../hooks/use-api'
-import { upload, download, post, errorText } from '../../services/api'
-import { fileDownloadPath, updateDraftFile } from '../../services/files'
+import { upload, post, errorText } from '../../services/api'
+import { updateDraftFile } from '../../services/files'
+import { DownloadButton } from './DownloadButton'
 import { date, bytes } from '../../lib/format'
 import { notify } from '../../lib/notify'
 import { Button, DataTable, DetailList, ErrorMessage, Field, Modal, Notice } from '../ui'
@@ -146,7 +147,6 @@ export function DatabaseDetail({ id, lookups, onClose, onStatus }) {
   const history = useApi(`/database/files/${id}/history`, 'DULIEU.VIEW')
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
   const file = query.data
   return (
     <Modal open wide title={file?.tenFile || 'Chi tiết Database'} onClose={onClose}>
@@ -174,22 +174,7 @@ export function DatabaseDetail({ id, lookups, onClose, onStatus }) {
             ]}
           />
           <div className="flex flex-wrap gap-2 my-5">
-            <Button
-              busy={busy}
-              onClick={async () => {
-                setBusy(true)
-                try {
-                  await download(fileDownloadPath('database', file), file.tenFile)
-                } catch (e) {
-                  setError(errorText(e))
-                } finally {
-                  setBusy(false)
-                }
-              }}
-            >
-              <Download size={14} />
-              Tải về
-            </Button>
+            <DownloadButton kind="database" file={file} onError={setError} iconSize={14} />
             {can('DATABASE.RELEASE') && (
               <Button onClick={() => onStatus(file)}>Đổi trạng thái</Button>
             )}

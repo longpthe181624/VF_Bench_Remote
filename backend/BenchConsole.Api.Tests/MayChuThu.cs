@@ -1,11 +1,12 @@
 using BenchConsole.Api.Data;
 using BenchConsole.Api.Mqtt;
+using BenchConsole.Api.Services.Files.Storage;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace BenchConsole.Api.Tests;
@@ -50,7 +51,7 @@ public class MayChuThu : WebApplicationFactory<DiemVaoApi>
                 var loai = d.ImplementationFactory is not null
                     ? typeof(MqttIngestService)   // đăng ký bằng factory
                     : d.ImplementationType;
-                if (loai == typeof(MqttIngestService) || loai == typeof(BenchConsole.Api.Services.JobMaintenance)) services.Remove(d);
+                if (loai == typeof(MqttIngestService) || loai == typeof(BenchConsole.Api.Services.Testing.JobMaintenance)) services.Remove(d);
             }
         });
     }

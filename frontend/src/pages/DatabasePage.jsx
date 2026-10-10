@@ -2,11 +2,11 @@ import { DATABASE_FIELDS } from '../lib/database-fields'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Upload, Download } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import { useAuth } from '../context/auth-context'
 import { useApi } from '../hooks/use-api'
-import { download, remove, errorText } from '../services/api'
-import { fileDownloadPath } from '../services/files'
+import { remove, errorText } from '../services/api'
+import { DownloadButton } from '../components/files/DownloadButton'
 import { bytes } from '../lib/format'
 import { notify } from '../lib/notify'
 import {
@@ -157,18 +157,7 @@ export default function DatabasePage({ embedded = false }) {
             label: 'Thao tác',
             render: (f) => (
               <div className="actions">
-                <Button
-                  onClick={async () => {
-                    try {
-                      await download(fileDownloadPath('database', f), f.tenFile)
-                    } catch (e) {
-                      setError(errorText(e))
-                    }
-                  }}
-                >
-                  <Download size={13} />
-                  Tải về
-                </Button>
+                <DownloadButton kind="database" file={f} onError={setError} />
                 {can('DULIEU.DELETE') && f.status === 'Draft' && (
                   <Button variant="danger" onClick={() => deleteFile(f)}>
                     Xoá
