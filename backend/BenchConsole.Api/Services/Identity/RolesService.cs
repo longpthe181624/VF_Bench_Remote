@@ -40,6 +40,9 @@ public sealed class RolesService(AppDbContext db, ILogger<RolesService> log, ICu
             throw ApiException.BadRequest("Thiếu mã vai trò.");
 
         var ma = req.Ma.Trim();
+        if (string.Equals(ma, AuthSeed.RoleAdmin, StringComparison.OrdinalIgnoreCase))
+            throw ApiException.BadRequest("Mã Admin dành riêng cho vai trò quản trị.");
+        RequireDelegablePermissions(req.Quyen ?? []);
         if (await db.Roles.AnyAsync(r => r.Ma == ma, ct))
             throw ApiException.Conflict($"Đã có vai trò mã '{ma}'.");
 
@@ -69,6 +72,10 @@ public sealed class RolesService(AppDbContext db, ILogger<RolesService> log, ICu
         if (string.Equals(role.Ma, AuthSeed.RoleAdmin, StringComparison.OrdinalIgnoreCase))
             throw ApiException.BadRequest("Không sửa được quyền của vai trò Admin. "
                         + "Vai trò này bỏ qua mọi kiểm tra quyền.");
+
+        var existing = await db.RolePermissions.Where(p => p.RoleId == id).Select(p => p.Permission!.Ma).ToListAsync(ct);
+        RequireDelegablePermissions(existing);
+        RequireDelegablePermissions(req.Quyen ?? []);
 
         var ganDuoc = await GanQuyenAsync(id, req.Quyen ?? [], ct);
         log.LogInformation("{Ai} đổi quyền vai trò {Ma}: {So} quyền",
@@ -110,5 +117,11 @@ public sealed class RolesService(AppDbContext db, ILogger<RolesService> log, ICu
         }));
         await db.SaveChangesAsync(ct);
         return quyen.Select(p => p.Ma).OrderBy(x => x).ToList();
+    }
+
+    private void RequireDelegablePermissions(IEnumerable<string> permissions)
+    {
+        if (!caller.IsAdmin && permissions.Any(p => !caller.HasPermission(p.Trim())))
+            throw ApiException.Forbidden();
     }
 }

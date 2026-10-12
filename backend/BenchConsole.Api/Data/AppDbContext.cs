@@ -307,6 +307,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Email).HasMaxLength(256).IsRequired();
             e.Property(x => x.HoTen).HasMaxLength(128).IsRequired();
             e.Property(x => x.MatKhauHash).HasMaxLength(256).IsRequired();
+            e.Property(x => x.SecurityStamp).HasMaxLength(32).IsRequired();
             e.Property(x => x.RefreshToken).HasMaxLength(256);
         });
 

@@ -21,7 +21,7 @@ public class JwtOptions
     public string Issuer { get; set; } = "BenchConsole";
     public string Audience { get; set; } = "BenchConsole";
 
-    /// <summary>Access token sống ngắn vì QUYỀN NẰM TRONG TOKEN: gỡ quyền của ai đó thì họ vẫn giữ quyền cũ cho tới khi token hết hạn.</summary>
+    /// <summary>Thời hạn access token; trạng thái tài khoản và quyền được kiểm tra lại ở mỗi request.</summary>
     public int AccessTokenPhut { get; set; } = 30;
 
     public int RefreshTokenNgay { get; set; } = 7;
@@ -61,6 +61,7 @@ public class AuthService(
             if (user.SoLanSai >= SoLanSaiToiDa)
             {
                 user.KhoaDenLuc = DateTimeOffset.UtcNow.AddMinutes(KhoaPhut);
+                user.RevokeSessions();
                 user.SoLanSai = 0;
                 log.LogWarning("Khoá tài khoản {Email} vì sai mật khẩu quá {So} lần",
                     user.Email, SoLanSaiToiDa);
@@ -141,6 +142,7 @@ public class AuthService(
         if (user.SoLanSai >= SoLanSaiToiDa)
         {
             user.KhoaDenLuc = DateTimeOffset.UtcNow.AddMinutes(KhoaPhut);
+            user.RevokeSessions();
             user.SoLanSai = 0;
             log.LogWarning("Khoá tài khoản {Email} vì sai {Vi} quá {So} lần",
                 user.Email, vi, SoLanSaiToiDa);
@@ -163,6 +165,7 @@ public class AuthService(
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email),
             new(AuthConstants.TokenUseClaimType, AuthConstants.TokenUseGhiDanhTotp),
+            new(AuthConstants.SecurityStampClaimType, user.SecurityStamp),
         };
 
         var khoa = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key!));
@@ -206,11 +209,16 @@ public class AuthService(
             throw new DangNhapThatBai("Tài khoản đã bật xác thực hai lớp.");
 
         if (!Totp.HopLe(user.TotpBiMat, ma, DateTimeOffset.UtcNow, null, out var nhip))
+        {
+            await GhiNhanSaiAsync(user, "mã ghi danh", ct);
             throw new DangNhapThatBai(
                 "Mã xác thực không đúng. Kiểm tra lại giờ trên điện thoại.");
+        }
 
         user.TotpBatLuc = DateTimeOffset.UtcNow;
         user.TotpNhipCuoi = nhip;
+        user.SoLanSai = 0;
+        user.RevokeSessions();
 
         await repo.XoaMaKhoiPhucAsync(user.Id, ct);
         var tho = new List<string>();
@@ -251,6 +259,7 @@ public class AuthService(
         user.TotpBiMat = null;
         user.TotpBatLuc = null;
         user.TotpNhipCuoi = null;
+        user.RevokeSessions();
         await repo.XoaMaKhoiPhucAsync(user.Id, ct);
         await repo.LuuAsync(ct);
         log.LogWarning("{Email} đã TẮT xác thực hai lớp", user.Email);
@@ -264,6 +273,7 @@ public class AuthService(
         user.TotpBiMat = null;
         user.TotpBatLuc = null;
         user.TotpNhipCuoi = null;
+        user.RevokeSessions();
         await repo.XoaMaKhoiPhucAsync(user.Id, ct);
         await repo.LuuAsync(ct);
         log.LogWarning("Quản trị gỡ xác thực hai lớp của {Email}", user.Email);
@@ -316,6 +326,9 @@ public class AuthService(
         if (user.RefreshTokenHetHan is null || user.RefreshTokenHetHan <= DateTimeOffset.UtcNow)
             throw new DangNhapThatBai("Phiên đăng nhập đã hết hạn.");
 
+        if (user.KhoaDenLuc > DateTimeOffset.UtcNow || (user.TotpBatBuoc && user.TotpBatLuc is null))
+            throw new DangNhapThatBai("Tài khoản bị khoá hoặc cần ghi danh xác thực hai lớp.");
+
         // Cấp token mới thì refresh token cũ mất hiệu lực luôn (xoay vòng).
         return await CapTokenAsync(user, ct);
     }
@@ -338,11 +351,12 @@ public class AuthService(
             throw new DangNhapThatBai("Mật khẩu cũ không đúng.");
 
         user.MatKhauHash = BCrypt.Net.BCrypt.HashPassword(moi);
+        user.RevokeSessions();
         user.SuaLuc = DateTimeOffset.UtcNow;
 
         log.LogInformation("{Email} tự đổi mật khẩu", user.Email);
 
-        // CapTokenAsync ghi đè RefreshToken, nên mọi phiên khác chết theo.
+        // Cấp phiên mới sau khi thu hồi các access/refresh token cũ.
         return await CapTokenAsync(user, ct);
     }
 
@@ -369,6 +383,7 @@ public class AuthService(
             new(ClaimTypes.Name, user.HoTen),
             new(ClaimTypes.Email, user.Email),
             new(AuthConstants.TokenUseClaimType, AuthConstants.TokenUseAccess),
+            new(AuthConstants.SecurityStampClaimType, user.SecurityStamp),
         };
 
         // Vai trò và quyền mỗi thứ một claim riêng.

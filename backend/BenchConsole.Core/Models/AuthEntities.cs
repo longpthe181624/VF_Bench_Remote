@@ -13,6 +13,15 @@ public class User
     /// <summary>BCrypt. Không bao giờ giữ mật khẩu thô, kể cả tạm.</summary>
     public string MatKhauHash { get; set; } = "";
 
+    public string SecurityStamp { get; set; } = Guid.NewGuid().ToString("N");
+
+    public void RevokeSessions()
+    {
+        SecurityStamp = Guid.NewGuid().ToString("N");
+        RefreshToken = null;
+        RefreshTokenHetHan = null;
+    }
+
     /// <summary>Khoá tài khoản tới thời điểm này. Null là không khoá.</summary>
     public DateTimeOffset? KhoaDenLuc { get; set; }
 

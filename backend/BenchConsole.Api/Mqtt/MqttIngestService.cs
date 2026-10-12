@@ -263,7 +263,7 @@ public class MqttIngestService(
                     }
                 }
 
-                pushes.Add(() => hub.Clients.All.SendAsync(
+                pushes.Add(() => hub.Clients.Group(BenchHub.ReportsGroup).SendAsync(
                     "runFinished", RunDto.From(run, bench.Code), ct));
                 break;
         }

@@ -1344,6 +1344,11 @@ namespace BenchConsole.Api.Migrations
                     b.Property<DateTimeOffset?>("RefreshTokenHetHan")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<int>("SoLanSai")
                         .HasColumnType("int");
 

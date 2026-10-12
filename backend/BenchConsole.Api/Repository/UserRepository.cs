@@ -1,4 +1,5 @@
 using BenchConsole.Api.Data;
+using BenchConsole.Core.Auth;
 using BenchConsole.Core.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,14 +33,18 @@ public class UserRepository(AppDbContext db) : IUserRepository
     public Task<User?> TheoRefreshTokenAsync(string token, CancellationToken ct)
         => db.Users.FirstOrDefaultAsync(u => u.RefreshToken == token, ct);
 
-    /// <summary>Quyền đi đường UserRoles → RolePermissions → Permission.</summary>
-    public Task<List<string>> MaQuyenCuaAsync(int userId, CancellationToken ct)
-        => db.UserRoles
+    /// <summary>Mọi người dùng được xem/sửa bench; quyền khác lấy từ vai trò.</summary>
+    public async Task<List<string>> MaQuyenCuaAsync(int userId, CancellationToken ct)
+    {
+        var permissions = await db.UserRoles
             .Where(ur => ur.UserId == userId)
             .SelectMany(ur => ur.Role!.RolePermissions)
             .Select(rp => rp.Permission!.Ma)
             .Distinct()
             .ToListAsync(ct);
+        return permissions.Concat([MaQuyen.BenchView, MaQuyen.BenchUpdate])
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
     public Task<List<string>> MaVaiTroCuaAsync(int userId, CancellationToken ct)
         => db.UserRoles

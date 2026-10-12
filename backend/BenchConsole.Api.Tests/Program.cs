@@ -980,6 +980,8 @@ using (var scope = may.Services.CreateScope())
 }
 
 await ApiErrorChecks.Run(may.Services, Check);
+Nhom("Security: thu hồi phiên, quyền hiện tại, SignalR và ZIP");
+await SecurityChecks.Run(Check);
 
 if (loi.Count == 0)
 {

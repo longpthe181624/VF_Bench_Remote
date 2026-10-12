@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
+using BenchConsole.Core.Auth;
 
 namespace BenchConsole.Api.Auth;
 
@@ -28,6 +29,7 @@ public class PermissionPolicyProvider(IOptions<AuthorizationOptions> options)
         var quyen = policyName[HasPermissionAttribute.PolicyPrefix.Length..];
         var policy = new AuthorizationPolicyBuilder()
             .RequireAuthenticatedUser()
+            .RequireClaim(AuthConstants.TokenUseClaimType, AuthConstants.TokenUseAccess)
             .AddRequirements(new PermissionRequirement(quyen))
             .Build();
 

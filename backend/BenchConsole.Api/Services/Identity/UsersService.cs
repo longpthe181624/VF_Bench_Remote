@@ -38,6 +38,8 @@ public sealed class UsersService(AppDbContext db,
         if (await db.Users.AnyAsync(u => u.Email == email, ct))
             throw ApiException.Conflict($"Đã có tài khoản dùng email {email}.");
 
+        var roles = await AssignableRoles(req.VaiTro ?? [], ct);
+
         var user = new User
         {
             Email = email,
@@ -48,7 +50,7 @@ public sealed class UsersService(AppDbContext db,
         db.Users.Add(user);
         await db.SaveChangesAsync(ct);
 
-        var ganDuoc = await GanVaiTroAsync(user.Id, req.VaiTro ?? [], ct);
+        var ganDuoc = await GanVaiTroAsync(user.Id, roles, ct);
         log.LogInformation("{Ai} tạo người dùng {Email}", caller.Email, email);
 
         return NguoiDungTomTatDto.From(user, ganDuoc);
@@ -56,6 +58,7 @@ public sealed class UsersService(AppDbContext db,
 
     public async Task Sua(int id, SuaNguoiDungRequest req, CancellationToken ct)
     {
+        await RequireManageableUser(id, ct);
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user is null)
             throw ApiException.NotFound();
@@ -69,6 +72,7 @@ public sealed class UsersService(AppDbContext db,
     public async Task<List<string>> DoiVaiTro(
         int id, GanVaiTroRequest req, CancellationToken ct)
     {
+        await RequireManageableUser(id, ct);
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user is null)
             throw ApiException.NotFound();
@@ -84,7 +88,8 @@ public sealed class UsersService(AppDbContext db,
             throw ApiException.BadRequest("Không gỡ được vai trò Admin của chính mình. "
                         + "Nhờ một quản trị viên khác thực hiện.");
 
-        var ganDuoc = await GanVaiTroAsync(id, req.VaiTro ?? [], ct);
+        var roles = await AssignableRoles(req.VaiTro ?? [], ct);
+        var ganDuoc = await GanVaiTroAsync(id, roles, ct);
         log.LogInformation("{Ai} đổi vai trò của {Email} thành {VaiTro}",
             caller.Email, user.Email, string.Join(", ", ganDuoc));
         return ganDuoc;
@@ -98,6 +103,7 @@ public sealed class UsersService(AppDbContext db,
 
     public async Task GoTotp(int id, CancellationToken ct)
     {
+        await RequireManageableUser(id, ct);
         if (!await db.Users.AnyAsync(u => u.Id == id, ct))
             throw ApiException.NotFound();
         await auth.GoChoNguoiKhacAsync(id, ct);
@@ -106,6 +112,7 @@ public sealed class UsersService(AppDbContext db,
     public async Task DatLaiMatKhau(
         int id, DatLaiMatKhauRequest req, CancellationToken ct)
     {
+        await RequireManageableUser(id, ct);
         if (string.IsNullOrWhiteSpace(req.MatKhauMoi) || req.MatKhauMoi.Length < 8)
             throw ApiException.BadRequest("Mật khẩu phải từ 8 ký tự.");
 
@@ -117,8 +124,7 @@ public sealed class UsersService(AppDbContext db,
         user.SoLanSai = 0;
         user.KhoaDenLuc = null;
         // Vô hiệu refresh token: đổi mật khẩu mà phiên cũ vẫn sống thì người bị chiếm tài khoản vẫn đang đăng nhập.
-        user.RefreshToken = null;
-        user.RefreshTokenHetHan = null;
+        user.RevokeSessions();
         user.SuaLuc = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
@@ -127,6 +133,7 @@ public sealed class UsersService(AppDbContext db,
 
     public async Task Xoa(int id, CancellationToken ct)
     {
+        await RequireManageableUser(id, ct);
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user is null)
             throw ApiException.NotFound();
@@ -166,6 +173,7 @@ public sealed class UsersService(AppDbContext db,
     private async Task DoiKhoaAsync(
         int id, DateTimeOffset? den, CancellationToken ct)
     {
+        await RequireManageableUser(id, ct);
         var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
         if (user is null)
             throw ApiException.NotFound();
@@ -177,19 +185,37 @@ public sealed class UsersService(AppDbContext db,
         user.KhoaDenLuc = den;
         user.SoLanSai = 0;
         if (den is not null)
-        { user.RefreshToken = null; user.RefreshTokenHetHan = null; }
+            user.RevokeSessions();
         user.SuaLuc = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
     }
 
+    private async Task RequireManageableUser(int userId, CancellationToken ct)
+    {
+        if (caller.IsAdmin) return;
+        var roles = await db.Roles.Where(r => r.UserRoles.Any(u => u.UserId == userId))
+            .Include(r => r.RolePermissions).ThenInclude(p => p.Permission).ToListAsync(ct);
+        if (roles.Any(r => string.Equals(r.Ma, AuthSeed.RoleAdmin, StringComparison.OrdinalIgnoreCase))
+            || roles.SelectMany(r => r.RolePermissions).Any(p => !caller.HasPermission(p.Permission!.Ma)))
+            throw ApiException.Forbidden();
+    }
+
+    private async Task<List<Role>> AssignableRoles(List<string> names, CancellationToken ct)
+    {
+        var wanted = names.Select(v => v.Trim()).Where(v => v.Length > 0).ToHashSet();
+        var roles = await db.Roles.Include(r => r.RolePermissions).ThenInclude(p => p.Permission)
+            .Where(r => wanted.Contains(r.Ma)).ToListAsync(ct);
+        if (!caller.IsAdmin && (roles.Any(r => string.Equals(r.Ma, AuthSeed.RoleAdmin, StringComparison.OrdinalIgnoreCase))
+            || roles.SelectMany(r => r.RolePermissions).Any(p => !caller.HasPermission(p.Permission!.Ma))))
+            throw ApiException.Forbidden();
+        return roles;
+    }
+
     private async Task<List<string>> GanVaiTroAsync(
-        int userId, List<string> maVaiTro, CancellationToken ct)
+        int userId, List<Role> roles, CancellationToken ct)
     {
         var cu = await db.UserRoles.Where(ur => ur.UserId == userId).ToListAsync(ct);
         db.UserRoles.RemoveRange(cu);
-
-        var can = maVaiTro.Select(v => v.Trim()).Where(v => v.Length > 0).ToHashSet();
-        var roles = await db.Roles.Where(r => can.Contains(r.Ma)).ToListAsync(ct);
 
         db.UserRoles.AddRange(roles.Select(r => new UserRole
         {

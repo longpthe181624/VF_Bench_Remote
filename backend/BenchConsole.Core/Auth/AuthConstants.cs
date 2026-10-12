@@ -9,6 +9,8 @@ public static class AuthConstants
     /// <summary>Phân biệt token dùng để gọi API với các loại token khác.</summary>
     public const string TokenUseClaimType = "token_use";
 
+    public const string SecurityStampClaimType = "security_stamp";
+
     public const string TokenUseAccess = "access";
 
     /// <summary>Token tạm, CHỈ dùng được cho hai endpoint ghi danh xác thực hai lớp.</summary>

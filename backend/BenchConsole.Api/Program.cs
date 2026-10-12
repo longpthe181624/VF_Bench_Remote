@@ -66,6 +66,7 @@ if (string.IsNullOrWhiteSpace(jwt.Key))
 builder.Services.AddSingleton(jwt);
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UserTokenEvents>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentCaller, HttpCurrentCaller>();
 builder.Services.AddScoped<DuLieuChungService>();
@@ -93,6 +94,7 @@ builder.Services.AddAuthentication("ConsoleAuth")
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ClientApiKeyHandler>(ClientKeyAccess.Scheme, _ => { })
     .AddJwtBearer(o =>
     {
+        o.EventsType = typeof(UserTokenEvents);
         o.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -238,7 +240,7 @@ app.UseAuthorization();
 app.MapControllers();
 if (reactDaBuild)
     app.MapFallbackToFile("/app/{*path:nonfile}", "app/index.html");
-app.MapHub<BenchHub>("/hub/benches");
+app.MapHub<BenchHub>("/hub/benches", options => options.CloseOnAuthenticationExpiration = true);
 
 // Healthcheck kiểm kết nối SQL Server và MQTT broker.
 app.MapGet("/health", async (AppDbContext db, MqttIngestService mqtt, CancellationToken ct) =>

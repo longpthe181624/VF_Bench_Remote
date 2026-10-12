@@ -117,6 +117,9 @@ public class KhoGoiTestCase
             long tong = 0;
             foreach (var entry in z.Entries)
             {
+                var unixType = (entry.ExternalAttributes >> 16) & 0xF000;
+                if (unixType is not (0 or 0x8000 or 0x4000))
+                    throw new GoiKhongHopLe("ZIP không được chứa symbolic link hoặc file thiết bị.");
                 var name = entry.FullName.Replace('\\', '/');
                 if (name.StartsWith('/') || name.Contains(':') || name.Split('/').Any(p => p is ".." or "."))
                     throw new GoiKhongHopLe("ZIP chứa đường dẫn không hợp lệ.");
